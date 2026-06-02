@@ -1,0 +1,171 @@
+{
+  "id": "N10_2",
+  "title": "Задолженность по основным видам, валютам и ставкам",
+  "category": "N10",
+  "pages": 1,
+  "pdfFile": "1@1_N10_2.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Графа I",
+      "type": "number"
+    },
+    {
+      "key": "K",
+      "label": "Графа K",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Графа L",
+      "type": "number"
+    },
+    {
+      "key": "J",
+      "label": "Графа J",
+      "type": "number"
+    },
+    {
+      "key": "M",
+      "label": "Графа M",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "100",
+      "name": "Заемные средства с фиксированной"
+    },
+    {
+      "num": "110",
+      "name": "Внешние кредиторы"
+    },
+    {
+      "num": "111",
+      "name": "рубли"
+    },
+    {
+      "num": "112",
+      "name": "доллары США"
+    },
+    {
+      "num": "113",
+      "name": "евро"
+    },
+    {
+      "num": "114",
+      "name": "японская йена"
+    },
+    {
+      "num": "115",
+      "name": "фунт стерлингов"
+    },
+    {
+      "num": "119",
+      "name": "прочие валюты"
+    },
+    {
+      "num": "120",
+      "name": "Внутригрупповая задолженность"
+    },
+    {
+      "num": "200",
+      "name": "Заемные средства с плавающей ставкой"
+    },
+    {
+      "num": "210",
+      "name": "Внешние кредиторы"
+    },
+    {
+      "num": "211",
+      "name": "рубли"
+    },
+    {
+      "num": "212",
+      "name": "доллары США"
+    },
+    {
+      "num": "213",
+      "name": "евро"
+    },
+    {
+      "num": "214",
+      "name": "японская йена"
+    },
+    {
+      "num": "215",
+      "name": "фунт стерлингов"
+    },
+    {
+      "num": "219",
+      "name": "прочие валюты"
+    },
+    {
+      "num": "220",
+      "name": "Внутригрупповая задолженность"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

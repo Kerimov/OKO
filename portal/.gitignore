@@ -1,0 +1,8 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# PDF-образцы (копируйте локально из своей папки ОКО-pdf)
+public/pdf/*.pdf
+!public/pdf/.gitkeep

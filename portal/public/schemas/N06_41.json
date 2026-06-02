@@ -1,0 +1,207 @@
+{
+  "id": "N06_41",
+  "title": "Внешняя дебиторская задолженность по срокам погашения",
+  "category": "N06",
+  "pages": 2,
+  "pdfFile": "1@1_N06_41.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Графа I",
+      "type": "number"
+    },
+    {
+      "key": "J",
+      "label": "Графа J",
+      "type": "number"
+    },
+    {
+      "key": "K",
+      "label": "Графа K",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Графа L",
+      "type": "number"
+    },
+    {
+      "key": "M",
+      "label": "Графа M",
+      "type": "number"
+    },
+    {
+      "key": "N",
+      "label": "Графа N",
+      "type": "number"
+    },
+    {
+      "key": "O",
+      "label": "Графа O",
+      "type": "number"
+    },
+    {
+      "key": "P",
+      "label": "Графа P",
+      "type": "number"
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "Q",
+      "label": "Графа Q",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "10",
+      "name": "Задолженность"
+    },
+    {
+      "num": "20",
+      "name": "из Российской"
+    },
+    {
+      "num": "30",
+      "name": "из Молдавии"
+    },
+    {
+      "num": "40",
+      "name": "из Украины"
+    },
+    {
+      "num": "50",
+      "name": "из прочих"
+    },
+    {
+      "num": "60",
+      "name": "AAA, AA, A"
+    },
+    {
+      "num": "70",
+      "name": "BBB, BB, B"
+    },
+    {
+      "num": "80",
+      "name": "CCC, CC, C"
+    },
+    {
+      "num": "90",
+      "name": "ниже C"
+    },
+    {
+      "num": "100",
+      "name": "NR (рейтинг"
+    },
+    {
+      "num": "105",
+      "name": "Банки Группы"
+    },
+    {
+      "num": "110",
+      "name": "Прочая внешняя"
+    },
+    {
+      "num": "120",
+      "name": "из Российской"
+    },
+    {
+      "num": "130",
+      "name": "из Молдавии"
+    },
+    {
+      "num": "140",
+      "name": "из Украины"
+    },
+    {
+      "num": "150",
+      "name": "из прочих"
+    },
+    {
+      "num": "160",
+      "name": "AAA, AA, A"
+    },
+    {
+      "num": "170",
+      "name": "BBB, BB, B"
+    },
+    {
+      "num": "180",
+      "name": "CCC, CC, C"
+    },
+    {
+      "num": "190",
+      "name": "ниже C"
+    },
+    {
+      "num": "200",
+      "name": "NR (рейтинг"
+    },
+    {
+      "num": "205",
+      "name": "Банки Группы"
+    }
+  ],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

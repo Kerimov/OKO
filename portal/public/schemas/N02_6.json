@@ -1,0 +1,113 @@
+{
+  "id": "N02_6",
+  "title": "Стоимость, амортизация и обесценение прав пользования активами",
+  "category": "N02",
+  "pages": 3,
+  "pdfFile": "1@1_N02_6.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Земельные участки (0110)",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Здания произв. (0120)",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Здания непроизв.",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Скважины",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Магистр. трубопроводы",
+      "type": "number"
+    },
+    {
+      "key": "P",
+      "label": "Дороги",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Прочие сооруж. произв.",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Прочие сооруж. непроизв.",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Компрессоры",
+      "type": "number"
+    },
+    {
+      "key": "J",
+      "label": "Прочие машины",
+      "type": "number"
+    },
+    {
+      "key": "K",
+      "label": "Транспорт",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Инвентарь",
+      "type": "number"
+    },
+    {
+      "key": "M",
+      "label": "Другие ОС произв.",
+      "type": "number"
+    },
+    {
+      "key": "N",
+      "label": "Другие ОС непроизв.",
+      "type": "number"
+    },
+    {
+      "key": "O",
+      "label": "Итого",
+      "type": "number"
+    }
+  ],
+  "rows": [],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

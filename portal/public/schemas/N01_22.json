@@ -1,0 +1,58 @@
+{
+  "id": "N01_22",
+  "title": "Расчет текущего налога на прибыль",
+  "category": "N01",
+  "pages": 1,
+  "pdfFile": "1@1_N01_22.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    }
+  ],
+  "rows": [],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

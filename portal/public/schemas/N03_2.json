@@ -1,0 +1,92 @@
+{
+  "id": "N03_2",
+  "title": "Объекты с минимальными объемами капвложений",
+  "category": "N03",
+  "pages": 2,
+  "pdfFile": "1@1_N03_2.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Графа I",
+      "type": "number"
+    },
+    {
+      "key": "S",
+      "label": "Графа S",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "1",
+      "name": "Всего"
+    },
+    {
+      "num": "11",
+      "name": "Прочие  объекты"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

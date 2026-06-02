@@ -1,0 +1,94 @@
+{
+  "id": "N01_34",
+  "title": "Доля меньшинства",
+  "category": "N01",
+  "pages": 1,
+  "pdfFile": "1@1_N01_34.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 50
+    },
+    {
+      "key": "name",
+      "label": "Контрагент",
+      "type": "text",
+      "width": 220
+    },
+    {
+      "key": "C",
+      "label": "Доля меньшинства на начало, %",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Поступл.: изм. доли, %",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Поступл.: уставный капитал",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Поступл.: добавочный капитал",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Поступл.: резервный капитал",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Поступл.: нераспр. прибыль прошлых лет",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Поступл.: прибыль/убыток отч. периода",
+      "type": "number"
+    },
+    {
+      "key": "K",
+      "label": "ИТОГО поступление",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Выбытие: изм. доли, %",
+      "type": "number"
+    },
+    {
+      "key": "T",
+      "label": "На конец отчетного периода",
+      "type": "number"
+    },
+    {
+      "key": "U",
+      "label": "Доля меньшинства на конец, %",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "1",
+      "name": "Всего"
+    }
+  ],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}
