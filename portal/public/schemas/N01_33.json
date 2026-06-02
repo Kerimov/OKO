@@ -1,0 +1,56 @@
+{
+  "id": "N01_33",
+  "title": "Чистые активы",
+  "category": "N01",
+  "pages": 1,
+  "pdfFile": "1@1_N01_33.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "code",
+      "label": "Код строки",
+      "type": "text",
+      "width": 90,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 280,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "На конец отчетного периода",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "На 31 декабря предыдущего года",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "На 31 декабря года, предш. предыдущему",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "3",
+      "name": "600"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "N13_2",
+  "title": "Налог на прибыль и иные обязательные платежи из прибыли",
+  "category": "N13",
+  "pages": 1,
+  "pdfFile": "1@1_N13_2.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    }
+  ],
+  "rows": [],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "id": "N04_2",
+  "title": "Резерв под обесценение по инвестициям",
+  "category": "N04",
+  "pages": 1,
+  "pdfFile": "1@1_N04_2.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "10",
+      "name": "Резерв под обесценение на начало отчетного периода"
+    },
+    {
+      "num": "20",
+      "name": "Начисление резерва в отчетном периоде"
+    },
+    {
+      "num": "25",
+      "name": "Переклассификация резерва в отчетном периоде"
+    },
+    {
+      "num": "30",
+      "name": "Восстановление резерва в отчетном периоде"
+    },
+    {
+      "num": "40",
+      "name": "Резерв под обесценение на конец отчетного периода"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

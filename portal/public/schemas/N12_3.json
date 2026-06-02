@@ -1,0 +1,160 @@
+{
+  "id": "N12_3",
+  "title": "Себестоимость продаж по видам деятельности (по статьям)",
+  "category": "N12",
+  "pages": 2,
+  "pdfFile": "1@1_N12_3.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Графа I",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Графа L",
+      "type": "number"
+    },
+    {
+      "key": "M",
+      "label": "Графа M",
+      "type": "number"
+    },
+    {
+      "key": "N",
+      "label": "Графа N",
+      "type": "number"
+    },
+    {
+      "key": "P",
+      "label": "Графа P",
+      "type": "number"
+    },
+    {
+      "key": "Q",
+      "label": "Графа Q",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "100",
+      "name": "ГРР"
+    },
+    {
+      "num": "110",
+      "name": "Затраты по договорам страхования"
+    },
+    {
+      "num": "120",
+      "name": "Капитальный ремонт основных"
+    },
+    {
+      "num": "130",
+      "name": "Услуги по транспортировке газа"
+    },
+    {
+      "num": "140",
+      "name": "Услуги по транспортировке"
+    },
+    {
+      "num": "150",
+      "name": "Услуги по добыче газа и газового"
+    },
+    {
+      "num": "160",
+      "name": "Услуги по хранению газа"
+    },
+    {
+      "num": "170",
+      "name": "Услуги по переработке"
+    },
+    {
+      "num": "180",
+      "name": "Прочие услуги производственного"
+    },
+    {
+      "num": "190",
+      "name": "Общепроизводственные расходы"
+    },
+    {
+      "num": "200",
+      "name": "Общехозяйственные расходы"
+    },
+    {
+      "num": "210",
+      "name": "Коммерческие расходы"
+    },
+    {
+      "num": "220",
+      "name": "Итого"
+    },
+    {
+      "num": "300",
+      "name": "из стр.220 Итого по отдельным"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

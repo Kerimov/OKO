@@ -1,0 +1,203 @@
+{
+  "id": "N01_23",
+  "title": "Временные разницы и отложенные налоговые активы и обязательства",
+  "category": "N01",
+  "pages": 4,
+  "pdfFile": "1@1_N01_23.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    },
+    {
+      "key": "E",
+      "label": "Графа E",
+      "type": "number"
+    },
+    {
+      "key": "F",
+      "label": "Графа F",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "I",
+      "label": "Графа I",
+      "type": "number"
+    },
+    {
+      "key": "J",
+      "label": "Графа J",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Графа L",
+      "type": "number"
+    },
+    {
+      "key": "K",
+      "label": "Графа K",
+      "type": "number"
+    },
+    {
+      "key": "M",
+      "label": "Графа M",
+      "type": "number"
+    },
+    {
+      "key": "O",
+      "label": "Графа O",
+      "type": "number"
+    },
+    {
+      "key": "Q",
+      "label": "Графа Q",
+      "type": "number"
+    },
+    {
+      "key": "V",
+      "label": "Графа V",
+      "type": "number"
+    },
+    {
+      "key": "W",
+      "label": "Графа W",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "41",
+      "name": "по сомнительным"
+    },
+    {
+      "num": "42",
+      "name": "по оценочным"
+    },
+    {
+      "num": "43",
+      "name": "по оценочным"
+    },
+    {
+      "num": "45",
+      "name": "под обесценение"
+    },
+    {
+      "num": "49",
+      "name": "прочие резервы"
+    },
+    {
+      "num": "51",
+      "name": "от основной"
+    },
+    {
+      "num": "52",
+      "name": "от реализации"
+    },
+    {
+      "num": "53",
+      "name": "от операций с"
+    },
+    {
+      "num": "54",
+      "name": "от уступки права"
+    },
+    {
+      "num": "55",
+      "name": "по объектам"
+    },
+    {
+      "num": "59",
+      "name": "прочие убытки,"
+    },
+    {
+      "num": "61",
+      "name": "на освоение"
+    },
+    {
+      "num": "62",
+      "name": "на ОКиТР"
+    },
+    {
+      "num": "64",
+      "name": "на страхование"
+    },
+    {
+      "num": "65",
+      "name": "на возмещение"
+    },
+    {
+      "num": "66",
+      "name": "на строительство"
+    },
+    {
+      "num": "69",
+      "name": "прочие расходы,"
+    },
+    {
+      "num": "210",
+      "name": "по сомнительным"
+    },
+    {
+      "num": "211",
+      "name": "по оценочным"
+    },
+    {
+      "num": "212",
+      "name": "под обесценение"
+    },
+    {
+      "num": "219",
+      "name": "прочие резервы"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

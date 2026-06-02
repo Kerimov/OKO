@@ -1,0 +1,7 @@
+.DS_Store
+*.local
+portal/node_modules
+portal/dist
+
+# PDF-образцы форм (локально, не публикуются в репозиторий)
+portal/public/pdf/*.pdf

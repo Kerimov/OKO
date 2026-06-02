@@ -1,0 +1,107 @@
+{
+  "id": "N16_4",
+  "title": "Просроченная задолженность",
+  "category": "N16",
+  "pages": 1,
+  "pdfFile": "1@1_N16_4.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование показателя",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "B",
+      "label": "Графа B",
+      "type": "number"
+    },
+    {
+      "key": "C",
+      "label": "Графа C",
+      "type": "number"
+    },
+    {
+      "key": "L",
+      "label": "Графа L",
+      "type": "number"
+    },
+    {
+      "key": "N",
+      "label": "Графа N",
+      "type": "number"
+    },
+    {
+      "key": "G",
+      "label": "Графа G",
+      "type": "number"
+    },
+    {
+      "key": "H",
+      "label": "Графа H",
+      "type": "number"
+    },
+    {
+      "key": "J",
+      "label": "Графа J",
+      "type": "number"
+    },
+    {
+      "key": "D",
+      "label": "Графа D",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    {
+      "num": "140",
+      "name": "резерв по сомнительным долгам по"
+    },
+    {
+      "num": "160",
+      "name": "резерв по сомнительной прочей"
+    },
+    {
+      "num": "181",
+      "name": "в Российской Федерации"
+    },
+    {
+      "num": "182",
+      "name": "в странах бывшего СССР (кроме Российской"
+    },
+    {
+      "num": "183",
+      "name": "в странах дальнего зарубежья"
+    },
+    {
+      "num": "221",
+      "name": "Сумма созданного резерва"
+    },
+    {
+      "num": "235",
+      "name": "в т.ч. из стр. 230 \"Задолженность за ТМЦ,"
+    }
+  ],
+  "allowAddRows": false,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}
