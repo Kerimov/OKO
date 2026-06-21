@@ -29,6 +29,7 @@ export interface FormSchema {
   columns: FormColumn[];
   rows: FormRowTemplate[];
   allowAddRows?: boolean;
+  kontrForm?: boolean;
   signatures: string[];
 }
 
@@ -47,6 +48,14 @@ export interface FormCatalog {
 }
 
 export type RowData = Record<string, string | number>;
+
+export interface KontrAgent {
+  id: number;
+  name: string;
+  orgForm?: string | null;
+  inn?: string | null;
+  kpp?: string | null;
+}
 
 export interface FormMeta {
   organization: string;

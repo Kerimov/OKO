@@ -18,7 +18,7 @@ export function HomePage() {
     loadCatalog()
       .then(setCatalog)
       .catch((e) => setError(e.message));
-    setMyCount(countInstances());
+    countInstances().then(setMyCount);
   }, []);
 
   const handleCreate = async (templateId: string) => {
@@ -26,8 +26,8 @@ export function HomePage() {
     setError("");
     try {
       const schema = await loadSchema(templateId);
-      const instance = createInstance(schema);
-      setMyCount(countInstances());
+      const instance = await createInstance(schema);
+      setMyCount(await countInstances());
       navigate(`/my/${instance.instanceId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Не удалось создать форму");

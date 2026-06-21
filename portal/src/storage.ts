@@ -1,13 +1,39 @@
-import type { FormMeta, FormSchema, InstanceSummary, OkoFormInstance } from "./types";
+import type {
+  FormMeta,
+  FormSchema,
+  InstanceSummary,
+  OkoFormInstance,
+  KontrAgent,
+} from "./types";
 import { buildInitialRows } from "./utils";
 
 const INDEX_KEY = "oko-instances-index";
 const INSTANCE_PREFIX = "oko-instance-";
 const GLOBAL_META = "oko-global-meta";
+const MIGRATED_KEY = "oko-migrated-to-api";
 
 export interface GlobalMeta extends FormMeta {}
 
-function readIndex(): InstanceSummary[] {
+let useBackend = false;
+
+export function isBackendMode(): boolean {
+  return useBackend;
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...init?.headers },
+    ...init,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || res.statusText);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+function readIndexLocal(): InstanceSummary[] {
   try {
     const raw = localStorage.getItem(INDEX_KEY);
     if (raw) return JSON.parse(raw);
@@ -17,7 +43,7 @@ function readIndex(): InstanceSummary[] {
   return [];
 }
 
-function writeIndex(list: InstanceSummary[]): void {
+function writeIndexLocal(list: InstanceSummary[]): void {
   localStorage.setItem(INDEX_KEY, JSON.stringify(list));
 }
 
@@ -48,36 +74,93 @@ export function defaultDisplayName(
     minute: "2-digit",
   });
   if (meta.organization.trim()) {
-    const org = meta.organization.trim().slice(0, 40);
-    return `${templateId} — ${org} — ${date}`;
+    return `${templateId} — ${meta.organization.trim().slice(0, 40)} — ${date}`;
   }
   const shortTitle =
     templateTitle.length > 45 ? templateTitle.slice(0, 45) + "…" : templateTitle;
   return `${templateId} — ${shortTitle} — ${date}`;
 }
 
-export function loadGlobalMeta(): GlobalMeta {
-  try {
-    const raw = localStorage.getItem(GLOBAL_META);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    /* ignore */
+async function migrateLocalToBackend(): Promise<void> {
+  if (localStorage.getItem(MIGRATED_KEY)) return;
+  const instances = readIndexLocal()
+    .map((s) => {
+      try {
+        const raw = localStorage.getItem(INSTANCE_PREFIX + s.instanceId);
+        return raw ? (JSON.parse(raw) as OkoFormInstance) : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((i): i is OkoFormInstance => i !== null);
+
+  if (instances.length === 0 && !localStorage.getItem(GLOBAL_META)) {
+    localStorage.setItem(MIGRATED_KEY, "1");
+    return;
   }
-  return {
+
+  const settings: Record<string, string> = {};
+  const metaRaw = localStorage.getItem(GLOBAL_META);
+  if (metaRaw) settings.globalMeta = metaRaw;
+
+  await apiFetch("/api/instances/migrate", {
+    method: "POST",
+    body: JSON.stringify({ instances, settings }),
+  });
+  localStorage.setItem(MIGRATED_KEY, "1");
+}
+
+export async function initStorage(): Promise<boolean> {
+  try {
+    await apiFetch<{ ok: boolean }>("/api/health");
+    useBackend = true;
+    await migrateLocalToBackend();
+    return true;
+  } catch {
+    useBackend = false;
+    return false;
+  }
+}
+
+export async function loadGlobalMeta(): Promise<GlobalMeta> {
+  const fallback: GlobalMeta = {
     organization: "",
     enterpriseCode: "1@1",
     periodStart: "",
     periodEnd: "",
     unit: "тыс.руб.",
   };
+  if (!useBackend) {
+    try {
+      const raw = localStorage.getItem(GLOBAL_META);
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return fallback;
+  }
+  try {
+    const data = await apiFetch<Record<string, string>>("/api/settings");
+    if (data.globalMeta) return JSON.parse(data.globalMeta);
+  } catch {
+    /* ignore */
+    }
+  return fallback;
 }
 
-export function saveGlobalMeta(meta: GlobalMeta): void {
-  localStorage.setItem(GLOBAL_META, JSON.stringify(meta));
+export async function saveGlobalMeta(meta: GlobalMeta): Promise<void> {
+  if (!useBackend) {
+    localStorage.setItem(GLOBAL_META, JSON.stringify(meta));
+    return;
+  }
+  await apiFetch("/api/settings", {
+    method: "PUT",
+    body: JSON.stringify({ globalMeta: JSON.stringify(meta) }),
+  });
 }
 
-export function createInstance(schema: FormSchema): OkoFormInstance {
-  const global = loadGlobalMeta();
+export async function createInstance(schema: FormSchema): Promise<OkoFormInstance> {
+  const global = await loadGlobalMeta();
   const now = new Date().toISOString();
   const meta: FormMeta = {
     organization: global.organization,
@@ -101,49 +184,89 @@ export function createInstance(schema: FormSchema): OkoFormInstance {
     updatedAt: now,
   };
 
-  saveInstance(instance);
+  await saveInstance(instance);
   return instance;
 }
 
-export function saveInstance(instance: OkoFormInstance): void {
+export async function saveInstance(instance: OkoFormInstance): Promise<void> {
   instance.updatedAt = new Date().toISOString();
-  localStorage.setItem(
-    INSTANCE_PREFIX + instance.instanceId,
-    JSON.stringify(instance)
-  );
 
-  const summary = summaryFromInstance(instance);
-  const index = readIndex().filter((s) => s.instanceId !== instance.instanceId);
-  index.push(summary);
-  index.sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-  writeIndex(index);
-}
-
-export function loadInstance(instanceId: string): OkoFormInstance | null {
-  try {
-    const raw = localStorage.getItem(INSTANCE_PREFIX + instanceId);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    /* ignore */
+  if (!useBackend) {
+    localStorage.setItem(
+      INSTANCE_PREFIX + instance.instanceId,
+      JSON.stringify(instance)
+    );
+    const summary = summaryFromInstance(instance);
+    const index = readIndexLocal().filter((s) => s.instanceId !== instance.instanceId);
+    index.push(summary);
+    index.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+    writeIndexLocal(index);
+    return;
   }
-  return null;
+
+  const existing = await loadInstance(instance.instanceId);
+  if (existing) {
+    await apiFetch(`/api/instances/${instance.instanceId}`, {
+      method: "PUT",
+      body: JSON.stringify(instance),
+    });
+  } else {
+    await apiFetch("/api/instances", {
+      method: "POST",
+      body: JSON.stringify(instance),
+    });
+  }
 }
 
-export function deleteInstance(instanceId: string): void {
-  localStorage.removeItem(INSTANCE_PREFIX + instanceId);
-  writeIndex(readIndex().filter((s) => s.instanceId !== instanceId));
+export async function loadInstance(instanceId: string): Promise<OkoFormInstance | null> {
+  if (!useBackend) {
+    try {
+      const raw = localStorage.getItem(INSTANCE_PREFIX + instanceId);
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+  try {
+    return await apiFetch<OkoFormInstance>(`/api/instances/${instanceId}`);
+  } catch {
+    return null;
+  }
 }
 
-export function listInstances(): InstanceSummary[] {
-  return readIndex().sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+export async function deleteInstance(instanceId: string): Promise<void> {
+  if (!useBackend) {
+    localStorage.removeItem(INSTANCE_PREFIX + instanceId);
+    writeIndexLocal(readIndexLocal().filter((s) => s.instanceId !== instanceId));
+    return;
+  }
+  await apiFetch(`/api/instances/${instanceId}`, { method: "DELETE" });
 }
 
-export function countInstances(): number {
-  return readIndex().length;
+export async function listInstances(): Promise<InstanceSummary[]> {
+  if (!useBackend) {
+    return readIndexLocal().sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+  }
+  return apiFetch<InstanceSummary[]>("/api/instances");
+}
+
+export async function loadAllInstances(): Promise<OkoFormInstance[]> {
+  const index = await listInstances();
+  const out: OkoFormInstance[] = [];
+  for (const s of index) {
+    const inst = await loadInstance(s.instanceId);
+    if (inst) out.push(inst);
+  }
+  return out;
+}
+
+export async function countInstances(): Promise<number> {
+  return (await listInstances()).length;
 }
 
 export function exportInstance(instance: OkoFormInstance): void {
@@ -153,8 +276,7 @@ export function exportInstance(instance: OkoFormInstance): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  const safeName = instance.displayName.replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_").slice(0, 60);
-  a.download = `oko_${instance.templateId}_${safeName}.json`;
+  a.download = `oko_${instance.templateId}_${instance.displayName.replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_").slice(0, 60)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -167,12 +289,8 @@ export async function importInstanceFile(file: File): Promise<OkoFormInstance> {
     data.instanceId = crypto.randomUUID();
     data.createdAt = data.createdAt ?? new Date().toISOString();
   }
-  if (!data.templateId && data.formId) {
-    data.templateId = data.formId;
-  }
-  if (!data.templateTitle) {
-    data.templateTitle = data.templateId ?? "Форма";
-  }
+  if (!data.templateId && data.formId) data.templateId = data.formId;
+  if (!data.templateTitle) data.templateTitle = data.templateId ?? "Форма";
   if (!data.displayName) {
     data.displayName = defaultDisplayName(
       data.templateId,
@@ -181,6 +299,27 @@ export async function importInstanceFile(file: File): Promise<OkoFormInstance> {
     );
   }
 
-  saveInstance(data as OkoFormInstance);
+  await saveInstance(data as OkoFormInstance);
   return data as OkoFormInstance;
+}
+
+export async function loadKontrAgents(): Promise<KontrAgent[]> {
+  if (!useBackend) {
+    const res = await fetch("/data/kontr.json");
+    const data = await res.json();
+    return data.items as KontrAgent[];
+  }
+  return apiFetch<KontrAgent[]>("/api/kontr");
+}
+
+export async function addKontrAgent(
+  agent: Omit<KontrAgent, "id">
+): Promise<KontrAgent> {
+  if (!useBackend) {
+    return { id: Date.now(), ...agent };
+  }
+  return apiFetch<KontrAgent>("/api/kontr", {
+    method: "POST",
+    body: JSON.stringify(agent),
+  });
 }

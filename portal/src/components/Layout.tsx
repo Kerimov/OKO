@@ -20,6 +20,9 @@ export function Layout() {
           >
             Мои формы ОКО
           </Link>
+          <Link to="/tools" className={pathname === "/tools" ? "active" : ""}>
+            Администрирование
+          </Link>
           <Link to="/settings" className={pathname === "/settings" ? "active" : ""}>
             Настройки
           </Link>
@@ -29,7 +32,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="footer">
-        Формы корпоративной (специализированной) отчётности · 75 форм
+        Формы корпоративной (специализированной) отчётности · 76 форм
       </footer>
     </div>
   );

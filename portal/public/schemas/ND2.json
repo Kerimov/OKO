@@ -29,104 +29,108 @@
       "readonly": true
     },
     {
-      "key": "R",
-      "label": "Графа R",
-      "type": "number"
-    },
-    {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Здания: произв.назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Здания: непроизвод.назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Скважины",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
-    },
-    {
-      "key": "P",
-      "label": "Графа P",
-      "type": "number"
+      "label": "Магистр. трубопр.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Дороги",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Сооружения: Прочие сооруж. произв. назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
+      "label": "Сооружения: Прочие сооруж. непроизвод. назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Машины и оборуд.: Компрессоры",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
-      "label": "Графа K",
-      "type": "number"
+      "label": "Прочие машины и оборуд.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Графа L",
-      "type": "number"
+      "label": "Транспорт",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "M",
-      "label": "Графа M",
-      "type": "number"
+      "label": "Другие виды ОС",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "N",
-      "label": "Графа N",
-      "type": "number"
+      "label": "Итого",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "O",
-      "label": "Графа O",
-      "type": "number"
+      "label": "Пост.на 08сч. за искл.объект., получ.от Заказчика в рамках инвест.дог.",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "P",
+      "label": "Пост.на 08сч.объект., получ.от Заказчика в рамках инвест. дог.",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "R",
+      "label": "Поступление на прочие счета (07, 10, пр.)",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "08",
-      "name": "сч. за"
+      "name": "Сумма дооценки, приходящаяся на выбывшие основные средства",
+      "num": "300"
     },
     {
-      "num": "08",
-      "name": "сч."
+      "name": "Накопленная амортизация на конец отч.периода",
+      "num": "200"
     },
     {
-      "num": "10",
-      "code": "0",
-      "name": "Первоначальная стоимость на конец отч.периода"
-    },
-    {
-      "num": "20",
-      "code": "0",
-      "name": "Накопленная амортизация на конец отч.периода"
-    },
-    {
-      "num": "30",
-      "code": "0",
-      "name": "Сумма дооценки, приходящаяся на выбывшие основные"
+      "name": "Первоначальная стоимость на конец отч.периода",
+      "num": "100"
     }
   ],
   "allowAddRows": false,

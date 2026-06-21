@@ -30,69 +30,97 @@
     },
     {
       "key": "B",
-      "label": "Графа B",
-      "type": "number"
+      "label": "Валюта",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Вид ставки процента",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Частота погашения процентов",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Обеспечение выданное",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
+      "label": "Дата получения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
-    },
-    {
-      "key": "H",
-      "label": "Графа H",
-      "type": "number"
-    },
-    {
-      "key": "I",
-      "label": "Графа I",
-      "type": "number"
-    },
-    {
-      "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Дата погашения (по договору)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Графа L",
-      "type": "number"
+      "label": "Порядок формирования плавающей ставки",
+      "type": "text",
+      "width": 90
+    },
+    {
+      "key": "H",
+      "label": "Годовая процентная ставка/ Годовая ставка купона,%",
+      "type": "text",
+      "width": 90
+    },
+    {
+      "key": "I",
+      "label": "Сумма задолж. на отчетную дату: Текущая часть",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "J",
+      "label": "Сумма задолж. на отчетную дату: Долгосрочная часть",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "M",
-      "label": "Графа M",
-      "type": "number"
+      "label": "в т.ч. проценты из гр.I (текущая часть)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "N",
-      "label": "Графа N",
-      "type": "number"
+      "label": "в т.ч. проценты из гр.J (долго-срочная часть)",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "P",
+      "label": "Наличие ковенант",
+      "type": "text",
+      "width": 90
+    },
+    {
+      "key": "K",
+      "label": "Ставка дисконтирования для расчета справедливой стоимости",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "1",
-      "name": "Всего"
+      "name": "Строка 12",
+      "num": "12"
+    },
+    {
+      "name": "Всего",
+      "num": "1"
     }
   ],
   "allowAddRows": false,

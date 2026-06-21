@@ -1,15 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadGlobalMeta, saveGlobalMeta } from "../storage";
+import type { GlobalMeta } from "../storage";
+
+const emptyMeta: GlobalMeta = {
+  organization: "",
+  enterpriseCode: "1@1",
+  periodStart: "",
+  periodEnd: "",
+  unit: "тыс.руб.",
+};
 
 export function SettingsPage() {
-  const [meta, setMeta] = useState(loadGlobalMeta);
+  const [meta, setMeta] = useState<GlobalMeta>(emptyMeta);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    saveGlobalMeta(meta);
+  useEffect(() => {
+    loadGlobalMeta().then((m) => {
+      setMeta(m);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    await saveGlobalMeta(meta);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  if (loading) {
+    return <div className="loading">Загрузка настроек…</div>;
+  }
 
   return (
     <div className="settings-page">

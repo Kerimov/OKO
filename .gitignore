@@ -2,6 +2,19 @@
 *.local
 portal/node_modules
 portal/dist
+server/node_modules
+
+# SQLite database
+data/oko.db
+data/oko.db-*
 
 # PDF-образцы форм (локально, не публикуются в репозиторий)
 portal/public/pdf/*.pdf
+
+# Исходный комплект ОКО (бинарники)
+reference/*.mdb
+reference/*.mde
+# Локальная копия комплекта ОКО (не публиковать)
+12345/*.mdb
+*.mde
+.env

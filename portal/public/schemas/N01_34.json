@@ -16,74 +16,135 @@
       "key": "num",
       "label": "№",
       "type": "text",
-      "width": 50
+      "width": 55,
+      "frozen": true,
+      "readonly": true
     },
     {
       "key": "name",
-      "label": "Контрагент",
+      "label": "Наименование организации",
       "type": "text",
-      "width": 220
+      "width": 320,
+      "frozen": true,
+      "readonly": false
+    },
+    {
+      "key": "B",
+      "label": "На начало отчетного периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "C",
-      "label": "Доля меньшинства на начало, %",
-      "type": "number"
+      "label": "Доля меньшинства на начало отч.периода, %",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Поступл.: изм. доли, %",
-      "type": "number"
+      "label": "Поступл.: Изменение доли меньшинства, %",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Поступл.: уставный капитал",
-      "type": "number"
+      "label": "Поступл.: Изменение в уставном капитале",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Поступл.: добавочный капитал",
-      "type": "number"
+      "label": "Поступл.: Изменение в добавочном капитале",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Поступл.: резервный капитал",
-      "type": "number"
+      "label": "Поступл.: Изменение в резервном капитале",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Поступл.: нераспр. прибыль прошлых лет",
-      "type": "number"
+      "label": "Поступл.: Изменение в нераспр.приб.(убыт.) прошлых лет",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Поступл.: прибыль/убыток отч. периода",
-      "type": "number"
+      "label": "Поступл.: Изм. в прибыли отч.периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
       "label": "ИТОГО поступление",
-      "type": "number"
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Выбытие: изм. доли, %",
-      "type": "number"
+      "label": "Выбытие: Изм. доли меньшинст-ва, %",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "M",
+      "label": "Выбытие: Изменение в уставном капитале",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "N",
+      "label": "Выбытие: Изменение в добавочном капитале",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "O",
+      "label": "Выбытие: Изменение в резервном капитале",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "P",
+      "label": "Выбытие: Изм. в нераспр.приб.(убыт.) прошлых лет",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "Q",
+      "label": "Выбытие: Изм. в убытке отч. Периода",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "S",
+      "label": "ИТОГО Выбытие",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "T",
       "label": "На конец отчетного периода",
-      "type": "number"
+      "type": "number",
+      "width": 90
     },
     {
       "key": "U",
-      "label": "Доля меньшинства на конец, %",
-      "type": "number"
+      "label": "Доля меньшинства на конец отч.периода, %",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "1",
-      "name": "Всего"
+      "name": "Строка 12",
+      "num": "12"
+    },
+    {
+      "name": "Всего",
+      "num": "1"
     }
   ],
   "allowAddRows": true,

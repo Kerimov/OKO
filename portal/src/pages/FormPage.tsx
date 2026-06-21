@@ -1,16 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { loadSchema } from "../api";
+import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { FormTable } from "../components/FormTable";
+import { isKontrForm } from "../constants";
+import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
+import { failedCellsForForm } from "../engine/cellErrors";
+import { exportFormToExcel } from "../engine/exportExcel";
+import { recalcForm } from "../engine/recalcEngine";
 import {
   deleteInstance,
   exportInstance,
   importInstanceFile,
+  loadAllInstances,
   loadInstance,
+  loadKontrAgents,
   saveGlobalMeta,
   saveInstance,
 } from "../storage";
-import type { FormMeta, FormSchema, OkoFormInstance, RowData } from "../types";
+import type { FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
 import { buildInitialRows, formatPeriod } from "../utils";
 
 export function FormPage() {
@@ -28,32 +36,52 @@ export function FormPage() {
     unit: "тыс.руб.",
   });
   const [signatures, setSignatures] = useState<Record<string, string>>({});
+  const [kontrAgents, setKontrAgents] = useState<KontrAgent[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [recalcing, setRecalcing] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const kontrMode = schema ? isKontrForm(schema.id) : false;
 
   useEffect(() => {
     if (!instanceId) return;
     setError("");
-    const inst = loadInstance(instanceId);
-    if (!inst) {
-      setError("Форма не найдена. Возможно, она была удалена.");
-      return;
-    }
-    setInstance(inst);
-    setDisplayName(inst.displayName);
-    setMeta(inst.meta);
-    setRows(inst.rows);
-    setSignatures(inst.signatures ?? {});
+    loadInstance(instanceId).then((inst) => {
+      if (!inst) {
+        setError("Форма не найдена. Возможно, она была удалена.");
+        return;
+      }
+      setInstance(inst);
+      setDisplayName(inst.displayName);
+      setMeta(inst.meta);
+      setRows(inst.rows);
+      setSignatures(inst.signatures ?? {});
 
-    loadSchema(inst.templateId)
-      .then(setSchema)
-      .catch((e) => setError(e.message));
+      loadSchema(inst.templateId)
+        .then(setSchema)
+        .catch((e) => setError(e.message));
+    });
   }, [instanceId]);
 
+  useEffect(() => {
+    if (!kontrMode) return;
+    loadKontrAgents().then(setKontrAgents).catch(() => setKontrAgents([]));
+  }, [kontrMode]);
+
+  const cellErrors = useMemo(() => {
+    if (!schema) return undefined;
+    return failedCellsForForm(schema.id, checkResult);
+  }, [schema, checkResult]);
+
   const persist = useCallback(
-    (overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>) => {
+    async (
+      overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>
+    ) => {
       if (!instance || !schema) return null;
       const updated: OkoFormInstance = {
         ...instance,
@@ -63,22 +91,22 @@ export function FormPage() {
         signatures: overrides?.signatures ?? signatures,
         updatedAt: new Date().toISOString(),
       };
-      saveInstance(updated);
-      saveGlobalMeta(updated.meta);
+      await saveInstance(updated);
+      await saveGlobalMeta(updated.meta);
       setInstance(updated);
       return updated;
     },
     [instance, schema, displayName, meta, rows, signatures]
   );
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!instance) return;
-    persist();
+    await persist();
     setStatus("Сохранено " + new Date().toLocaleTimeString("ru-RU"));
     setTimeout(() => setStatus(""), 3000);
   }, [instance, persist]);
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!schema || !instance) return;
     if (!confirm("Сбросить все введённые данные к шаблону?")) return;
     const fresh = buildInitialRows(schema);
@@ -86,14 +114,15 @@ export function FormPage() {
     for (const name of schema.signatures) sigs[name] = "";
     setRows(fresh);
     setSignatures(sigs);
-    persist({ rows: fresh, signatures: sigs });
+    await persist({ rows: fresh, signatures: sigs });
+    setCheckResult(null);
     setStatus("Данные сброшены к шаблону");
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!instance) return;
     if (!confirm(`Удалить форму «${instance.displayName}»?`)) return;
-    deleteInstance(instance.instanceId);
+    await deleteInstance(instance.instanceId);
     navigate("/my");
   };
 
@@ -112,7 +141,7 @@ export function FormPage() {
     if (!schema || !instance) return;
     setExportingPdf(true);
     try {
-      persist();
+      await persist();
       const { exportFormToPdf } = await import("../exportPdf");
       exportFormToPdf({
         schema,
@@ -127,6 +156,64 @@ export function FormPage() {
       setError("Не удалось сформировать PDF");
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const handleRecalc = async () => {
+    if (!schema) return;
+    setRecalcing(true);
+    try {
+      const next = await recalcForm(schema, rows);
+      setRows(next);
+      await persist({ rows: next });
+      setStatus("Строки пересчитаны");
+      setTimeout(() => setStatus(""), 3000);
+    } catch {
+      setError("Ошибка пересчёта");
+    } finally {
+      setRecalcing(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!schema || !instance) return;
+    setExportingExcel(true);
+    try {
+      await persist();
+      await exportFormToExcel({
+        schema,
+        displayName,
+        meta,
+        rows,
+      });
+      setStatus("Excel сохранён");
+      setTimeout(() => setStatus(""), 3000);
+    } catch {
+      setError("Не удалось сформировать Excel");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const handleCheck = async () => {
+    if (!schema || !instance) return;
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      await persist();
+      const all = await loadAllInstances();
+      const result = await runFormChecks(schema.id, all);
+      setCheckResult(result);
+      setStatus(
+        result.failed === 0
+          ? "Проверка пройдена"
+          : `Ошибок увязок: ${result.failed}`
+      );
+      setTimeout(() => setStatus(""), 5000);
+    } catch {
+      setError("Не удалось выполнить проверку");
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -177,7 +264,7 @@ export function FormPage() {
               className="display-name-input"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              onBlur={() => persist({ displayName })}
+              onBlur={() => void persist({ displayName })}
             />
           </label>
           <div className="form-subtitle">
@@ -207,21 +294,41 @@ export function FormPage() {
           >
             {exportingPdf ? "PDF…" : "Сохранить PDF"}
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleRecalc}
+            disabled={recalcing}
+          >
+            {recalcing ? "…" : "Пересчёт"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
+          >
+            {exportingExcel ? "Excel…" : "Excel"}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleCheck} disabled={checking}>
+            {checking ? "Проверка…" : "Проверить форму"}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={handleExport}>
             Экспорт JSON
           </button>
-          <button type="button" className="btn btn-secondary" onClick={handleReset}>
+          <button type="button" className="btn btn-secondary" onClick={() => void handleReset()}>
             Сбросить данные
           </button>
-          <button type="button" className="btn btn-danger-outline" onClick={handleDelete}>
+          <button type="button" className="btn btn-danger-outline" onClick={() => void handleDelete()}>
             Удалить
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
+          <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
             Сохранить
           </button>
         </div>
       </div>
       {status && <div className="status-bar">{status}</div>}
+      <CheckResultsPanel result={checkResult} loading={checking} />
 
       <section className="form-meta-panel">
         <div className="meta-grid">
@@ -273,7 +380,10 @@ export function FormPage() {
         columns={schema.columns}
         rows={rows}
         onChange={setRows}
-        allowAddRows={schema.allowAddRows}
+        allowAddRows={schema.allowAddRows || kontrMode}
+        kontrMode={kontrMode}
+        kontrAgents={kontrAgents}
+        cellErrors={cellErrors}
       />
 
       {schema.signatures.length > 0 && (

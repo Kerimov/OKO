@@ -2,7 +2,7 @@
   "id": "N03_2",
   "title": "Объекты с минимальными объемами капвложений",
   "category": "N03",
-  "pages": 2,
+  "pages": 1,
   "pdfFile": "1@1_N03_2.pdf",
   "meta": {
     "organization": "",
@@ -22,66 +22,81 @@
     },
     {
       "key": "name",
-      "label": "Наименование показателя",
+      "label": "Объекты с мин.объемами кап.вложений за отчетный период",
       "type": "text",
       "width": 320,
       "frozen": true,
       "readonly": true
     },
     {
+      "key": "S",
+      "label": "Вид деятельности",
+      "type": "text",
+      "width": 144
+    },
+    {
       "key": "B",
-      "label": "Графа B",
-      "type": "number"
+      "label": "Стоимость объекта на начало отчетного периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Поступл.: в связи с расход., необх.для поддерж.объекта",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Поступл.: прочее поступление",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Выбыт./ Уменьш.стоим.: в связи с возобновлением строительства",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
+      "label": "Выбыт./ Уменьш. стоим.: Продажа/передача",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Выбыт./ Уменьш. стоим.: Списание с баланса / Ликвидация",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Выбыт./ Уменьш. стоим.: Прочее выбытие",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
-    },
-    {
-      "key": "S",
-      "label": "Графа S",
-      "type": "number"
+      "label": "Стоимость объекта на конец отчетного периода",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "1",
-      "name": "Всего"
+      "name": "(1)",
+      "num": "12",
+      "code": "1"
     },
     {
-      "num": "11",
-      "name": "Прочие  объекты"
+      "name": "Прочие объекты",
+      "num": "11"
+    },
+    {
+      "name": "Всего",
+      "num": "1",
+      "code": "12"
     }
   ],
   "allowAddRows": false,
