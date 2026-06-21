@@ -22,7 +22,7 @@
     },
     {
       "key": "name",
-      "label": "Наименование показателя",
+      "label": "Строка Формы",
       "type": "text",
       "width": 320,
       "frozen": true,
@@ -30,83 +30,105 @@
     },
     {
       "key": "B",
-      "label": "Графа B",
-      "type": "number"
+      "label": "Сальдо на начало",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Со счетом 86",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Прочее",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Итого",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
+      "label": "Со счетом 90",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Со счетом 91",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
-      "label": "Графа K",
-      "type": "number"
+      "label": "Со счетом 92",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Прочее",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
+      "label": "Итого",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Сальдо на конец",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "10",
-      "name": "Средства налога на"
-    },
-    {
-      "num": "20",
-      "name": "Финансирование"
-    },
-    {
-      "num": "30",
-      "name": "Арендные поступления"
-    },
-    {
-      "num": "40",
-      "name": "Безвозмездные"
-    },
-    {
-      "num": "50",
-      "name": "Прочие"
-    },
-    {
-      "num": "60",
-      "name": "Всего по счету  98"
-    },
-    {
+      "name": "в т.ч. из стр.60 признанные организацией в связи с получением гос.помощи",
       "num": "70",
-      "name": "в т.ч. из стр.60"
+      "code": "60"
+    },
+    {
+      "name": "в т.ч. из стр.60 долгосрочные доходы будущих периодов",
+      "num": "65",
+      "code": "60"
+    },
+    {
+      "name": "Всего по счету 98",
+      "num": "60",
+      "code": "6"
+    },
+    {
+      "name": "Прочие",
+      "num": "50",
+      "code": "5"
+    },
+    {
+      "name": "Безвозмездные поступления (сч. 9820)",
+      "num": "40",
+      "code": "4"
+    },
+    {
+      "name": "Арендные поступления",
+      "num": "30",
+      "code": "3"
+    },
+    {
+      "name": "Финансирование целевых программ",
+      "num": "20",
+      "code": "2"
+    },
+    {
+      "name": "Средства налога на ВМСБ",
+      "num": "10",
+      "code": "1"
     }
   ],
   "allowAddRows": false,

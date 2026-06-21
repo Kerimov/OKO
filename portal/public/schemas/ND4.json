@@ -22,79 +22,100 @@
     },
     {
       "key": "name",
-      "label": "Наименование показателя",
+      "label": "Наименование контрагента",
       "type": "text",
       "width": 320,
       "frozen": true,
-      "readonly": true
+      "readonly": false
     },
     {
       "key": "B",
-      "label": "Графа B",
-      "type": "number"
+      "label": "Валюта задолженности",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "C",
+      "label": "Характер задолженности",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Дата возникновения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Дата погашения по договору",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
+      "label": "Ожидаемая дата погашения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Ожидаемый График погашения: до 6 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Ожидаемый График погашения : 6-12 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
+      "label": "Ожидаемый График погашения: 12-24 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Ожидаемый График погашения: 24-36 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
-      "label": "Графа K",
-      "type": "number"
+      "label": "Ожидаемый График погашения: 36-48 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Графа L",
-      "type": "number"
+      "label": "Ожидаемый График погашения: 48-60 мес.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "M",
-      "label": "Графа M",
-      "type": "number"
+      "label": "Ожидаемый График погашения: свыше 60 мес.",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "1",
-      "name": "Всего"
+      "name": "Строка 12",
+      "num": "12"
     },
     {
-      "num": "11",
-      "name": "Прочие"
+      "name": "Прочие",
+      "num": "11"
+    },
+    {
+      "name": "Всего",
+      "num": "1"
     }
   ],
-  "allowAddRows": false,
+  "allowAddRows": true,
   "signatures": [
     "Руководитель",
     "Главный бухгалтер"

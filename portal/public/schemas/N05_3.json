@@ -2,7 +2,7 @@
   "id": "N05_3",
   "title": "Расходы будущих периодов (счет 97)",
   "category": "N05",
-  "pages": 1,
+  "pages": 2,
   "pdfFile": "1@1_N05_3.pdf",
   "meta": {
     "organization": "",
@@ -29,92 +29,122 @@
       "readonly": true
     },
     {
+      "key": "number",
+      "label": "N п/п",
+      "type": "text",
+      "width": 90
+    },
+    {
+      "key": "name",
+      "label": "name",
+      "type": "text",
+      "width": 320
+    },
+    {
       "key": "B",
-      "label": "Графа B",
-      "type": "number"
+      "label": "Сальдо на начало отчетного периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Поступление: Получено от др. подразд. (сч. 79)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Поступление: Начислено",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Выбытие: Получено от др. подразд. (сч. 79)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
+      "label": "Выбытие: Списано",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Переклассификация между долгосрочными и краткосрочными РБП",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Сальдо на конец отчетного периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
+      "label": "Сальдо на начало отчетного периода",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Поступление: Получено от др. подразд. (сч. 79)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
-      "label": "Графа K",
-      "type": "number"
+      "label": "Поступление: Начислено",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Графа L",
-      "type": "number"
+      "label": "Выбытие: Передано от др. подразд. (сч. 79)",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "M",
-      "label": "Графа M",
-      "type": "number"
+      "label": "Выбытие: Списано",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "N",
-      "label": "Графа N",
-      "type": "number"
+      "label": "Переклассификация между долгосрочными и краткосрочными РБП",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "O",
-      "label": "Графа O",
-      "type": "number"
+      "label": "Сальдо на конец отчетного периода",
+      "type": "number",
+      "width": 90
     }
   ],
   "rows": [
     {
-      "num": "30",
-      "name": "ГРР (расходы на освоение"
-    },
-    {
-      "num": "40",
-      "name": "Поддержка,"
-    },
-    {
-      "num": "150",
-      "name": "Прочие"
-    },
-    {
+      "name": "Итого РБП",
       "num": "160",
-      "name": "Итого РБП"
+      "code": "16"
+    },
+    {
+      "name": "Прочие",
+      "num": "150",
+      "code": "15"
+    },
+    {
+      "name": "Поддержка, обслуживание, сопровождение программ для ЭВМ",
+      "num": "40",
+      "code": "4"
+    },
+    {
+      "name": "ГРР (расходы на освоение природных ресурсов)",
+      "num": "30",
+      "code": "3"
     }
   ],
   "allowAddRows": false,

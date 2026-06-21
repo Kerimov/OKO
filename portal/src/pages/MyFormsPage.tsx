@@ -14,7 +14,7 @@ export function MyFormsPage() {
   const [search, setSearch] = useState("");
   const [filterTemplate, setFilterTemplate] = useState("all");
 
-  const refresh = () => setInstances(listInstances());
+  const refresh = async () => setInstances(await listInstances());
 
   useEffect(() => {
     refresh();
@@ -49,8 +49,7 @@ export function MyFormsPage() {
     ) {
       return;
     }
-    deleteInstance(inst.instanceId);
-    refresh();
+    deleteInstance(inst.instanceId).then(refresh);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,8 +71,8 @@ export function MyFormsPage() {
         <h1>Мои формы ОКО</h1>
         <p>
           Здесь хранятся отдельные заполненные экземпляры форм. Создайте новую
-          форму в{" "}
-          <Link to="/">каталоге шаблонов</Link>.
+          форму в <Link to="/">каталоге шаблонов</Link> или откройте{" "}
+          <Link to="/tools">администрирование</Link> для проверки и сальdo.
         </p>
         <div className="stats">
           <span className="stat">{instances.length} сохранённых форм</span>

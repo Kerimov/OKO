@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Generate JSON schemas for OKO forms from PDF templates."""
+"""DEPRECATED: use generate_schemas_from_mdb.py instead.
+
+Legacy PDF parser. Source of truth for schemas is z261.mdb (see generate_schemas_from_mdb.py).
+"""
 import json
 import re
 from pathlib import Path

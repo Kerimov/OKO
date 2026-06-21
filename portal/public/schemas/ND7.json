@@ -1,0 +1,83 @@
+{
+  "id": "ND7",
+  "title": "Дополнительная форма ND7",
+  "category": "ND",
+  "pages": 1,
+  "pdfFile": "1@1_ND7.pdf",
+  "meta": {
+    "organization": "",
+    "enterpriseCode": "1@1",
+    "periodStart": "",
+    "periodEnd": "",
+    "unit": "тыс.руб."
+  },
+  "columns": [
+    {
+      "key": "num",
+      "label": "№",
+      "type": "text",
+      "width": 55,
+      "frozen": true,
+      "readonly": true
+    },
+    {
+      "key": "name",
+      "label": "Наименование контрагента",
+      "type": "text",
+      "width": 320,
+      "frozen": true,
+      "readonly": false
+    },
+    {
+      "key": "B",
+      "label": "Кредитор контрагента",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "D",
+      "label": "Дата заключения ДУЗ",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "E",
+      "label": "Дата окончания ДУЗ",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "F",
+      "label": "Лимит выдачи по ДУЗ",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "G",
+      "label": "Доступный лимит выдачи по ДУЗ на отч.дату",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "C",
+      "label": "Процентная ставка по ДУЗ",
+      "type": "number",
+      "width": 90
+    }
+  ],
+  "rows": [
+    {
+      "name": "Строка 12",
+      "num": "12"
+    },
+    {
+      "name": "Всего",
+      "num": "1"
+    }
+  ],
+  "allowAddRows": true,
+  "signatures": [
+    "Руководитель",
+    "Главный бухгалтер"
+  ]
+}

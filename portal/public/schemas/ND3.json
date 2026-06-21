@@ -30,77 +30,100 @@
     },
     {
       "key": "C",
-      "label": "Графа C",
-      "type": "number"
+      "label": "Здания: произв.назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "D",
-      "label": "Графа D",
-      "type": "number"
+      "label": "Здания: непроизвод. назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "E",
-      "label": "Графа E",
-      "type": "number"
+      "label": "Сооружения: Скважины",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "F",
-      "label": "Графа F",
-      "type": "number"
-    },
-    {
-      "key": "P",
-      "label": "Графа P",
-      "type": "number"
+      "label": "Сооружения: Магистр. трубопр.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "G",
-      "label": "Графа G",
-      "type": "number"
+      "label": "Сооружения: Дороги",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "H",
-      "label": "Графа H",
-      "type": "number"
+      "label": "Сооружения: Прочие сооруж. произв. Назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "I",
-      "label": "Графа I",
-      "type": "number"
+      "label": "Сооружения: Прочие сооруж. непроизвод. Назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "J",
-      "label": "Графа J",
-      "type": "number"
+      "label": "Машины и оборуд.: Компрессоры",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "K",
-      "label": "Графа K",
-      "type": "number"
+      "label": "Проч.машины и оборуд. произв. Назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "L",
-      "label": "Графа L",
-      "type": "number"
+      "label": "Транспорт",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "M",
-      "label": "Графа M",
-      "type": "number"
+      "label": "Инвентарь произв. и хозяйств.",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "N",
-      "label": "Графа N",
-      "type": "number"
+      "label": "Другие ОС: произв.назначения",
+      "type": "number",
+      "width": 90
     },
     {
       "key": "O",
-      "label": "Графа O",
-      "type": "number"
+      "label": "Другие ОС: непроизв.назначения",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "P",
+      "label": "Итого",
+      "type": "number",
+      "width": 90
     }
   ],
-  "rows": [],
-  "allowAddRows": true,
+  "rows": [
+    {
+      "name": "Накопленная амортизация на дату выбытия",
+      "num": "200"
+    },
+    {
+      "name": "Первоначальная стоимость на дату выбытия",
+      "num": "100"
+    }
+  ],
+  "allowAddRows": false,
   "signatures": [
     "Руководитель",
     "Главный бухгалтер"
