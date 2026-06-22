@@ -9,6 +9,7 @@ import {
 import {
   evalContextFromInstances,
   latestInstancePerTemplate,
+  loadEvalContextForChecks,
   loadInstancesForCheck,
 } from "./instanceIndex";
 
@@ -88,9 +89,8 @@ export async function getCheckRuleCounts(): Promise<CheckRuleCounts> {
 
 function runRules(
   rules: CheckRule[],
-  instances: OkoFormInstance[]
+  ctx: import("./cellExpression").EvalContext
 ): CheckRunResult {
-  const ctx = evalContextFromInstances(instances);
   const items: CheckResultItem[] = [];
   let passed = 0;
   let failed = 0;
@@ -154,7 +154,7 @@ export async function runFormChecks(
   });
   const inst =
     instances ?? latestInstancePerTemplate(await loadInstancesForCheck());
-  return runRules(rules, inst);
+  return runRules(rules, evalContextFromInstances(inst));
 }
 
 export async function runAllChecks(
@@ -166,8 +166,8 @@ export async function runAllChecks(
     mode,
     excludeAggr: true,
   });
-  const inst = latestInstancePerTemplate(await loadInstancesForCheck(period));
-  return runRules(rules, inst);
+  const ctx = await loadEvalContextForChecks(period);
+  return runRules(rules, ctx);
 }
 
 export async function runActiveChecks(
@@ -176,5 +176,5 @@ export async function runActiveChecks(
 ): Promise<CheckRunResult> {
   const data = await loadChecks();
   const rules = pickRules(data.checks, { mode, excludeAggr: true });
-  return runRules(rules, instances);
+  return runRules(rules, evalContextFromInstances(instances));
 }

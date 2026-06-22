@@ -1,13 +1,33 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import {
+  migrateCheckRulesTable,
+  seedCheckRulesFromJson,
+} from "./checks.js";
+import {
+  migrateExcelTables,
+  seedExcelMappingsFromJson,
+} from "./excel.js";
+import {
+  migrateInstanceTables,
+  migratePortalPayloadsToCells,
+} from "./instances.js";
+import {
+  migrateFormTables,
+  seedFormsFromJson,
+} from "./forms.js";
+import {
+  migrateSaldoTables,
+  seedFormCorrespondenceFromJson,
+  seedSaldoRulesFromJson,
+} from "./saldo.js";
+import { migrateAuditTable } from "./audit.js";
+import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
+import { migrateRashTables, seedRashFromJson } from "./rash.js";
+import { migrateUserTables, seedBootstrapAdmin } from "./users.js";
+import { DATA_DIR, DB_PATH, ROOT, SCHEMA_PATH } from "./paths.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "../..");
-const DATA_DIR = path.join(ROOT, "data");
-const DB_PATH = process.env.OKO_DB_PATH ?? path.join(DATA_DIR, "oko.db");
-const SCHEMA_PATH = path.join(ROOT, "data", "schema.sql");
 const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
 
 let db: DatabaseSync | null = null;
@@ -61,6 +81,51 @@ function initSchema(database: DatabaseSync): void {
     database.exec(sql);
   }
   database.exec(INSTANCE_DDL);
+  migrateCheckRulesTable(database);
+  migrateFormTables(database);
+  migrateSaldoTables(database);
+  migrateExcelTables(database);
+  migrateInstanceTables(database);
+  migrateRashTables(database);
+  migrateAuditTable(database);
+  migrateOrgTables(database);
+  migrateUserTables(database);
+  const seededAdmin = seedBootstrapAdmin(database);
+  if (seededAdmin > 0) {
+    console.log("Created bootstrap admin user (see OKO_BOOTSTRAP_ADMIN_* env)");
+  }
+  const seededOrgs = seedOrganizationsFromSettings(database);
+  if (seededOrgs > 0) {
+    console.log("Seeded default organization and period (zid=1, eid=1)");
+  }
+  const seededRash = seedRashFromJson(database);
+  if (seededRash > 0) {
+    console.log(`Seeded ${seededRash} rash rules from rash-rules.json`);
+  }
+  const seededChecks = seedCheckRulesFromJson(database);
+  if (seededChecks > 0) {
+    console.log(`Seeded ${seededChecks} check rules from checks.json`);
+  }
+  const seededForms = seedFormsFromJson(database);
+  if (seededForms > 0) {
+    console.log(`Seeded ${seededForms} form templates from schemas`);
+  }
+  const seededCorrespondence = seedFormCorrespondenceFromJson(database);
+  if (seededCorrespondence > 0) {
+    console.log(`Seeded saldo correspondence for ${seededCorrespondence} forms`);
+  }
+  const seededSaldo = seedSaldoRulesFromJson(database);
+  if (seededSaldo > 0) {
+    console.log(`Seeded ${seededSaldo} saldo rules from saldo-rules.json`);
+  }
+  const seededExcel = seedExcelMappingsFromJson(database);
+  if (seededExcel > 0) {
+    console.log(`Seeded ${seededExcel} excel mappings from excel-export.json`);
+  }
+  const migratedInstances = migratePortalPayloadsToCells(database);
+  if (migratedInstances > 0) {
+    console.log(`Migrated ${migratedInstances} instances from payload to form_cell_values`);
+  }
 }
 
 function seedKontr(database: DatabaseSync): void {

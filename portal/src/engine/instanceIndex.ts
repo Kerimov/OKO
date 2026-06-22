@@ -1,6 +1,7 @@
 import type { OkoFormInstance, RowData } from "../types";
 import type { EvalContext } from "./cellExpression";
-import { loadAllInstances } from "../storage";
+import { loadAllInstances, isBackendMode } from "../storage";
+import { fetchEvalSnapshot } from "../api";
 
 /** formId -> rowNum -> row data */
 export type FormDataIndex = Map<string, Map<string, RowData>>;
@@ -96,7 +97,13 @@ export function evalContextFromInstances(instances: OkoFormInstance[]): EvalCont
   for (const inst of instances) {
     rowsByForm.set(inst.templateId, inst.rows);
   }
+  return evalContextFromRowsAndIndex(rowsByForm, index);
+}
 
+function evalContextFromRowsAndIndex(
+  rowsByForm: Map<string, RowData[]>,
+  index: FormDataIndex
+): EvalContext {
   return {
     getCell: cellGetterFromIndex(index),
     getCellK(form, column, condition, rowKey) {
@@ -112,6 +119,44 @@ export function evalContextFromInstances(instances: OkoFormInstance[]): EvalCont
       return sum;
     },
   };
+}
+
+export function evalContextFromSnapshot(snapshot: {
+  rowsByForm: Record<string, RowData[]>;
+  cellIndex: Record<string, Record<string, Record<string, number>>>;
+}): EvalContext {
+  const rowsByForm = new Map<string, RowData[]>();
+  for (const [formId, rows] of Object.entries(snapshot.rowsByForm)) {
+    rowsByForm.set(formId, rows);
+  }
+  return {
+    getCell(form, column, row) {
+      return snapshot.cellIndex[form]?.[String(row)]?.[column] ?? 0;
+    },
+    getCellK(form, column, condition, rowKey) {
+      const rows = rowsByForm.get(form) ?? [];
+      return getCellKValue(rows, column, condition, rowKey);
+    },
+    getTotal(form, column) {
+      const rows = rowsByForm.get(form) ?? [];
+      let sum = 0;
+      for (const row of rows) {
+        sum += parseCellValue(row[column]);
+      }
+      return sum;
+    },
+  };
+}
+
+export async function loadEvalContextForChecks(
+  filterPeriod?: { start: string; end: string }
+): Promise<EvalContext> {
+  if (isBackendMode() && !filterPeriod?.start && !filterPeriod?.end) {
+    const snapshot = await fetchEvalSnapshot();
+    if (snapshot) return evalContextFromSnapshot(snapshot);
+  }
+  const instances = latestInstancePerTemplate(await loadInstancesForCheck(filterPeriod));
+  return evalContextFromInstances(instances);
 }
 
 export async function loadInstancesForCheck(

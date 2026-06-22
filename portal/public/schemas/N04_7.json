@@ -32,19 +32,25 @@
       "key": "J",
       "label": "Долевые финансовые вложения",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "N",
       "label": "Долевые фин. вложения, предназначенные для продажи / выбытия",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "B",
       "label": "Корпоративные облигации",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "C",

@@ -62,7 +62,9 @@
       "key": "M",
       "label": "Итого",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     }
   ],
   "rows": [

@@ -74,7 +74,9 @@
       "key": "K",
       "label": "ИТОГО Внешняя задолженность",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "L",
@@ -92,7 +94,9 @@
       "key": "N",
       "label": "ИТОГО Внутригрупповая задолженность",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     }
   ],
   "rows": [

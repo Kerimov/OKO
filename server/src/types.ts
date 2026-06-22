@@ -11,6 +11,8 @@ export interface OkoFormInstance {
   templateId: string;
   templateTitle: string;
   displayName: string;
+  zid?: number | null;
+  eid?: number | null;
   meta: FormMeta;
   rows: Record<string, string | number>[];
   signatures: Record<string, string>;

@@ -137,6 +137,23 @@ export async function transferSaldoDetailed(
   return { rows, applied };
 }
 
+/** Count active a_tblsaldo rules for a form and saldo type. */
+export async function countSaldoRulesForForm(
+  formId: string,
+  saldoType: "t" | "s" | "g"
+): Promise<number> {
+  const data = await loadSaldoRules();
+  return data.rules.filter(
+    (r) =>
+      r.targetForm === formId &&
+      ((saldoType === "t" && r.saldoT) ||
+        (saldoType === "s" && r.saldoS) ||
+        (saldoType === "g" && r.saldoG))
+  ).length;
+}
+
+export type SaldoTransferMode = "columns" | "detailed";
+
 export function applySaldoToTarget(
   target: OkoFormInstance,
   rows: RowData[]

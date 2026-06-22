@@ -5,6 +5,8 @@ export interface FormColumn {
   width?: number;
   frozen?: boolean;
   readonly?: boolean;
+  /** Итоговая графа (FTotal из a_stblFIELDs) */
+  fTotal?: boolean;
 }
 
 export interface FormRowTemplate {
@@ -71,6 +73,8 @@ export interface OkoFormInstance {
   templateId: string;
   templateTitle: string;
   displayName: string;
+  zid?: number | null;
+  eid?: number | null;
   meta: FormMeta;
   rows: RowData[];
   signatures: Record<string, string>;
@@ -86,8 +90,94 @@ export interface InstanceSummary {
   organization: string;
   periodStart: string;
   periodEnd: string;
+  zid?: number | null;
+  eid?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Organization {
+  zid: number;
+  name: string;
+  code: string | null;
+  parentZid: number | null;
+}
+
+export interface ReportingPeriod {
+  eid: number;
+  zid: number;
+  name: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  quarter: number | null;
+  year: number | null;
+}
+
+export interface WorkContext {
+  zid: number | null;
+  eid: number | null;
+}
+
+export interface PackageCompleteness {
+  zid: number;
+  eid: number;
+  total: number;
+  filled: number;
+  items: Array<{
+    formId: string;
+    title: string;
+    category: string;
+    filled: boolean;
+    instanceId?: string;
+    displayName?: string;
+  }>;
+}
+
+export interface CreatePackageResult {
+  created: number;
+  skipped: number;
+  total: number;
+  instanceIds: string[];
+}
+
+export interface RashRule {
+  kod: number;
+  name: string;
+  note?: string | null;
+  refRows?: string | null;
+  totalFormula?: string | null;
+  refA1Name?: string | null;
+  refA1Title?: string | null;
+  refA2Name?: string | null;
+  refA2Title?: string | null;
+  refA3Name?: string | null;
+  refA3Title?: string | null;
+  refA4Name?: string | null;
+  refA4Title?: string | null;
+}
+
+export interface RashAddsum {
+  id?: number;
+  kod: number;
+  sort: number;
+  sumTitle: string;
+  fldType: string;
+}
+
+export interface RashThresholds {
+  level1: number;
+  level2: number;
+  level3: number;
+  unit: string;
+  labels: string[];
+}
+
+export interface RashRulesData {
+  version: string;
+  total: number;
+  rules: RashRule[];
+  addsum: RashAddsum[];
+  thresholds: RashThresholds;
 }
 
 /** @deprecated используйте OkoFormInstance */

@@ -320,6 +320,17 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.auto-recalc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
 }
 
 .btn {
@@ -615,6 +626,70 @@ a:hover {
   margin-bottom: 1.25rem;
 }
 
+/* Login */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+
+.login-card h1 {
+  font-size: 1.5rem;
+  color: var(--primary);
+  margin-bottom: 0.25rem;
+}
+
+.login-desc {
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+.login-form label {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.login-form input {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.header-user {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-left: 1rem;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-logout {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.5rem;
+}
+
+.header-logout:hover {
+  color: var(--primary);
+}
+
 .settings-form {
   display: flex;
   flex-direction: column;
@@ -769,18 +844,353 @@ a:hover {
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
-  .logo-text {
-    display: none;
-  }
+/* Admin / checks editor */
+.admin-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
 
-  .form-toolbar {
-    flex-direction: column;
-  }
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
 
-  .toolbar-actions {
-    width: 100%;
+.admin-header h1 {
+  font-size: 1.4rem;
+  color: var(--primary);
+}
+
+.admin-desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.admin-stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.checks-layout {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .checks-layout {
+    grid-template-columns: 1fr;
   }
+}
+
+.checks-list-panel,
+.checks-edit-panel,
+.checks-detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.saldo-editor .checks-layout,
+.excel-editor .checks-layout {
+  grid-template-columns: 1fr minmax(300px, 460px);
+}
+
+.checks-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.check-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.checks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.checks-table th,
+.checks-table td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.checks-table thead {
+  background: var(--frozen-bg);
+}
+
+.checks-table tbody tr {
+  cursor: pointer;
+}
+
+.checks-table tbody tr:hover {
+  background: #f0f5fb;
+}
+
+.checks-table tbody tr.selected {
+  background: #e3eef9;
+}
+
+.checks-table .expr-cell {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  max-width: 360px;
+}
+
+.checks-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.checks-edit-panel h2,
+.checks-detail-panel h2 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  color: var(--primary);
+}
+
+.checks-form,
+.checks-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.checks-form label:not(.check-flag),
+.checks-form-grid label:not(.check-flag),
+.checks-detail-panel > label:not(.check-flag) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.checks-detail-panel > .admin-desc {
+  margin-bottom: 0.5rem;
+}
+
+.checks-form-grid .form-section-label,
+.checks-detail-panel .form-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin: 0.35rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.checks-form-grid .form-section-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.checks-form label.full-width {
+  grid-column: 1 / -1;
+}
+
+.checks-form input,
+.checks-form textarea,
+.checks-form-grid input:not([type="checkbox"]):not([type="radio"]),
+.checks-form-grid textarea,
+.checks-detail-panel input:not([type="checkbox"]):not([type="radio"]),
+.checks-detail-panel textarea {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.checks-form-grid .checks-flags input[type="checkbox"],
+.checks-form-grid .check-flag input[type="checkbox"],
+.checks-flags input[type="checkbox"],
+.checks-detail-panel .check-flag input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.checks-form textarea,
+.checks-form-grid textarea,
+.checks-detail-panel textarea {
+  font-family: ui-monospace, monospace;
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.checks-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.checks-flags label,
+.checks-form-grid .check-flag,
+.checks-detail-panel .check-flag {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  color: var(--text);
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.checks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.test-result {
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  background: var(--frozen-bg);
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+/* Forms editor */
+.forms-editor-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .forms-editor-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.forms-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  max-height: calc(100vh - 200px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+}
+
+.forms-sidebar-list {
+  list-style: none;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+  flex: 1;
+}
+
+.forms-sidebar-list button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.forms-sidebar-list button:hover {
+  background: var(--frozen-bg);
+}
+
+.forms-sidebar-list button.active {
+  background: #e3eef9;
+}
+
+.forms-sidebar-title {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.forms-main {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  min-height: 400px;
+}
+
+.forms-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.forms-tabs button {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--frozen-bg);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.forms-tabs button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.editor-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.editor-table-wrap {
+  max-height: 55vh;
+}
+
+.mono-input {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.row-actions {
+  white-space: nowrap;
 }
 
 /* Tools / checks */

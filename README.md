@@ -36,6 +36,17 @@ npm run dev
 
 Подробности — в [portal/README.md](portal/README.md).
 
+Планы развития: [Phase 2](docs/PHASE2-PLAN.md) · [Phase 3](docs/PHASE3-PLAN.md).
+
+## Деплой API (production)
+
+```bash
+cp .env.example .env   # задайте OKO_ADMIN_TOKEN, OKO_USER_TOKEN
+docker compose up -d --build
+```
+
+Портал на Vercel + API на VPS: см. [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Деплой на Vercel
 
 В настройках проекта Vercel укажите **Root Directory: `portal`**, затем задеплойте из GitHub или выполните `cd portal && vercel --prod`. Подробнее — [portal/README.md](portal/README.md#публикация-на-vercel).

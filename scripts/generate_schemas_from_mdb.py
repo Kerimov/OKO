@@ -243,14 +243,16 @@ def build_columns(fields, allow_add: bool) -> list[dict]:
             continue
         col_type = "number" if f.Ftype == 4 else "text"
         label = clean_label(f.FCaption) or f.FName
-        columns.append(
-            {
-                "key": f.FName,
-                "label": label,
-                "type": col_type,
-                "width": col_width(f.FName, f.Ftype, f.FWidth),
-            }
-        )
+        col_def = {
+            "key": f.FName,
+            "label": label,
+            "type": col_type,
+            "width": col_width(f.FName, f.Ftype, f.FWidth),
+        }
+        if str(getattr(f, "FTotal", "") or "") in ("1", "True", "-1"):
+            col_def["fTotal"] = True
+            col_def["readonly"] = True
+        columns.append(col_def)
     return columns
 
 
