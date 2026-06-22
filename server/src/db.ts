@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import fs from "fs";
 import path from "path";
 import {
@@ -27,24 +26,17 @@ import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
 import { migrateRashTables, seedRashFromJson } from "./rash.js";
 import { migrateUserTables, seedBootstrapAdmin } from "./users.js";
 import {
-  deleteAggEntry,
-  exportAggPayload,
-  getAggStats,
-  listAggEntries,
   migrateAggTables,
-  reimportAggFromJson,
-  runPackageAggregation,
   seedAggFromJson,
   seedOrganizationsFromAggCodes,
-  upsertAggEntry,
 } from "./aggregation.js";
-import { DATA_DIR, DB_PATH, ROOT, SCHEMA_PATH } from "./paths.js";
+import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
+import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
+import { refreshUserAccountsCache } from "./auth.js";
 
 const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
 
-let db: DatabaseSync | null = null;
-
-const INSTANCE_DDL = `
+const INSTANCE_DDL_SQLITE = `
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -75,85 +67,11 @@ CREATE TABLE IF NOT EXISTS kontragents (
 );
 `;
 
-export function getDb(): DatabaseSync {
-  if (!db) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    db = new DatabaseSync(DB_PATH);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-    initSchema(db);
-    seedKontr(db);
-  }
-  return db;
-}
-
-function initSchema(database: DatabaseSync): void {
-  if (fs.existsSync(SCHEMA_PATH)) {
-    const sql = fs.readFileSync(SCHEMA_PATH, "utf-8");
-    database.exec(sql);
-  }
-  database.exec(INSTANCE_DDL);
-  migrateCheckRulesTable(database);
-  migrateFormTables(database);
-  migrateSaldoTables(database);
-  migrateExcelTables(database);
-  migrateInstanceTables(database);
-  migrateRashTables(database);
-  migrateAuditTable(database);
-  migrateOrgTables(database);
-  migrateUserTables(database);
-  migrateAggTables(database);
-  const seededAggOrgs = seedOrganizationsFromAggCodes(database);
-  if (seededAggOrgs > 0) {
-    console.log(`Seeded ${seededAggOrgs} organizations from agg-list.json codes`);
-  }
-  const seededAgg = seedAggFromJson(database);
-  if (seededAgg > 0) {
-    console.log(`Seeded ${seededAgg} aggregation rules from agg-list.json`);
-  }
-  const seededAdmin = seedBootstrapAdmin(database);
-  if (seededAdmin > 0) {
-    console.log("Created bootstrap admin user (see OKO_BOOTSTRAP_ADMIN_* env)");
-  }
-  const seededOrgs = seedOrganizationsFromSettings(database);
-  if (seededOrgs > 0) {
-    console.log("Seeded default organization and period (zid=1, eid=1)");
-  }
-  const seededRash = seedRashFromJson(database);
-  if (seededRash > 0) {
-    console.log(`Seeded ${seededRash} rash rules from rash-rules.json`);
-  }
-  const seededChecks = seedCheckRulesFromJson(database);
-  if (seededChecks > 0) {
-    console.log(`Seeded ${seededChecks} check rules from checks.json`);
-  }
-  const seededForms = seedFormsFromJson(database);
-  if (seededForms > 0) {
-    console.log(`Seeded ${seededForms} form templates from schemas`);
-  }
-  const seededCorrespondence = seedFormCorrespondenceFromJson(database);
-  if (seededCorrespondence > 0) {
-    console.log(`Seeded saldo correspondence for ${seededCorrespondence} forms`);
-  }
-  const seededSaldo = seedSaldoRulesFromJson(database);
-  if (seededSaldo > 0) {
-    console.log(`Seeded ${seededSaldo} saldo rules from saldo-rules.json`);
-  }
-  const seededExcel = seedExcelMappingsFromJson(database);
-  if (seededExcel > 0) {
-    console.log(`Seeded ${seededExcel} excel mappings from excel-export.json`);
-  }
-  const migratedInstances = migratePortalPayloadsToCells(database);
-  if (migratedInstances > 0) {
-    console.log(`Migrated ${migratedInstances} instances from payload to form_cell_values`);
-  }
-}
-
-function seedKontr(database: DatabaseSync): void {
-  const count = database.prepare("SELECT COUNT(*) AS c FROM kontragents").get() as {
-    c: number;
-  };
-  if (count.c > 0 || !fs.existsSync(KONTR_PATH)) return;
+async function seedKontr(database: OkoDb): Promise<void> {
+  const count = await database
+    .prepare("SELECT COUNT(*) AS c FROM kontragents")
+    .get<{ c: number }>();
+  if ((count?.c ?? 0) > 0 || !fs.existsSync(KONTR_PATH)) return;
 
   const data = JSON.parse(fs.readFileSync(KONTR_PATH, "utf-8")) as {
     items: Array<{
@@ -165,19 +83,92 @@ function seedKontr(database: DatabaseSync): void {
     }>;
   };
 
-  const insert = database.prepare(
-    "INSERT OR REPLACE INTO kontragents (id, name, org_form, inn, kpp) VALUES (?, ?, ?, ?, ?)"
-  );
-  database.exec("BEGIN");
-  try {
+  const upsertSql =
+    database.dialect === "postgres"
+      ? `INSERT INTO kontragents (id, name, org_form, inn, kpp)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           org_form = EXCLUDED.org_form,
+           inn = EXCLUDED.inn,
+           kpp = EXCLUDED.kpp`
+      : `INSERT OR REPLACE INTO kontragents (id, name, org_form, inn, kpp) VALUES (?, ?, ?, ?, ?)`;
+
+  await database.transaction(async (tx) => {
+    const insert = tx.prepare(upsertSql);
     for (const k of data.items) {
-      insert.run(k.id, k.name, k.orgForm ?? null, k.inn ?? null, k.kpp ?? null);
+      await insert.run(k.id, k.name, k.orgForm ?? null, k.inn ?? null, k.kpp ?? null);
     }
-    database.exec("COMMIT");
-  } catch (e) {
-    database.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export { DB_PATH, ROOT };
+async function initSchema(database: OkoDb): Promise<void> {
+  if (database.dialect === "sqlite") {
+    await database.exec(INSTANCE_DDL_SQLITE);
+  }
+  await migrateCheckRulesTable(database);
+  await migrateFormTables(database);
+  await migrateSaldoTables(database);
+  await migrateExcelTables(database);
+  await migrateInstanceTables(database);
+  await migrateRashTables(database);
+  await migrateAuditTable(database);
+  await migrateOrgTables(database);
+  await migrateUserTables(database);
+  await migrateAggTables(database);
+
+  const seededAggOrgs = await seedOrganizationsFromAggCodes(database);
+  if (seededAggOrgs > 0) {
+    console.log(`Seeded ${seededAggOrgs} organizations from agg-list.json codes`);
+  }
+  const seededAgg = await seedAggFromJson(database);
+  if (seededAgg > 0) {
+    console.log(`Seeded ${seededAgg} aggregation rules from agg-list.json`);
+  }
+  const seededAdmin = await seedBootstrapAdmin(database);
+  if (seededAdmin > 0) {
+    console.log("Created bootstrap admin user (see OKO_BOOTSTRAP_ADMIN_* env)");
+  }
+  const seededOrgs = await seedOrganizationsFromSettings(database);
+  if (seededOrgs > 0) {
+    console.log("Seeded default organization and period (zid=1, eid=1)");
+  }
+  const seededRash = await seedRashFromJson(database);
+  if (seededRash > 0) {
+    console.log(`Seeded ${seededRash} rash rules from rash-rules.json`);
+  }
+  const seededChecks = await seedCheckRulesFromJson(database);
+  if (seededChecks > 0) {
+    console.log(`Seeded ${seededChecks} check rules from checks.json`);
+  }
+  const seededForms = await seedFormsFromJson(database);
+  if (seededForms > 0) {
+    console.log(`Seeded ${seededForms} form templates from schemas`);
+  }
+  const seededCorrespondence = await seedFormCorrespondenceFromJson(database);
+  if (seededCorrespondence > 0) {
+    console.log(`Seeded saldo correspondence for ${seededCorrespondence} forms`);
+  }
+  const seededSaldo = await seedSaldoRulesFromJson(database);
+  if (seededSaldo > 0) {
+    console.log(`Seeded ${seededSaldo} saldo rules from saldo-rules.json`);
+  }
+  const seededExcel = await seedExcelMappingsFromJson(database);
+  if (seededExcel > 0) {
+    console.log(`Seeded ${seededExcel} excel mappings from excel-export.json`);
+  }
+  const migratedInstances = await migratePortalPayloadsToCells(database);
+  if (migratedInstances > 0) {
+    console.log(`Migrated ${migratedInstances} instances from payload to form_cell_values`);
+  }
+  await seedKontr(database);
+  await refreshUserAccountsCache();
+}
+
+export async function bootstrapDatabase(): Promise<OkoDb> {
+  const database = await initDatabase();
+  await initSchema(database);
+  return database;
+}
+
+export { getDb, DB_PATH, ROOT, DATA_DIR };

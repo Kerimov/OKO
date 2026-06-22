@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import type { DatabaseSync } from "node:sqlite";
+import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
 export interface ExcelMappingRow {
@@ -33,14 +33,12 @@ const INSERT_EXCEL = `INSERT INTO excel_mappings (
   form_name, sheet_name, excel_row, excel_column, form_column, form_row, period, add_text
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-export function migrateExcelTables(db: DatabaseSync): void {
-  const cols = db.prepare("PRAGMA table_info(excel_mappings)").all() as Array<{ name: string }>;
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("period")) {
-    db.exec("ALTER TABLE excel_mappings ADD COLUMN period INTEGER DEFAULT 0");
+export async function migrateExcelTables(db: OkoDb): Promise<void> {
+  if (!(await db.columnExists("excel_mappings", "period"))) {
+    await db.exec("ALTER TABLE excel_mappings ADD COLUMN period INTEGER DEFAULT 0");
   }
-  if (!names.has("add_text")) {
-    db.exec("ALTER TABLE excel_mappings ADD COLUMN add_text TEXT");
+  if (!(await db.columnExists("excel_mappings", "add_text"))) {
+    await db.exec("ALTER TABLE excel_mappings ADD COLUMN add_text TEXT");
   }
 }
 
@@ -75,11 +73,11 @@ export function dtoToRow(dto: ExcelMappingDto): Omit<ExcelMappingRow, "id"> {
   };
 }
 
-function insertMappings(db: DatabaseSync, mappings: ExcelMappingDto[]): void {
+async function insertMappings(db: OkoDb, mappings: ExcelMappingDto[]): Promise<void> {
   const insert = db.prepare(INSERT_EXCEL);
   for (const dto of mappings) {
     const r = dtoToRow(dto);
-    insert.run(
+    await insert.run(
       r.form_name,
       r.sheet_name,
       r.excel_row,
@@ -92,55 +90,48 @@ function insertMappings(db: DatabaseSync, mappings: ExcelMappingDto[]): void {
   }
 }
 
-export function seedExcelMappingsFromJson(db: DatabaseSync): number {
+export async function seedExcelMappingsFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(EXCEL_JSON)) return 0;
-  const count = db.prepare("SELECT COUNT(*) AS c FROM excel_mappings").get() as { c: number };
+  const count = (await db.prepare("SELECT COUNT(*) AS c FROM excel_mappings").get()) as { c: number };
   if (count.c > 0) return 0;
 
   const data = JSON.parse(fs.readFileSync(EXCEL_JSON, "utf-8")) as { mappings: ExcelMappingDto[] };
-  db.exec("BEGIN");
-  try {
-    insertMappings(db, data.mappings);
-    db.exec("COMMIT");
+  return db.transaction(async (tx) => {
+    await insertMappings(tx, data.mappings);
     return data.mappings.length;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function reimportExcelMappingsFromJson(db: DatabaseSync): number {
+export async function reimportExcelMappingsFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(EXCEL_JSON)) throw new Error("excel-export.json not found");
   const data = JSON.parse(fs.readFileSync(EXCEL_JSON, "utf-8")) as { mappings: ExcelMappingDto[] };
-  db.exec("DELETE FROM excel_mappings");
-  db.exec("BEGIN");
-  try {
-    insertMappings(db, data.mappings);
-    db.exec("COMMIT");
+  await db.exec("DELETE FROM excel_mappings");
+  return db.transaction(async (tx) => {
+    await insertMappings(tx, data.mappings);
     return data.mappings.length;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function getExcelStats(db: DatabaseSync) {
-  const total = (db.prepare("SELECT COUNT(*) AS c FROM excel_mappings").get() as { c: number }).c;
+export async function getExcelStats(db: OkoDb) {
+  const total = ((await db.prepare("SELECT COUNT(*) AS c FROM excel_mappings").get()) as { c: number })
+    .c;
   const formsCount = (
-    db.prepare("SELECT COUNT(DISTINCT form_name) AS c FROM excel_mappings").get() as { c: number }
+    (await db.prepare("SELECT COUNT(DISTINCT form_name) AS c FROM excel_mappings").get()) as {
+      c: number;
+    }
   ).c;
   return { total, formsCount };
 }
 
-export function exportExcelPayload(db: DatabaseSync) {
-  const rows = db
+export async function exportExcelPayload(db: OkoDb) {
+  const rows = (await db
     .prepare(
       `SELECT id, form_name, sheet_name, excel_row, excel_column,
               form_column, form_row, period, add_text
        FROM excel_mappings ORDER BY form_name, id`
     )
-    .all() as ExcelMappingRow[];
-  const stats = getExcelStats(db);
+    .all()) as ExcelMappingRow[];
+  const stats = await getExcelStats(db);
   return {
     version: "2.0",
     source: "sqlite:excel_mappings",
@@ -150,22 +141,22 @@ export function exportExcelPayload(db: DatabaseSync) {
   };
 }
 
-export function getExcelMapping(db: DatabaseSync, id: number): ExcelMappingDto | null {
-  const row = db
+export async function getExcelMapping(db: OkoDb, id: number): Promise<ExcelMappingDto | null> {
+  const row = (await db
     .prepare(
       `SELECT id, form_name, sheet_name, excel_row, excel_column,
               form_column, form_row, period, add_text
        FROM excel_mappings WHERE id = ?`
     )
-    .get(id) as ExcelMappingRow | undefined;
+    .get(id)) as ExcelMappingRow | undefined;
   return row ? rowToDto(row) : null;
 }
 
-export function createExcelMapping(db: DatabaseSync, dto: ExcelMappingDto): ExcelMappingDto {
+export async function createExcelMapping(db: OkoDb, dto: ExcelMappingDto): Promise<ExcelMappingDto> {
   const r = dtoToRow(dto);
-  const result = db
-    .prepare(INSERT_EXCEL)
-    .run(
+  const inserted = (await db
+    .prepare(`${INSERT_EXCEL} RETURNING id`)
+    .get(
       r.form_name,
       r.sheet_name,
       r.excel_row,
@@ -174,17 +165,17 @@ export function createExcelMapping(db: DatabaseSync, dto: ExcelMappingDto): Exce
       r.form_row,
       r.period,
       r.add_text
-    );
-  return getExcelMapping(db, Number(result.lastInsertRowid))!;
+    )) as { id: number };
+  return (await getExcelMapping(db, inserted.id))!;
 }
 
-export function updateExcelMapping(
-  db: DatabaseSync,
+export async function updateExcelMapping(
+  db: OkoDb,
   id: number,
   dto: ExcelMappingDto
-): ExcelMappingDto | null {
+): Promise<ExcelMappingDto | null> {
   const r = dtoToRow(dto);
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE excel_mappings SET
         form_name = ?, sheet_name = ?, excel_row = ?, excel_column = ?,
@@ -206,7 +197,7 @@ export function updateExcelMapping(
   return getExcelMapping(db, id);
 }
 
-export function deleteExcelMapping(db: DatabaseSync, id: number): boolean {
-  const result = db.prepare("DELETE FROM excel_mappings WHERE id = ?").run(id);
+export async function deleteExcelMapping(db: OkoDb, id: number): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM excel_mappings WHERE id = ?").run(id);
   return result.changes > 0;
 }

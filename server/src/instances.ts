@@ -1,10 +1,11 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { OkoDb } from "./oko-db.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
 
-export function migrateInstanceTables(db: DatabaseSync): void {
-  db.exec(`
+export async function migrateInstanceTables(db: OkoDb): Promise<void> {
+  if (db.dialect === "sqlite") {
+    await db.exec(`
     CREATE TABLE IF NOT EXISTS form_instances (
       instance_id TEXT PRIMARY KEY,
       template_id TEXT NOT NULL,
@@ -40,20 +41,19 @@ export function migrateInstanceTables(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_instances_template ON form_instances(template_id);
     CREATE INDEX IF NOT EXISTS idx_instances_period ON form_instances(period_start, period_end);
   `);
+  }
 
-  const cols = db.prepare("PRAGMA table_info(form_instances)").all() as Array<{ name: string }>;
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("template_title")) {
-    db.exec("ALTER TABLE form_instances ADD COLUMN template_title TEXT");
+  if (!(await db.columnExists("form_instances", "template_title"))) {
+    await db.exec("ALTER TABLE form_instances ADD COLUMN template_title TEXT");
   }
-  if (!names.has("enterprise_code")) {
-    db.exec("ALTER TABLE form_instances ADD COLUMN enterprise_code TEXT");
+  if (!(await db.columnExists("form_instances", "enterprise_code"))) {
+    await db.exec("ALTER TABLE form_instances ADD COLUMN enterprise_code TEXT");
   }
-  if (!names.has("signatures_json")) {
-    db.exec("ALTER TABLE form_instances ADD COLUMN signatures_json TEXT DEFAULT '{}'");
+  if (!(await db.columnExists("form_instances", "signatures_json"))) {
+    await db.exec("ALTER TABLE form_instances ADD COLUMN signatures_json TEXT DEFAULT '{}'");
   }
-  if (!names.has("status")) {
-    db.exec("ALTER TABLE form_instances ADD COLUMN status TEXT DEFAULT 'draft'");
+  if (!(await db.columnExists("form_instances", "status"))) {
+    await db.exec("ALTER TABLE form_instances ADD COLUMN status TEXT DEFAULT 'draft'");
   }
 }
 
@@ -90,12 +90,13 @@ export function normalizeInstanceStatus(status: string | null | undefined): "dra
   return status === "submitted" ? "submitted" : "draft";
 }
 
-export function saveInstanceCells(db: DatabaseSync, inst: OkoFormInstance): void {
+export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promise<void> {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
 
-  db.prepare(
-    `INSERT INTO form_instances (
+  await db
+    .prepare(
+      `INSERT INTO form_instances (
       instance_id, template_id, zid, eid, template_title, display_name, organization,
       period_start, period_end, unit, enterprise_code, signatures_json, status,
       created_at, updated_at
@@ -114,43 +115,45 @@ export function saveInstanceCells(db: DatabaseSync, inst: OkoFormInstance): void
       signatures_json = excluded.signatures_json,
       status = excluded.status,
       updated_at = excluded.updated_at`
-  ).run(
-    inst.instanceId,
-    inst.templateId,
-    inst.zid ?? null,
-    inst.eid ?? null,
-    inst.templateTitle,
-    inst.displayName,
-    inst.meta.organization ?? "",
-    inst.meta.periodStart ?? "",
-    inst.meta.periodEnd ?? "",
-    inst.meta.unit ?? "тыс.руб.",
-    inst.meta.enterpriseCode ?? "1@1",
-    signaturesJson,
-    status,
-    inst.createdAt,
-    inst.updatedAt
-  );
+    )
+    .run(
+      inst.instanceId,
+      inst.templateId,
+      inst.zid ?? null,
+      inst.eid ?? null,
+      inst.templateTitle,
+      inst.displayName,
+      inst.meta.organization ?? "",
+      inst.meta.periodStart ?? "",
+      inst.meta.periodEnd ?? "",
+      inst.meta.unit ?? "тыс.руб.",
+      inst.meta.enterpriseCode ?? "1@1",
+      signaturesJson,
+      status,
+      inst.createdAt,
+      inst.updatedAt
+    );
 
-  db.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(inst.instanceId);
+  await db.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(inst.instanceId);
 
   const insert = db.prepare(
     `INSERT INTO form_cell_values (instance_id, row_no, row_name, column_key, value_num, value_text)
      VALUES (?, ?, ?, ?, ?, ?)`
   );
 
-  inst.rows.forEach((row, index) => {
+  for (let index = 0; index < inst.rows.length; index++) {
+    const row = inst.rows[index];
     const rowNo = resolveRowNo(row, index);
     const rowName = String(row.name ?? "");
     for (const [key, val] of Object.entries(row)) {
       const { value_num, value_text } = cellValueParts(val);
       if (value_num === null && value_text === null) continue;
-      insert.run(inst.instanceId, rowNo, rowName || null, key, value_num, value_text);
+      await insert.run(inst.instanceId, rowNo, rowName || null, key, value_num, value_text);
     }
     if (!row.num && rowNo >= 900_000_000) {
-      insert.run(inst.instanceId, rowNo, rowName || null, "_row_index", index, null);
+      await insert.run(inst.instanceId, rowNo, rowName || null, "_row_index", index, null);
     }
-  });
+  }
 }
 
 export function rowsFromCells(
@@ -195,15 +198,18 @@ export function rowsFromCells(
   });
 }
 
-export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFormInstance | null {
-  const header = db
+export async function loadInstanceFromDb(
+  db: OkoDb,
+  instanceId: string
+): Promise<OkoFormInstance | null> {
+  const header = (await db
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
               period_start, period_end, unit, enterprise_code, signatures_json, status,
               created_at, updated_at
        FROM form_instances WHERE instance_id = ?`
     )
-    .get(instanceId) as
+    .get(instanceId)) as
     | {
         instance_id: string;
         template_id: string;
@@ -225,13 +231,13 @@ export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFor
 
   if (!header) return null;
 
-  const cells = db
+  const cells = (await db
     .prepare(
       `SELECT row_no, row_name, column_key, value_num, value_text
        FROM form_cell_values WHERE instance_id = ?
        ORDER BY row_no, column_key`
     )
-    .all(instanceId) as Array<{
+    .all(instanceId)) as Array<{
     row_no: number;
     row_name: string | null;
     column_key: string;
@@ -268,16 +274,19 @@ export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFor
   };
 }
 
-export function loadInstanceFromPayload(db: DatabaseSync, instanceId: string): OkoFormInstance | null {
-  const row = db
+export async function loadInstanceFromPayload(
+  db: OkoDb,
+  instanceId: string
+): Promise<OkoFormInstance | null> {
+  const row = (await db
     .prepare("SELECT payload FROM portal_instances WHERE instance_id = ?")
-    .get(instanceId) as { payload: string } | undefined;
+    .get(instanceId)) as { payload: string } | undefined;
   if (!row) return null;
   return JSON.parse(row.payload) as OkoFormInstance;
 }
 
-export function listInstanceSummaries(
-  db: DatabaseSync,
+export async function listInstanceSummaries(
+  db: OkoDb,
   filter?: { zid?: number; eid?: number }
 ) {
   const conditions: string[] = [];
@@ -292,13 +301,13 @@ export function listInstanceSummaries(
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const normalized = db
+  const normalized = (await db
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
               period_start, period_end, status, created_at, updated_at
        FROM form_instances ${where} ORDER BY updated_at DESC`
     )
-    .all(...params) as Array<{
+    .all(...params)) as Array<{
     instance_id: string;
     template_id: string;
     zid: number | null;
@@ -330,13 +339,13 @@ export function listInstanceSummaries(
     }));
   }
 
-  const legacy = db
+  const legacy = (await db
     .prepare(
       `SELECT instance_id, template_id, template_title, display_name, organization,
               period_start, period_end, created_at, updated_at
        FROM portal_instances ORDER BY updated_at DESC`
     )
-    .all() as Array<{
+    .all()) as Array<{
     instance_id: string;
     template_id: string;
     template_title: string;
@@ -364,29 +373,26 @@ export function listInstanceSummaries(
   }));
 }
 
-export function deleteInstanceFromDb(db: DatabaseSync, instanceId: string): void {
-  db.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
-  db.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
+export async function deleteInstanceFromDb(db: OkoDb, instanceId: string): Promise<void> {
+  await db.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
+  await db.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
 }
 
-export function setInstanceStatus(
-  db: DatabaseSync,
+export async function setInstanceStatus(
+  db: OkoDb,
   instanceId: string,
   status: "draft" | "submitted"
-): OkoFormInstance | null {
-  const existing = loadInstanceFromDb(db, instanceId);
+): Promise<OkoFormInstance | null> {
+  const existing = await loadInstanceFromDb(db, instanceId);
   if (!existing) return null;
   const now = new Date().toISOString();
-  db.prepare(
-    `UPDATE form_instances SET status = ?, updated_at = ? WHERE instance_id = ?`
-  ).run(status, now, instanceId);
+  await db
+    .prepare(`UPDATE form_instances SET status = ?, updated_at = ? WHERE instance_id = ?`)
+    .run(status, now, instanceId);
   return { ...existing, status, updatedAt: now };
 }
 
-export function assertInstanceEditable(
-  inst: OkoFormInstance,
-  isAdmin: boolean
-): void {
+export function assertInstanceEditable(inst: OkoFormInstance, isAdmin: boolean): void {
   if (isAdmin) return;
   if (normalizeInstanceStatus(inst.status) === "submitted") {
     const err = new Error("Form is submitted and cannot be edited");
@@ -395,10 +401,11 @@ export function assertInstanceEditable(
   }
 }
 
-export function upsertInstance(db: DatabaseSync, inst: OkoFormInstance): void {
-  saveInstanceCells(db, inst);
-  db.prepare(
-    `INSERT INTO portal_instances (
+export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<void> {
+  await saveInstanceCells(db, inst);
+  await db
+    .prepare(
+      `INSERT INTO portal_instances (
       instance_id, template_id, template_title, display_name,
       organization, period_start, period_end, payload, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -411,46 +418,52 @@ export function upsertInstance(db: DatabaseSync, inst: OkoFormInstance): void {
       period_end = excluded.period_end,
       payload = excluded.payload,
       updated_at = excluded.updated_at`
-  ).run(
-    inst.instanceId,
-    inst.templateId,
-    inst.templateTitle,
-    inst.displayName,
-    inst.meta.organization ?? "",
-    inst.meta.periodStart ?? "",
-    inst.meta.periodEnd ?? "",
-    JSON.stringify(inst),
-    inst.createdAt,
-    inst.updatedAt
-  );
+    )
+    .run(
+      inst.instanceId,
+      inst.templateId,
+      inst.templateTitle,
+      inst.displayName,
+      inst.meta.organization ?? "",
+      inst.meta.periodStart ?? "",
+      inst.meta.periodEnd ?? "",
+      JSON.stringify(inst),
+      inst.createdAt,
+      inst.updatedAt
+    );
 }
 
-export function loadInstance(db: DatabaseSync, instanceId: string): OkoFormInstance | null {
-  const normalized = loadInstanceFromDb(db, instanceId);
+export async function loadInstance(
+  db: OkoDb,
+  instanceId: string
+): Promise<OkoFormInstance | null> {
+  const normalized = await loadInstanceFromDb(db, instanceId);
   if (normalized) return normalized;
-  const legacy = loadInstanceFromPayload(db, instanceId);
+  const legacy = await loadInstanceFromPayload(db, instanceId);
   if (legacy) {
-    saveInstanceCells(db, legacy);
+    await saveInstanceCells(db, legacy);
     return legacy;
   }
   return null;
 }
 
-export function migratePortalPayloadsToCells(db: DatabaseSync): number {
-  const portals = db.prepare("SELECT instance_id, payload FROM portal_instances").all() as Array<{
+export async function migratePortalPayloadsToCells(db: OkoDb): Promise<number> {
+  const portals = (await db
+    .prepare("SELECT instance_id, payload FROM portal_instances")
+    .all()) as Array<{
     instance_id: string;
     payload: string;
   }>;
 
   let migrated = 0;
   for (const p of portals) {
-    const exists = db
+    const exists = await db
       .prepare("SELECT 1 FROM form_instances WHERE instance_id = ?")
       .get(p.instance_id);
     if (exists) continue;
     try {
       const inst = JSON.parse(p.payload) as OkoFormInstance;
-      saveInstanceCells(db, inst);
+      await saveInstanceCells(db, inst);
       migrated++;
     } catch {
       /* skip invalid payload */
@@ -459,33 +472,35 @@ export function migratePortalPayloadsToCells(db: DatabaseSync): number {
   return migrated;
 }
 
-export function getInstanceStorageStats(db: DatabaseSync) {
+export async function getInstanceStorageStats(db: OkoDb) {
   const instances = (
-    db.prepare("SELECT COUNT(*) AS c FROM form_instances").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) AS c FROM form_instances").get()) as { c: number }
   ).c;
-  const cells = (db.prepare("SELECT COUNT(*) AS c FROM form_cell_values").get() as { c: number }).c;
+  const cells = (
+    (await db.prepare("SELECT COUNT(*) AS c FROM form_cell_values").get()) as { c: number }
+  ).c;
   const legacy = (
-    db.prepare("SELECT COUNT(*) AS c FROM portal_instances").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) AS c FROM portal_instances").get()) as { c: number }
   ).c;
   const legacyOnly = (
-    db
+    (await db
       .prepare(
         `SELECT COUNT(*) AS c FROM portal_instances p
          WHERE NOT EXISTS (SELECT 1 FROM form_instances f WHERE f.instance_id = p.instance_id)`
       )
-      .get() as { c: number }
+      .get()) as { c: number }
   ).c;
   return { instances, cells, legacyPayloads: legacy, pendingMigration: legacyOnly };
 }
 
-export function buildCellIndexForLatestInstances(db: DatabaseSync) {
-  const latest = db
+export async function buildCellIndexForLatestInstances(db: OkoDb) {
+  const latest = (await db
     .prepare(
       `SELECT fi.instance_id, fi.template_id
        FROM form_instances fi
        ORDER BY fi.updated_at DESC`
     )
-    .all() as Array<{ instance_id: string; template_id: string }>;
+    .all()) as Array<{ instance_id: string; template_id: string }>;
 
   const picked = new Map<string, string>();
   for (const r of latest) {
@@ -500,7 +515,7 @@ export function buildCellIndexForLatestInstances(db: DatabaseSync) {
   );
 
   for (const [templateId, instanceId] of picked) {
-    const cells = cellStmt.all(instanceId) as Array<{
+    const cells = (await cellStmt.all(instanceId)) as Array<{
       row_no: number;
       column_key: string;
       value_num: number | null;
@@ -522,19 +537,18 @@ export function buildCellIndexForLatestInstances(db: DatabaseSync) {
   return index;
 }
 
-export function buildEvalSnapshotFromDb(db: DatabaseSync, zid?: number) {
-  const latest = zid != null
-    ? (db
-        .prepare(
-          `SELECT instance_id, template_id FROM form_instances
+export async function buildEvalSnapshotFromDb(db: OkoDb, zid?: number) {
+  const latest =
+    zid != null
+      ? ((await db
+          .prepare(
+            `SELECT instance_id, template_id FROM form_instances
            WHERE zid = ? ORDER BY updated_at DESC`
-        )
-        .all(zid) as Array<{ instance_id: string; template_id: string }>)
-    : (db
-        .prepare(
-          `SELECT instance_id, template_id FROM form_instances ORDER BY updated_at DESC`
-        )
-        .all() as Array<{ instance_id: string; template_id: string }>);
+          )
+          .all(zid)) as Array<{ instance_id: string; template_id: string }>)
+      : ((await db
+          .prepare(`SELECT instance_id, template_id FROM form_instances ORDER BY updated_at DESC`)
+          .all()) as Array<{ instance_id: string; template_id: string }>);
 
   const picked = new Map<string, string>();
   for (const r of latest) {
@@ -550,7 +564,7 @@ export function buildEvalSnapshotFromDb(db: DatabaseSync, zid?: number) {
   );
 
   for (const [templateId, instanceId] of picked) {
-    const cells = cellStmt.all(instanceId) as Array<{
+    const cells = (await cellStmt.all(instanceId)) as Array<{
       row_no: number;
       row_name: string | null;
       column_key: string;

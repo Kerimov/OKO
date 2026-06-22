@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { DatabaseSync } from "node:sqlite";
-import { getDb } from "./db.js";
+import type { OkoDb } from "./oko-db.js";
+import { getDb } from "./oko-db.js";
 
 export interface AuditEntry {
   id: number;
@@ -13,8 +13,9 @@ export interface AuditEntry {
   created_at: string;
 }
 
-export function migrateAuditTable(db: DatabaseSync): void {
-  db.exec(`
+export async function migrateAuditTable(db: OkoDb): Promise<void> {
+  if (db.dialect === "sqlite") {
+    await db.exec(`
     CREATE TABLE IF NOT EXISTS report_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       action      TEXT NOT NULL,
@@ -27,22 +28,21 @@ export function migrateAuditTable(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_report_log_created ON report_log(created_at);
   `);
+  }
 
-  const cols = db.prepare("PRAGMA table_info(report_log)").all() as Array<{ name: string }>;
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("entity_type")) {
-    db.exec("ALTER TABLE report_log ADD COLUMN entity_type TEXT");
+  if (!(await db.columnExists("report_log", "entity_type"))) {
+    await db.exec("ALTER TABLE report_log ADD COLUMN entity_type TEXT");
   }
-  if (!names.has("entity_id")) {
-    db.exec("ALTER TABLE report_log ADD COLUMN entity_id TEXT");
+  if (!(await db.columnExists("report_log", "entity_id"))) {
+    await db.exec("ALTER TABLE report_log ADD COLUMN entity_id TEXT");
   }
-  if (!names.has("actor")) {
-    db.exec("ALTER TABLE report_log ADD COLUMN actor TEXT");
+  if (!(await db.columnExists("report_log", "actor"))) {
+    await db.exec("ALTER TABLE report_log ADD COLUMN actor TEXT");
   }
 }
 
-export function logAudit(
-  db: DatabaseSync,
+export async function logAudit(
+  db: OkoDb,
   req: Request,
   action: string,
   options?: {
@@ -51,7 +51,7 @@ export function logAudit(
     entityId?: string | null;
     details?: unknown;
   }
-): void {
+): Promise<void> {
   const details =
     options?.details === undefined
       ? null
@@ -59,21 +59,23 @@ export function logAudit(
         ? options.details.slice(0, 4000)
         : JSON.stringify(options.details).slice(0, 4000);
 
-  db.prepare(
-    `INSERT INTO report_log (action, instance_id, entity_type, entity_id, actor, details)
+  await db
+    .prepare(
+      `INSERT INTO report_log (action, instance_id, entity_type, entity_id, actor, details)
      VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(
-    action,
-    options?.instanceId ?? null,
-    options?.entityType ?? null,
-    options?.entityId ?? null,
-    req.apiRole ?? null,
-    details
-  );
+    )
+    .run(
+      action,
+      options?.instanceId ?? null,
+      options?.entityType ?? null,
+      options?.entityId ?? null,
+      req.apiRole ?? null,
+      details
+    );
 }
 
-export function listAuditLog(
-  db: DatabaseSync,
+export async function listAuditLog(
+  db: OkoDb,
   options: { limit?: number; offset?: number; q?: string }
 ) {
   const limit = Math.min(options.limit ?? 50, 200);
@@ -91,17 +93,19 @@ export function listAuditLog(
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM report_log ${where}`).get(...params) as { c: number }
+    (await db.prepare(`SELECT COUNT(*) AS c FROM report_log ${where}`).get(...params)) as {
+      c: number;
+    }
   ).c;
 
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT id, action, instance_id, entity_type, entity_id, actor, details, created_at
        FROM report_log ${where}
        ORDER BY id DESC
        LIMIT ? OFFSET ?`
     )
-    .all(...params, limit, offset) as AuditEntry[];
+    .all(...params, limit, offset)) as AuditEntry[];
 
   return { total, limit, offset, items: rows };
 }
@@ -133,18 +137,20 @@ export function auditMiddleware(req: Request, res: Response, next: () => void): 
 
     if (!metaRoutes) return;
 
-    logAudit(getDb(), req, `${req.method} ${path}`, {
-      entityType: path.split("/")[2] ?? "api",
-      entityId:
-        (req.params as { number?: string; id?: string; formId?: string }).number ??
-        (req.params as { id?: string }).id ??
-        (req.params as { formId?: string }).formId ??
-        null,
-      details: {
-        durationMs: Date.now() - started,
-        bodyKeys: Object.keys((req.body as object) ?? {}),
-      },
-    });
+    void getDb().then((db) =>
+      logAudit(db, req, `${req.method} ${path}`, {
+        entityType: path.split("/")[2] ?? "api",
+        entityId:
+          (req.params as { number?: string; id?: string; formId?: string }).number ??
+          (req.params as { id?: string }).id ??
+          (req.params as { formId?: string }).formId ??
+          null,
+        details: {
+          durationMs: Date.now() - started,
+          bodyKeys: Object.keys((req.body as object) ?? {}),
+        },
+      })
+    );
   });
   next();
 }
