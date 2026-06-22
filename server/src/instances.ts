@@ -52,6 +52,9 @@ export function migrateInstanceTables(db: DatabaseSync): void {
   if (!names.has("signatures_json")) {
     db.exec("ALTER TABLE form_instances ADD COLUMN signatures_json TEXT DEFAULT '{}'");
   }
+  if (!names.has("status")) {
+    db.exec("ALTER TABLE form_instances ADD COLUMN status TEXT DEFAULT 'draft'");
+  }
 }
 
 function resolveRowNo(row: Record<string, string | number>, index: number): number {
@@ -83,15 +86,20 @@ function readCellValue(value_num: number | null, value_text: string | null): str
   return "";
 }
 
+export function normalizeInstanceStatus(status: string | null | undefined): "draft" | "submitted" {
+  return status === "submitted" ? "submitted" : "draft";
+}
+
 export function saveInstanceCells(db: DatabaseSync, inst: OkoFormInstance): void {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
+  const status = normalizeInstanceStatus(inst.status);
 
   db.prepare(
     `INSERT INTO form_instances (
       instance_id, template_id, zid, eid, template_title, display_name, organization,
-      period_start, period_end, unit, enterprise_code, signatures_json,
+      period_start, period_end, unit, enterprise_code, signatures_json, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_id) DO UPDATE SET
       template_id = excluded.template_id,
       zid = excluded.zid,
@@ -104,6 +112,7 @@ export function saveInstanceCells(db: DatabaseSync, inst: OkoFormInstance): void
       unit = excluded.unit,
       enterprise_code = excluded.enterprise_code,
       signatures_json = excluded.signatures_json,
+      status = excluded.status,
       updated_at = excluded.updated_at`
   ).run(
     inst.instanceId,
@@ -118,6 +127,7 @@ export function saveInstanceCells(db: DatabaseSync, inst: OkoFormInstance): void
     inst.meta.unit ?? "тыс.руб.",
     inst.meta.enterpriseCode ?? "1@1",
     signaturesJson,
+    status,
     inst.createdAt,
     inst.updatedAt
   );
@@ -189,7 +199,7 @@ export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFor
   const header = db
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
-              period_start, period_end, unit, enterprise_code, signatures_json,
+              period_start, period_end, unit, enterprise_code, signatures_json, status,
               created_at, updated_at
        FROM form_instances WHERE instance_id = ?`
     )
@@ -207,6 +217,7 @@ export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFor
         unit: string | null;
         enterprise_code: string | null;
         signatures_json: string;
+        status: string | null;
         created_at: string;
         updated_at: string;
       }
@@ -242,6 +253,7 @@ export function loadInstanceFromDb(db: DatabaseSync, instanceId: string): OkoFor
     displayName: header.display_name,
     zid: header.zid,
     eid: header.eid,
+    status: normalizeInstanceStatus(header.status),
     meta: {
       organization: header.organization ?? "",
       enterpriseCode: header.enterprise_code ?? "1@1",
@@ -283,7 +295,7 @@ export function listInstanceSummaries(
   const normalized = db
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
-              period_start, period_end, created_at, updated_at
+              period_start, period_end, status, created_at, updated_at
        FROM form_instances ${where} ORDER BY updated_at DESC`
     )
     .all(...params) as Array<{
@@ -296,6 +308,7 @@ export function listInstanceSummaries(
     organization: string | null;
     period_start: string | null;
     period_end: string | null;
+    status: string | null;
     created_at: string;
     updated_at: string;
   }>;
@@ -311,6 +324,7 @@ export function listInstanceSummaries(
       periodEnd: r.period_end ?? "",
       zid: r.zid,
       eid: r.eid,
+      status: normalizeInstanceStatus(r.status),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
@@ -344,6 +358,7 @@ export function listInstanceSummaries(
     periodEnd: r.period_end,
     zid: null,
     eid: null,
+    status: "draft" as const,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }));
@@ -352,6 +367,32 @@ export function listInstanceSummaries(
 export function deleteInstanceFromDb(db: DatabaseSync, instanceId: string): void {
   db.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
   db.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
+}
+
+export function setInstanceStatus(
+  db: DatabaseSync,
+  instanceId: string,
+  status: "draft" | "submitted"
+): OkoFormInstance | null {
+  const existing = loadInstanceFromDb(db, instanceId);
+  if (!existing) return null;
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE form_instances SET status = ?, updated_at = ? WHERE instance_id = ?`
+  ).run(status, now, instanceId);
+  return { ...existing, status, updatedAt: now };
+}
+
+export function assertInstanceEditable(
+  inst: OkoFormInstance,
+  isAdmin: boolean
+): void {
+  if (isAdmin) return;
+  if (normalizeInstanceStatus(inst.status) === "submitted") {
+    const err = new Error("Form is submitted and cannot be edited");
+    (err as Error & { status: number }).status = 403;
+    throw err;
+  }
 }
 
 export function upsertInstance(db: DatabaseSync, inst: OkoFormInstance): void {

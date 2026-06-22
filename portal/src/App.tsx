@@ -14,6 +14,8 @@ import { ExcelEditorPage } from "./pages/ExcelEditorPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { PackagePage } from "./pages/PackagePage";
 import { RashEditorPage } from "./pages/RashEditorPage";
+import { AggregationEditorPage } from "./pages/AggregationEditorPage";
+import { PackagesDashboardPage } from "./pages/PackagesDashboardPage";
 import { UsersAdminPage } from "./pages/UsersAdminPage";
 
 export default function App() {
@@ -33,6 +35,8 @@ export default function App() {
             <Route path="admin/saldo" element={<SaldoEditorPage />} />
             <Route path="admin/excel" element={<ExcelEditorPage />} />
             <Route path="admin/rash" element={<RashEditorPage />} />
+            <Route path="admin/aggregation" element={<AggregationEditorPage />} />
+            <Route path="admin/packages" element={<PackagesDashboardPage />} />
             <Route path="admin/audit" element={<AuditLogPage />} />
             <Route path="admin/users" element={<UsersAdminPage />} />
             <Route path="settings" element={<SettingsPage />} />

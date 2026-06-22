@@ -60,6 +60,7 @@ function summaryFromInstance(inst: OkoFormInstance): InstanceSummary {
     periodEnd: inst.meta.periodEnd,
     zid: inst.zid ?? null,
     eid: inst.eid ?? null,
+    status: inst.status ?? "draft",
     createdAt: inst.createdAt,
     updatedAt: inst.updatedAt,
   };
@@ -193,6 +194,7 @@ export async function createInstance(schema: FormSchema): Promise<OkoFormInstanc
     meta,
     rows: buildInitialRows(schema),
     signatures,
+    status: "draft",
     createdAt: now,
     updatedAt: now,
   };
@@ -231,6 +233,23 @@ export async function saveInstance(instance: OkoFormInstance): Promise<void> {
       body: JSON.stringify(instance),
     });
   }
+}
+
+export async function setInstanceStatus(
+  instanceId: string,
+  status: "draft" | "submitted"
+): Promise<OkoFormInstance> {
+  if (!useBackend) {
+    const inst = await loadInstance(instanceId);
+    if (!inst) throw new Error("Not found");
+    const updated = { ...inst, status, updatedAt: new Date().toISOString() };
+    await saveInstance(updated);
+    return updated;
+  }
+  return apiFetch<OkoFormInstance>(`/api/instances/${instanceId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function loadInstance(instanceId: string): Promise<OkoFormInstance | null> {

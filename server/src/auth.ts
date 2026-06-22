@@ -125,10 +125,12 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
 const USER_WRITE_ALLOWED = [
   /^\/api\/instances(\/|$)/,
+  /^\/api\/instances\/[^/]+\/status$/,
   /^\/api\/settings$/,
   /^\/api\/kontr$/,
   /^\/api\/work-context$/,
   /^\/api\/packages\/create$/,
+  /^\/api\/aggregation\/run$/,
   /^\/api\/auth\/logout$/,
 ];
 

@@ -67,6 +67,8 @@ export interface FormMeta {
   unit: string;
 }
 
+export type FormInstanceStatus = "draft" | "submitted";
+
 /** Сохранённый экземпляр заполненной формы */
 export interface OkoFormInstance {
   instanceId: string;
@@ -75,6 +77,7 @@ export interface OkoFormInstance {
   displayName: string;
   zid?: number | null;
   eid?: number | null;
+  status?: FormInstanceStatus;
   meta: FormMeta;
   rows: RowData[];
   signatures: Record<string, string>;
@@ -92,6 +95,7 @@ export interface InstanceSummary {
   periodEnd: string;
   zid?: number | null;
   eid?: number | null;
+  status?: FormInstanceStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -123,6 +127,8 @@ export interface PackageCompleteness {
   eid: number;
   total: number;
   filled: number;
+  draft: number;
+  submitted: number;
   items: Array<{
     formId: string;
     title: string;
@@ -130,7 +136,23 @@ export interface PackageCompleteness {
     filled: boolean;
     instanceId?: string;
     displayName?: string;
+    status?: FormInstanceStatus;
   }>;
+}
+
+export interface PackageDashboardRow {
+  zid: number;
+  eid: number;
+  organizationName: string;
+  organizationCode: string | null;
+  periodName: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  total: number;
+  filled: number;
+  draft: number;
+  submitted: number;
+  percent: number;
 }
 
 export interface CreatePackageResult {

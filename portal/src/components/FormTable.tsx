@@ -10,6 +10,7 @@ interface Props {
   kontrMode?: boolean;
   kontrAgents?: KontrAgent[];
   cellErrors?: Map<string, string>;
+  readOnly?: boolean;
 }
 
 export function FormTable({
@@ -20,6 +21,7 @@ export function FormTable({
   kontrMode,
   kontrAgents = [],
   cellErrors,
+  readOnly = false,
 }: Props) {
   const kontrListId = useMemo(
     () => (kontrMode ? `kontr-list-${Math.random().toString(36).slice(2)}` : undefined),
@@ -93,8 +95,8 @@ export function FormTable({
               {columns.map((col) => {
                 const errKey = cellErrorKey(row, rowIdx, col.key);
                 const errMsg = cellErrors?.get(errKey);
-                const kontrEditable = kontrMode && col.key === "name" && isKontrEditableRow(row);
-                const readonly = col.readonly && !kontrEditable;
+                const kontrEditable = !readOnly && kontrMode && col.key === "name" && isKontrEditableRow(row);
+                const readonly = readOnly || (col.readonly && !kontrEditable);
 
                 return (
                   <td
@@ -130,7 +132,7 @@ export function FormTable({
                   </td>
                 );
               })}
-              {(allowAddRows || kontrMode) && (
+              {(allowAddRows || kontrMode) && !readOnly && (
                 <td className="actions-col">
                   {allowAddRows || isKontrEditableRow(row) ? (
                     <button
@@ -148,7 +150,7 @@ export function FormTable({
           ))}
         </tbody>
       </table>
-      {(allowAddRows || kontrMode) && (
+      {(allowAddRows || kontrMode) && !readOnly && (
         <button type="button" className="btn btn-secondary add-row-btn" onClick={addRow}>
           + {kontrMode ? "Добавить контрагента" : "Добавить строку"}
         </button>

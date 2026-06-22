@@ -36,6 +36,10 @@ export function formatPeriod(start: string, end: string): string {
   return start || end;
 }
 
+export function formStatusLabel(status?: "draft" | "submitted"): string {
+  return status === "submitted" ? "Сдано" : "Черновик";
+}
+
 export function categoryLabel(
   categories: Record<string, string>,
   cat: string

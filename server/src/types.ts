@@ -6,6 +6,8 @@ export interface FormMeta {
   unit: string;
 }
 
+export type FormInstanceStatus = "draft" | "submitted";
+
 export interface OkoFormInstance {
   instanceId: string;
   templateId: string;
@@ -13,6 +15,7 @@ export interface OkoFormInstance {
   displayName: string;
   zid?: number | null;
   eid?: number | null;
+  status?: FormInstanceStatus;
   meta: FormMeta;
   rows: Record<string, string | number>[];
   signatures: Record<string, string>;

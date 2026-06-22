@@ -23,9 +23,11 @@ import {
   loadKontrAgents,
   saveGlobalMeta,
   saveInstance,
+  setInstanceStatus,
 } from "../storage";
-import type { FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
-import { buildInitialRows, formatPeriod } from "../utils";
+import { isAdminRole } from "../auth";
+import type { FormInstanceStatus, FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
+import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -61,6 +63,9 @@ export function FormPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
+  const admin = isAdminRole();
+  const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
+  const isLocked = instanceStatus === "submitted" && !admin;
 
   useEffect(() => {
     if (!instanceId) return;
@@ -142,11 +147,30 @@ export function FormPage() {
   );
 
   const handleSave = useCallback(async () => {
-    if (!instance) return;
+    if (!instance || isLocked) return;
     await persist();
     setStatus("Сохранено " + new Date().toLocaleTimeString("ru-RU"));
     setTimeout(() => setStatus(""), 3000);
-  }, [instance, persist]);
+  }, [instance, isLocked, persist]);
+
+  const handleSubmitForm = async () => {
+    if (!instance || instanceStatus === "submitted") return;
+    if (!confirm("Сдать форму? После сдачи редактирование будет недоступно (только администратор сможет вернуть в черновик).")) {
+      return;
+    }
+    await persist();
+    const updated = await setInstanceStatus(instance.instanceId, "submitted");
+    setInstance(updated);
+    setStatus("Форма сдана");
+  };
+
+  const handleReopenForm = async () => {
+    if (!instance || !admin) return;
+    if (!confirm("Вернуть форму в черновик?")) return;
+    const updated = await setInstanceStatus(instance.instanceId, "draft");
+    setInstance(updated);
+    setStatus("Форма возвращена в черновик");
+  };
 
   const handleReset = async () => {
     if (!schema || !instance) return;
@@ -336,6 +360,9 @@ export function FormPage() {
           <div className="form-subtitle">
             <span className="form-code">{schema.id}</span>
             <span>{schema.title}</span>
+            <span className={`status-badge ${instanceStatus}`}>
+              {formStatusLabel(instanceStatus)}
+            </span>
           </div>
         </div>
         <div className="toolbar-actions">
@@ -422,12 +449,37 @@ export function FormPage() {
           <button type="button" className="btn btn-danger-outline" onClick={() => void handleDelete()}>
             Удалить
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
-            Сохранить
-          </button>
+          {instanceStatus === "draft" && !isLocked && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleSubmitForm()}
+            >
+              Сдать форму
+            </button>
+          )}
+          {instanceStatus === "submitted" && admin && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleReopenForm()}
+            >
+              Вернуть в черновик
+            </button>
+          )}
+          {!isLocked && (
+            <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
+              Сохранить
+            </button>
+          )}
         </div>
       </div>
       {status && <div className="status-bar">{status}</div>}
+      {isLocked && (
+        <div className="status-bar status-locked">
+          Форма сдана и доступна только для просмотра. Для правок обратитесь к администратору.
+        </div>
+      )}
       <CheckResultsPanel result={checkResult} loading={checking} />
 
       {kontrMode && rashRuleCount != null && rashRuleCount > 0 && (
@@ -459,6 +511,7 @@ export function FormPage() {
             Код предприятия
             <input
               value={meta.enterpriseCode}
+              disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, enterpriseCode: e.target.value })}
             />
           </label>
@@ -466,6 +519,7 @@ export function FormPage() {
             Организация
             <input
               value={meta.organization}
+              disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, organization: e.target.value })}
               placeholder="Наименование организации"
             />
@@ -475,6 +529,7 @@ export function FormPage() {
             <input
               type="date"
               value={meta.periodStart}
+              disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, periodStart: e.target.value })}
             />
           </label>
@@ -483,6 +538,7 @@ export function FormPage() {
             <input
               type="date"
               value={meta.periodEnd}
+              disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, periodEnd: e.target.value })}
             />
           </label>
@@ -490,6 +546,7 @@ export function FormPage() {
             Ед. изм.
             <input
               value={meta.unit}
+              disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, unit: e.target.value })}
             />
           </label>
@@ -507,6 +564,7 @@ export function FormPage() {
         kontrMode={kontrMode}
         kontrAgents={kontrAgents}
         cellErrors={cellErrors}
+        readOnly={isLocked}
       />
 
       {schema.signatures.length > 0 && (

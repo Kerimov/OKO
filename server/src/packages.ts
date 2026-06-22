@@ -33,6 +33,7 @@ export interface PackageCompletenessItem {
   filled: boolean;
   instanceId?: string;
   displayName?: string;
+  status?: "draft" | "submitted";
 }
 
 export interface PackageCompletenessDto {
@@ -40,7 +41,24 @@ export interface PackageCompletenessDto {
   eid: number;
   total: number;
   filled: number;
+  draft: number;
+  submitted: number;
   items: PackageCompletenessItem[];
+}
+
+export interface PackageDashboardRow {
+  zid: number;
+  eid: number;
+  organizationName: string;
+  organizationCode: string | null;
+  periodName: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  total: number;
+  filled: number;
+  draft: number;
+  submitted: number;
+  percent: number;
 }
 
 export interface CreatePackageResult {
@@ -325,7 +343,7 @@ export function getPackageCompleteness(
   const catalog = exportCatalog(db);
   const instances = db
     .prepare(
-      `SELECT instance_id, template_id, display_name, updated_at
+      `SELECT instance_id, template_id, display_name, status, updated_at
        FROM form_instances WHERE zid = ? AND eid = ?
        ORDER BY updated_at DESC`
     )
@@ -333,21 +351,30 @@ export function getPackageCompleteness(
     instance_id: string;
     template_id: string;
     display_name: string;
+    status: string | null;
     updated_at: string;
   }>;
 
-  const latestByTemplate = new Map<string, { instanceId: string; displayName: string }>();
+  const latestByTemplate = new Map<
+    string,
+    { instanceId: string; displayName: string; status: "draft" | "submitted" }
+  >();
   for (const inst of instances) {
     if (!latestByTemplate.has(inst.template_id)) {
       latestByTemplate.set(inst.template_id, {
         instanceId: inst.instance_id,
         displayName: inst.display_name,
+        status: inst.status === "submitted" ? "submitted" : "draft",
       });
     }
   }
 
+  let draft = 0;
+  let submitted = 0;
   const items: PackageCompletenessItem[] = catalog.forms.map((f) => {
     const hit = latestByTemplate.get(f.id);
+    if (hit?.status === "submitted") submitted++;
+    else if (hit) draft++;
     return {
       formId: f.id,
       title: f.title,
@@ -355,11 +382,55 @@ export function getPackageCompleteness(
       filled: !!hit,
       instanceId: hit?.instanceId,
       displayName: hit?.displayName,
+      status: hit?.status,
     };
   });
 
   const filled = items.filter((i) => i.filled).length;
-  return { zid, eid, total: items.length, filled, items };
+  return { zid, eid, total: items.length, filled, draft, submitted, items };
+}
+
+export function getPackagesDashboard(db: DatabaseSync): PackageDashboardRow[] {
+  const catalog = exportCatalog(db);
+  const totalForms = catalog.forms.length;
+
+  const periods = db
+    .prepare(
+      `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end,
+              o.name AS org_name, o.code AS org_code
+       FROM periods p
+       JOIN organizations o ON o.zid = p.zid
+       ORDER BY o.name, p.period_start DESC, p.eid DESC`
+    )
+    .all() as unknown as Array<{
+    eid: number;
+    zid: number;
+    name: string;
+    period_start: string | null;
+    period_end: string | null;
+    org_name: string;
+    org_code: string | null;
+  }>;
+
+  const rows: PackageDashboardRow[] = [];
+  for (const p of periods) {
+    const completeness = getPackageCompleteness(db, p.zid, p.eid);
+    rows.push({
+      zid: p.zid,
+      eid: p.eid,
+      organizationName: p.org_name,
+      organizationCode: p.org_code,
+      periodName: p.name,
+      periodStart: p.period_start,
+      periodEnd: p.period_end,
+      total: totalForms,
+      filled: completeness.filled,
+      draft: completeness.draft,
+      submitted: completeness.submitted,
+      percent: totalForms > 0 ? Math.round((completeness.filled / totalForms) * 100) : 0,
+    });
+  }
+  return rows;
 }
 
 export function createReportPackage(
@@ -433,6 +504,7 @@ export function createReportPackage(
         },
         rows: buildInitialRows(schema),
         signatures,
+        status: "draft",
         createdAt: now,
         updatedAt: now,
       };

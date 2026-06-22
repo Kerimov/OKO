@@ -26,6 +26,18 @@ import { migrateAuditTable } from "./audit.js";
 import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
 import { migrateRashTables, seedRashFromJson } from "./rash.js";
 import { migrateUserTables, seedBootstrapAdmin } from "./users.js";
+import {
+  deleteAggEntry,
+  exportAggPayload,
+  getAggStats,
+  listAggEntries,
+  migrateAggTables,
+  reimportAggFromJson,
+  runPackageAggregation,
+  seedAggFromJson,
+  seedOrganizationsFromAggCodes,
+  upsertAggEntry,
+} from "./aggregation.js";
 import { DATA_DIR, DB_PATH, ROOT, SCHEMA_PATH } from "./paths.js";
 
 const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
@@ -90,6 +102,15 @@ function initSchema(database: DatabaseSync): void {
   migrateAuditTable(database);
   migrateOrgTables(database);
   migrateUserTables(database);
+  migrateAggTables(database);
+  const seededAggOrgs = seedOrganizationsFromAggCodes(database);
+  if (seededAggOrgs > 0) {
+    console.log(`Seeded ${seededAggOrgs} organizations from agg-list.json codes`);
+  }
+  const seededAgg = seedAggFromJson(database);
+  if (seededAgg > 0) {
+    console.log(`Seeded ${seededAgg} aggregation rules from agg-list.json`);
+  }
   const seededAdmin = seedBootstrapAdmin(database);
   if (seededAdmin > 0) {
     console.log("Created bootstrap admin user (see OKO_BOOTSTRAP_ADMIN_* env)");

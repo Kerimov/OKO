@@ -1392,3 +1392,48 @@ a:hover {
   max-height: 200px;
   overflow-y: auto;
 }
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  margin-left: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-badge.draft {
+  background: #f0f4f8;
+  color: var(--muted);
+}
+
+.status-badge.submitted {
+  background: #e6f4ea;
+  color: #1e6b3a;
+}
+
+.status-locked {
+  background: #fff8e6;
+  border-color: #e6c200;
+  color: #6b5600;
+}
+
+.packages-dashboard-table .table-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.completeness-inline {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+  max-width: 120px;
+}
+
+.completeness-inline .completeness-fill {
+  height: 100%;
+}

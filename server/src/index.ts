@@ -72,11 +72,13 @@ import {
 } from "./orgScope.js";
 import {
   buildEvalSnapshotFromDb,
+  assertInstanceEditable,
   deleteInstanceFromDb,
   getInstanceStorageStats,
   listInstanceSummaries,
   loadInstance,
   migratePortalPayloadsToCells,
+  setInstanceStatus,
   upsertInstance,
 } from "./instances.js";
 import {
@@ -84,6 +86,7 @@ import {
   createPeriod,
   createReportPackage,
   getPackageCompleteness,
+  getPackagesDashboard,
   getWorkContext,
   listOrganizations,
   listPeriods,
@@ -243,6 +246,7 @@ app.get("/api/instances/:id", (req, res) => {
 app.post("/api/instances", (req, res) => {
   try {
     const inst = enforceOrgInstanceWrite(req, req.body as OkoFormInstance);
+    if (!inst.status) inst.status = "draft";
     upsertInstance(getDb(), inst);
     res.status(201).json(inst);
   } catch (e) {
@@ -259,13 +263,50 @@ app.put("/api/instances/:id", (req, res) => {
   }
   try {
     const existing = loadInstance(getDb(), req.params.id);
-    if (existing) assertOrgInstanceAccess(req, existing);
+    if (existing) {
+      assertOrgInstanceAccess(req, existing);
+      assertInstanceEditable(existing, req.apiRole === "admin");
+    }
     const scoped = enforceOrgInstanceWrite(req, inst);
     upsertInstance(getDb(), scoped);
     res.json(scoped);
   } catch (e) {
+    const err = e as Error & { status?: number };
+    if (err.status === 403) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "save failed" });
+  }
+});
+
+app.patch("/api/instances/:id/status", (req, res) => {
+  const { status } = req.body as { status?: string };
+  if (status !== "draft" && status !== "submitted") {
+    res.status(400).json({ error: "status must be draft or submitted" });
+    return;
+  }
+  try {
+    const existing = loadInstance(getDb(), req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    assertOrgInstanceAccess(req, existing);
+    if (status === "draft" && req.apiRole !== "admin") {
+      res.status(403).json({ error: "Only admin can reopen submitted forms" });
+      return;
+    }
+    const updated = setInstanceStatus(getDb(), req.params.id, status);
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json(updated);
+  } catch (e) {
+    if (handleOrgError(res, e)) return;
+    res.status(500).json({ error: e instanceof Error ? e.message : "status update failed" });
   }
 });
 
@@ -417,6 +458,10 @@ app.post("/api/packages/create", (req, res) => {
   }
 });
 
+app.get("/api/packages/dashboard", requireAdmin, (_req, res) => {
+  res.json(getPackagesDashboard(getDb()));
+});
+
 // --- User accounts (org cabinets) ---
 
 app.get("/api/users", requireAdmin, (_req, res) => {
@@ -467,6 +512,107 @@ app.put("/api/users/:id", requireAdmin, (req, res) => {
     res.json(user);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "update failed" });
+  }
+});
+
+// --- Aggregation (a_tblAgg_List) ---
+
+app.get("/api/aggregation/stats", (_req, res) => {
+  res.json(getAggStats(getDb()));
+});
+
+app.get("/api/aggregation/export", (_req, res) => {
+  res.json(exportAggPayload(getDb()));
+});
+
+app.post("/api/aggregation/reimport", requireAdmin, (_req, res) => {
+  try {
+    const count = reimportAggFromJson(getDb());
+    res.json({ reimported: count });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
+  }
+});
+
+app.get("/api/aggregation/list", (req, res) => {
+  const parentZid = req.query.parentZid != null ? Number(req.query.parentZid) : undefined;
+  res.json(listAggEntries(getDb(), parentZid));
+});
+
+app.post("/api/aggregation/list", requireAdmin, (req, res) => {
+  const body = req.body as {
+    parentZid?: number;
+    childZid?: number;
+    included?: boolean;
+  };
+  if (!body.parentZid || !body.childZid) {
+    res.status(400).json({ error: "parentZid and childZid required" });
+    return;
+  }
+  try {
+    const entry = upsertAggEntry(getDb(), {
+      parentZid: body.parentZid,
+      childZid: body.childZid,
+      included: body.included,
+    });
+    res.status(201).json(entry);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
+  }
+});
+
+app.put("/api/aggregation/list/:id", requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const body = req.body as {
+    parentZid?: number;
+    childZid?: number;
+    included?: boolean;
+  };
+  if (!Number.isFinite(id) || !body.parentZid || !body.childZid) {
+    res.status(400).json({ error: "invalid id or missing zids" });
+    return;
+  }
+  try {
+    res.json(
+      upsertAggEntry(getDb(), {
+        id,
+        parentZid: body.parentZid,
+        childZid: body.childZid,
+        included: body.included,
+      })
+    );
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "update failed" });
+  }
+});
+
+app.delete("/api/aggregation/list/:id", requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "invalid id" });
+    return;
+  }
+  const ok = deleteAggEntry(getDb(), id);
+  if (!ok) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/aggregation/run", (req, res) => {
+  const { parentZid, eid } = req.body as { parentZid?: number; eid?: number };
+  if (!parentZid || !eid) {
+    res.status(400).json({ error: "parentZid and eid required" });
+    return;
+  }
+  try {
+    assertOrgZidParam(req, parentZid);
+    const result = runPackageAggregation(getDb(), parentZid, eid);
+    res.json(result);
+  } catch (e) {
+    if (handleOrgError(res, e)) return;
+    res.status(400).json({ error: e instanceof Error ? e.message : "aggregation failed" });
   }
 });
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   createOrganization,
   createPeriod,
@@ -11,11 +11,12 @@ import {
   saveWorkContext,
 } from "../packagesApi";
 import type { Organization, PackageCompleteness, ReportingPeriod } from "../types";
-import { formatPeriod } from "../utils";
+import { formatPeriod, formStatusLabel } from "../utils";
 import { isAdminRole } from "../auth";
 
 export function PackagePage() {
   const admin = isAdminRole();
+  const [searchParams] = useSearchParams();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
   const [zid, setZid] = useState<number | "">("");
@@ -51,12 +52,20 @@ export function PackagePage() {
     (async () => {
       const [orgList, ctx] = await Promise.all([listOrganizations(), loadWorkContext()]);
       setOrgs(orgList);
-      const initialZid: number | "" = ctx.zid ?? orgList[0]?.zid ?? "";
+      const paramZid = Number(searchParams.get("zid"));
+      const paramEid = Number(searchParams.get("eid"));
+      const initialZid: number | "" =
+        Number.isFinite(paramZid) && paramZid > 0
+          ? paramZid
+          : ctx.zid ?? orgList[0]?.zid ?? "";
       setZid(initialZid);
       if (typeof initialZid === "number") {
         const perList = await listPeriods(initialZid);
         setPeriods(perList);
-        const initialEid: number | "" = ctx.eid ?? perList[0]?.eid ?? "";
+        const initialEid: number | "" =
+          Number.isFinite(paramEid) && paramEid > 0
+            ? paramEid
+            : ctx.eid ?? perList[0]?.eid ?? "";
         setEid(initialEid);
         if (typeof initialEid === "number") {
           await refreshCompleteness(initialZid, initialEid);
@@ -64,7 +73,7 @@ export function PackagePage() {
       }
       setLoading(false);
     })();
-  }, [refreshCompleteness]);
+  }, [refreshCompleteness, searchParams]);
 
   const handleZidChange = async (value: number) => {
     setZid(value);
@@ -284,6 +293,10 @@ export function PackagePage() {
               {completeness.filled}/{completeness.total}
             </span>
           </h2>
+          <p className="tools-hint">
+            Черновики: <strong>{completeness.draft}</strong> · Сдано:{" "}
+            <strong>{completeness.submitted}</strong>
+          </p>
           <div className="completeness-bar">
             <div
               className="completeness-fill"
@@ -305,6 +318,31 @@ export function PackagePage() {
               Мои формы
             </Link>
           </div>
+          {completeness.items.filter((i) => i.filled).length > 0 && (
+            <details className="missing-forms">
+              <summary>
+                Заведено ({completeness.filled}) — черновики {completeness.draft}, сдано{" "}
+                {completeness.submitted}
+              </summary>
+              <ul>
+                {completeness.items
+                  .filter((i) => i.filled)
+                  .map((f) => (
+                    <li key={f.formId}>
+                      {f.instanceId ? (
+                        <Link to={`/my/${f.instanceId}`}>{f.formId}</Link>
+                      ) : (
+                        f.formId
+                      )}{" "}
+                      — {f.title}{" "}
+                      <span className={`status-badge ${f.status ?? "draft"}`}>
+                        {formStatusLabel(f.status)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
           {missing.length > 0 && (
             <details className="missing-forms">
               <summary>Не заведено ({missing.length})</summary>
