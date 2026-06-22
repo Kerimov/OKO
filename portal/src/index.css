@@ -211,6 +211,8 @@ a:hover {
   flex: 1;
   padding: 1.25rem 1.5rem;
   max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .footer {
@@ -520,13 +522,15 @@ a:hover {
   font-weight: 500;
 }
 
-.meta-grid input,
-.settings-form input,
-.sig-grid input {
+.meta-grid input:not([type="checkbox"]):not([type="radio"]),
+.settings-form input:not([type="checkbox"]):not([type="radio"]),
+.sig-grid input:not([type="checkbox"]):not([type="radio"]) {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .period-hint {
@@ -934,6 +938,8 @@ a:hover {
 .admin-page {
   max-width: 1400px;
   margin: 0 auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .admin-header {
@@ -943,6 +949,7 @@ a:hover {
   gap: 1rem;
   margin-bottom: 1rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .admin-header h1 {
@@ -954,6 +961,8 @@ a:hover {
   color: var(--muted);
   font-size: 0.9rem;
   margin-top: 0.25rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .admin-stats {
@@ -967,7 +976,7 @@ a:hover {
 
 .checks-layout {
   display: grid;
-  grid-template-columns: 1fr 420px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
   gap: 1rem;
   align-items: start;
 }
@@ -1002,12 +1011,32 @@ a:hover {
   align-items: center;
 }
 
-.check-flag {
+.check-flag,
+.checks-form .check-flag,
+.checks-form-grid .check-flag,
+.checks-detail-panel .check-flag,
+.checks-form .checks-flags label,
+.checks-flags label,
+.checkbox-inline {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--muted);
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  flex-wrap: wrap;
+}
+
+.checkbox-inline {
+  width: auto;
+}
+
+.checks-filters .check-flag {
+  width: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .checks-table {
@@ -1061,11 +1090,24 @@ a:hover {
   color: var(--primary);
 }
 
-.checks-form,
-.checks-form-grid {
+.checks-form {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+
+.checks-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 0.65rem 1rem;
+  align-items: start;
+}
+
+.checks-form-grid > label.full-width,
+.checks-form-grid .form-section-label,
+.checks-form-grid .checks-flags,
+.checks-form-grid .check-flag {
+  grid-column: 1 / -1;
 }
 
 .checks-form label:not(.check-flag),
@@ -1104,7 +1146,7 @@ a:hover {
   grid-column: 1 / -1;
 }
 
-.checks-form input,
+.checks-form input:not([type="checkbox"]):not([type="radio"]),
 .checks-form textarea,
 .checks-form-grid input:not([type="checkbox"]):not([type="radio"]),
 .checks-form-grid textarea,
@@ -1119,6 +1161,8 @@ a:hover {
   box-sizing: border-box;
 }
 
+.checks-form .checks-flags input[type="checkbox"],
+.checks-form .check-flag input[type="checkbox"],
 .checks-form-grid .checks-flags input[type="checkbox"],
 .checks-form-grid .check-flag input[type="checkbox"],
 .checks-flags input[type="checkbox"],
@@ -1154,6 +1198,7 @@ a:hover {
   color: var(--text);
   gap: 0.5rem;
   width: 100%;
+  min-width: 0;
 }
 
 .checks-actions {
@@ -1174,7 +1219,7 @@ a:hover {
 /* Forms editor */
 .forms-editor-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -1238,6 +1283,8 @@ a:hover {
   padding: 1rem;
   box-shadow: var(--shadow);
   min-height: 400px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .forms-tabs {
@@ -1332,6 +1379,20 @@ a:hover {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
+  min-width: 0;
+}
+
+.tools-grid label:has(input[type="checkbox"]),
+.tools-section > label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+}
+
+.tools-grid label input[type="checkbox"],
+.tools-section > label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }
 
 .tools-grid select,
