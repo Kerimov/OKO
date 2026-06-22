@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { InstanceSummary } from "../types";
+import type { FormInstanceStatus, InstanceSummary } from "../types";
 import {
   deleteInstance,
   importInstanceFile,
   listInstances,
 } from "../storage";
-import { formatPeriod } from "../utils";
+import { formatPeriod, formStatusLabel } from "../utils";
 
 export function MyFormsPage() {
   const navigate = useNavigate();
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
   const [search, setSearch] = useState("");
   const [filterTemplate, setFilterTemplate] = useState("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | FormInstanceStatus>("all");
 
   const refresh = async () => setInstances(await listInstances());
 
@@ -26,6 +27,9 @@ export function MyFormsPage() {
       if (filterTemplate !== "all" && inst.templateId !== filterTemplate) {
         return false;
       }
+      if (filterStatus !== "all" && (inst.status ?? "draft") !== filterStatus) {
+        return false;
+      }
       if (!q) return true;
       return (
         inst.displayName.toLowerCase().includes(q) ||
@@ -34,7 +38,7 @@ export function MyFormsPage() {
         inst.organization.toLowerCase().includes(q)
       );
     });
-  }, [instances, search, filterTemplate]);
+  }, [instances, search, filterTemplate, filterStatus]);
 
   const templateOptions = useMemo(() => {
     const ids = new Set(instances.map((i) => i.templateId));
@@ -99,6 +103,15 @@ export function MyFormsPage() {
             </option>
           ))}
         </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as "all" | FormInstanceStatus)}
+          className="category-select"
+        >
+          <option value="all">Все статусы</option>
+          <option value="draft">Черновики</option>
+          <option value="submitted">Сдано</option>
+        </select>
         <button
           type="button"
           className="btn btn-secondary"
@@ -145,6 +158,9 @@ export function MyFormsPage() {
                 <div className="instance-card-meta">
                   <span className="form-card-id">{inst.templateId}</span>
                   <span>{inst.templateTitle}</span>
+                  <span className={`status-badge ${inst.status ?? "draft"}`}>
+                    {formStatusLabel(inst.status)}
+                  </span>
                 </div>
                 {inst.organization && (
                   <p className="instance-org">{inst.organization}</p>

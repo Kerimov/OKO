@@ -78,6 +78,18 @@ export function Layout() {
                 Расшифровки
               </Link>
               <Link
+                to="/admin/aggregation"
+                className={pathname === "/admin/aggregation" ? "active" : ""}
+              >
+                Агрегация
+              </Link>
+              <Link
+                to="/admin/packages"
+                className={pathname === "/admin/packages" ? "active" : ""}
+              >
+                Комплекты
+              </Link>
+              <Link
                 to="/admin/users"
                 className={pathname === "/admin/users" ? "active" : ""}
               >

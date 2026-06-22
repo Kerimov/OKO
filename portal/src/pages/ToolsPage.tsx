@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { loadSchema } from "../api";
+import { listAggEntries, runPackageAggregation } from "../aggregationApi";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { aggregateInstances } from "../engine/aggregateEngine";
 import {
   getCheckRuleCounts,
+  runAggregationChecks,
   runAllChecks,
   type CheckMode,
   type CheckRunResult,
@@ -15,7 +17,7 @@ import {
   downloadReportPackage,
   filterInstancesByPeriod,
 } from "../engine/packageExport";
-import { loadWorkContext } from "../packagesApi";
+import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
 import { recalcForm } from "../engine/recalcEngine";
 import {
   applySaldoToTarget,
@@ -30,6 +32,7 @@ import {
   loadAllInstances,
   loadGlobalMeta,
   saveInstance,
+  isBackendMode,
 } from "../storage";
 import type { InstanceSummary, OkoFormInstance } from "../types";
 
@@ -64,7 +67,15 @@ export function ToolsPage() {
   const [aggrTemplate, setAggrTemplate] = useState("");
   const [aggrSelected, setAggrSelected] = useState<string[]>([]);
 
+  const [pkgParentZid, setPkgParentZid] = useState<number | "">("");
+  const [pkgEid, setPkgEid] = useState<number | "">("");
+  const [pkgChildren, setPkgChildren] = useState<number[]>([]);
+  const [pkgPeriods, setPkgPeriods] = useState<Array<{ eid: number; name: string }>>([]);
+  const [pkgParents, setPkgParents] = useState<number[]>([]);
+  const [aggrCheckResult, setAggrCheckResult] = useState<CheckRunResult | null>(null);
+
   const [periodInstances, setPeriodInstances] = useState<OkoFormInstance[]>([]);
+  const backend = isBackendMode();
 
   useEffect(() => {
     if (saldoMode !== "detailed" || !saldoTarget) {
@@ -118,6 +129,80 @@ export function ToolsPage() {
     () => Array.from(byTemplate.keys()).sort(),
     [byTemplate]
   );
+
+  const aggParentZids = pkgParents;
+
+  useEffect(() => {
+    if (!backend) return;
+    (async () => {
+      try {
+        const [entries, ctx, orgs] = await Promise.all([
+          listAggEntries(),
+          loadWorkContext(),
+          listOrganizations(),
+        ]);
+        const parentIds = [...new Set(entries.map((e) => e.parentZid))];
+        setPkgParents(parentIds);
+        const initialParent = ctx.zid && parentIds.includes(ctx.zid) ? ctx.zid : parentIds[0];
+        if (initialParent != null) {
+          setPkgParentZid(initialParent);
+          const children = entries
+            .filter((e) => e.parentZid === initialParent && e.included)
+            .map((e) => e.childZid);
+          setPkgChildren(children);
+          const periods = await listPeriods(initialParent);
+          setPkgPeriods(periods.map((p) => ({ eid: p.eid, name: p.name })));
+          const initialEid =
+            ctx.eid && periods.some((p) => p.eid === ctx.eid) ? ctx.eid : periods[0]?.eid;
+          if (initialEid != null) setPkgEid(initialEid);
+        } else if (orgs[0]) {
+          setPkgParentZid(orgs[0].zid);
+        }
+      } catch {
+        /* optional */
+      }
+    })();
+  }, [backend]);
+
+  const handlePkgParentChange = async (zid: number) => {
+    setPkgParentZid(zid);
+    setPkgEid("");
+    try {
+      const entries = await listAggEntries(zid);
+      setPkgChildren(entries.filter((e) => e.included).map((e) => e.childZid));
+      const periods = await listPeriods(zid);
+      setPkgPeriods(periods.map((p) => ({ eid: p.eid, name: p.name })));
+      if (periods[0]) setPkgEid(periods[0].eid);
+      else setPkgEid("");
+    } catch {
+      setPkgChildren([]);
+    }
+  };
+
+  const handlePackageAggregate = async () => {
+    if (pkgParentZid === "" || pkgEid === "") {
+      setStatus("Выберите сводную организацию и период");
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    setAggrCheckResult(null);
+    try {
+      const result = await runPackageAggregation(pkgParentZid, pkgEid);
+      await refresh();
+      const checks = await runAggregationChecks();
+      setAggrCheckResult(checks);
+      setStatus(
+        `Свод завершён: ${result.aggregated} форм, пропущено ${result.skipped}` +
+          (result.missing.length ? `, нет данных: ${result.missing.length}` : "") +
+          ` · увязки агрегации: ${checks.passed}/${checks.total} OK`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка агрегации комплекта");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleCheckAll = async () => {
     setChecking(true);
@@ -277,7 +362,8 @@ export function ToolsPage() {
         <Link to="/admin/checks">Редактор увязок</Link>,{" "}
         <Link to="/admin/saldo">Сальдо</Link>,{" "}
         <Link to="/admin/excel">Excel-маппинг</Link>,{" "}
-        <Link to="/admin/rash">Расшифровки</Link>.
+        <Link to="/admin/rash">Расшифровки</Link>,{" "}
+        <Link to="/admin/aggregation">Агрегация</Link>.
       </p>
       {status && <div className="status-bar">{status}</div>}
 
@@ -459,7 +545,69 @@ export function ToolsPage() {
       </section>
 
       <section className="tools-section">
-        <h2>Агрегация</h2>
+        <h2>Агрегация комплекта (a_tblAgg_List)</h2>
+        <p className="tools-hint">
+          Суммирование форм дочерних организаций в сводную по правилам{" "}
+          <Link to="/admin/aggregation">конфигурации агрегации</Link>. Требуются заполненные
+          комплекты участников за тот же период (EID).
+        </p>
+        {backend ? (
+          <>
+            <div className="tools-grid">
+              <label>
+                Сводная организация
+                <select
+                  value={pkgParentZid}
+                  onChange={(e) => void handlePkgParentChange(Number(e.target.value))}
+                >
+                  <option value="">— выберите —</option>
+                  {aggParentZids.map((z) => (
+                    <option key={z} value={z}>
+                      ZID={z}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Период (EID)
+                <select
+                  value={pkgEid}
+                  disabled={pkgParentZid === ""}
+                  onChange={(e) => setPkgEid(Number(e.target.value))}
+                >
+                  <option value="">— выберите —</option>
+                  {pkgPeriods.map((p) => (
+                    <option key={p.eid} value={p.eid}>
+                      {p.name} (EID={p.eid})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {pkgParentZid !== "" && pkgChildren.length > 0 && (
+              <p className="tools-hint">
+                Участники свода ({pkgChildren.length}): zid {pkgChildren.join(", ")}
+              </p>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy || pkgParentZid === "" || pkgEid === "" || pkgChildren.length === 0}
+              onClick={() => void handlePackageAggregate()}
+            >
+              {busy ? "Свод…" : "Свести комплект"}
+            </button>
+            {aggrCheckResult && aggrCheckResult.failed > 0 && (
+              <CheckResultsPanel result={aggrCheckResult} />
+            )}
+          </>
+        ) : (
+          <p className="tools-hint">Требуется API-сервер (SQLite).</p>
+        )}
+      </section>
+
+      <section className="tools-section">
+        <h2>Агрегация вручную (один шаблон)</h2>
         <p className="tools-hint">
           Суммирование числовых граф по строкам (как в ОКО при объединении форм филиалов).
           Нужны <strong>минимум 2 сохранённые формы одного шаблона</strong>.

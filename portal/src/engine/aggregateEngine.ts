@@ -98,6 +98,7 @@ export function aggregateInstances(options: AggregateOptions): AggregateResult {
     meta: { ...base.meta },
     rows,
     signatures: { ...base.signatures },
+    status: "draft",
     createdAt: now,
     updatedAt: now,
   };

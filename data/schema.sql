@@ -229,3 +229,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_zid ON users(zid);
+
+-- Aggregation list (a_tblAgg_List): parent org sums child orgs
+CREATE TABLE IF NOT EXISTS agg_list (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_zid  INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    child_zid   INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    included    INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(parent_zid, child_zid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agg_parent ON agg_list(parent_zid);
+CREATE INDEX IF NOT EXISTS idx_agg_child ON agg_list(child_zid);

@@ -304,6 +304,39 @@ def export_kontr(cur) -> dict:
     return {"version": "1.0", "source": str(MDB.name), "total": len(items), "items": items}
 
 
+def export_agg(cur) -> dict:
+    per = {}
+    try:
+        cur.execute("SELECT ZID, RowName FROM a_tblPERs")
+        for row in cur.fetchall():
+            d = row_to_dict(cur, row)
+            per[str(d["ZID"]).strip()] = d.get("RowName")
+    except Exception:
+        pass
+
+    cur.execute('SELECT ZID_AG, ZID_P, [Include?] FROM a_tblAgg_List ORDER BY ZID_AG, ZID_P')
+    entries = []
+    for row in cur.fetchall():
+        d = row_to_dict(cur, row)
+        parent = str(d["ZID_AG"]).strip()
+        child = str(d["ZID_P"]).strip()
+        entries.append(
+            {
+                "parentCode": parent,
+                "childCode": child,
+                "included": bool(d.get("Include?")),
+                "parentName": per.get(parent),
+                "childName": per.get(child),
+            }
+        )
+    return {
+        "version": "1.0",
+        "source": str(MDB.name),
+        "total": len(entries),
+        "entries": entries,
+    }
+
+
 def export_form_correspondence(cur) -> dict:
     cur.execute(
         "SELECT Tname, GosForm, str, npp, Yellow, Red, Blue, Green, "
@@ -354,6 +387,7 @@ def main():
         ("recalc-rules.json", export_recalc_rules),
         ("kontr.json", export_kontr),
         ("rash-rules.json", export_rash),
+        ("agg-list.json", export_agg),
     ]
 
     for filename, fn in exports:

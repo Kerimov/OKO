@@ -178,3 +178,18 @@ export async function runActiveChecks(
   const rules = pickRules(data.checks, { mode, excludeAggr: true });
   return runRules(rules, evalContextFromInstances(instances));
 }
+
+/** Rules marked forAggrOnly — run after package aggregation (Access Aggr*). */
+export async function runAggregationChecks(
+  formId?: string,
+  instances?: OkoFormInstance[],
+  mode: CheckMode = "period"
+): Promise<CheckRunResult> {
+  const data = await loadChecks();
+  const rules = pickRules(data.checks, { formId, mode, excludeAggr: false }).filter(
+    (c) => c.forAggrOnly
+  );
+  const inst =
+    instances ?? latestInstancePerTemplate(await loadInstancesForCheck());
+  return runRules(rules, evalContextFromInstances(inst));
+}

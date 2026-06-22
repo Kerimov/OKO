@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "source": "z261.mdb",
+  "total": 12,
+  "entries": [
+    {
+      "parentCode": "1@5222",
+      "childCode": "1@2",
+      "included": true,
+      "parentName": " -СВОД филиалы ПАО-",
+      "childName": "Автопредприятие"
+    },
+    {
+      "parentCode": "1@5222",
+      "childCode": "1@21",
+      "included": true,
+      "parentName": " -СВОД филиалы ПАО-",
+      "childName": "Главное управление охраны ПАО \"Газпром\" г.Санкт-Петербург"
+    },
+    {
+      "parentCode": "1@5222",
+      "childCode": "1@14",
+      "included": false,
+      "parentName": " -СВОД филиалы ПАО-",
+      "childName": "Представительство в Китае"
+    },
+    {
+      "parentCode": "1@5222",
+      "childCode": "1@13",
+      "included": false,
+      "parentName": " -СВОД филиалы ПАО-",
+      "childName": "Представительство в Алжире"
+    },
+    {
+      "parentCode": "1@5333",
+      "childCode": "1@2",
+      "included": false,
+      "parentName": " -СВОД представительства ПАО-",
+      "childName": "Автопредприятие"
+    },
+    {
+      "parentCode": "1@5333",
+      "childCode": "1@21",
+      "included": false,
+      "parentName": " -СВОД представительства ПАО-",
+      "childName": "Главное управление охраны ПАО \"Газпром\" г.Санкт-Петербург"
+    },
+    {
+      "parentCode": "1@5333",
+      "childCode": "1@14",
+      "included": true,
+      "parentName": " -СВОД представительства ПАО-",
+      "childName": "Представительство в Китае"
+    },
+    {
+      "parentCode": "1@5333",
+      "childCode": "1@13",
+      "included": true,
+      "parentName": " -СВОД представительства ПАО-",
+      "childName": "Представительство в Алжире"
+    },
+    {
+      "parentCode": "21@5021",
+      "childCode": "21@15",
+      "included": true,
+      "parentName": " -СВОД головной организации ГД Надым-",
+      "childName": "Управление технологического транспорта и специальной техники"
+    },
+    {
+      "parentCode": "21@5021",
+      "childCode": "21@6",
+      "included": true,
+      "parentName": " -СВОД головной организации ГД Надым-",
+      "childName": "Пансионат \"Надым"
+    },
+    {
+      "parentCode": "21@5021",
+      "childCode": "21@999",
+      "included": true,
+      "parentName": " -СВОД головной организации ГД Надым-",
+      "childName": "Администрация ООО \"Газпром добыча Надым"
+    },
+    {
+      "parentCode": "21@5021",
+      "childCode": "21@13",
+      "included": true,
+      "parentName": " -СВОД головной организации ГД Надым-",
+      "childName": "Управление связи"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import type {
   CreatePackageResult,
   Organization,
   PackageCompleteness,
+  PackageDashboardRow,
   ReportingPeriod,
   WorkContext,
 } from "./types";
@@ -190,10 +191,17 @@ export async function fetchPackageCompleteness(
       filled: !!inst,
       instanceId: inst?.instanceId,
       displayName: inst?.displayName,
+      status: inst?.status,
     };
   });
   const filled = items.filter((i) => i.filled).length;
-  return { zid, eid, total: items.length, filled, items };
+  const draft = items.filter((i) => i.filled && i.status !== "submitted").length;
+  const submitted = items.filter((i) => i.status === "submitted").length;
+  return { zid, eid, total: items.length, filled, draft, submitted, items };
+}
+
+export async function fetchPackagesDashboard(): Promise<PackageDashboardRow[]> {
+  return apiFetch<PackageDashboardRow[]>("/api/packages/dashboard");
 }
 
 export async function createReportPackage(
