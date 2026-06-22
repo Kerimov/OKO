@@ -176,13 +176,17 @@
       "key": "Z",
       "label": "Итого дебет",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "Б",
       "label": "Итого кредит",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     }
   ],
   "rows": [

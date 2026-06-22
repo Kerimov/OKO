@@ -15,11 +15,15 @@ import {
   downloadReportPackage,
   filterInstancesByPeriod,
 } from "../engine/packageExport";
+import { loadWorkContext } from "../packagesApi";
 import { recalcForm } from "../engine/recalcEngine";
 import {
   applySaldoToTarget,
+  countSaldoRulesForForm,
   transferSaldoByColumns,
+  transferSaldoDetailed,
   type SaldoPhase,
+  type SaldoTransferMode,
 } from "../engine/saldoEngine";
 import {
   listInstances,
@@ -53,11 +57,24 @@ export function ToolsPage() {
   const [saldoSource, setSaldoSource] = useState("");
   const [saldoTarget, setSaldoTarget] = useState("");
   const [saldoPhase, setSaldoPhase] = useState<SaldoPhase>("previous_period");
+  const [saldoMode, setSaldoMode] = useState<SaldoTransferMode>("columns");
+  const [saldoDetailedType, setSaldoDetailedType] = useState<"t" | "s" | "g">("t");
+  const [saldoRuleCount, setSaldoRuleCount] = useState<number | null>(null);
 
   const [aggrTemplate, setAggrTemplate] = useState("");
   const [aggrSelected, setAggrSelected] = useState<string[]>([]);
 
   const [periodInstances, setPeriodInstances] = useState<OkoFormInstance[]>([]);
+
+  useEffect(() => {
+    if (saldoMode !== "detailed" || !saldoTarget) {
+      setSaldoRuleCount(null);
+      return;
+    }
+    const templateId = summaries.find((s) => s.instanceId === saldoTarget)?.templateId;
+    if (!templateId) return;
+    countSaldoRulesForForm(templateId, saldoDetailedType).then(setSaldoRuleCount);
+  }, [saldoMode, saldoTarget, saldoDetailedType, summaries]);
 
   const refresh = async () => setSummaries(await listInstances());
 
@@ -67,12 +84,14 @@ export function ToolsPage() {
   }, []);
 
   useEffect(() => {
-    loadGlobalMeta().then((meta) => {
-      getCompleteness(summaries, {
-        start: meta.periodStart,
-        end: meta.periodEnd,
-      }).then(setCompleteness);
-    });
+    (async () => {
+      const [meta, work] = await Promise.all([loadGlobalMeta(), loadWorkContext()]);
+      const filter =
+        work.zid != null && work.eid != null
+          ? { zid: work.zid, eid: work.eid }
+          : { start: meta.periodStart, end: meta.periodEnd };
+      getCompleteness(summaries, filter).then(setCompleteness);
+    })();
   }, [summaries]);
 
   useEffect(() => {
@@ -181,12 +200,33 @@ export function ToolsPage() {
       setStatus("Выберите исходную и целевую формы");
       return;
     }
+    if (source.templateId !== target.templateId) {
+      setStatus(
+        `Шаблоны должны совпадать: ${source.templateId} ≠ ${target.templateId}`
+      );
+      return;
+    }
     try {
+      if (saldoMode === "detailed") {
+        const result = await transferSaldoDetailed(source, target, saldoDetailedType);
+        if (result.applied === 0) {
+          setStatus(
+            `Правила a_tblsaldo (${saldoDetailedType.toUpperCase()}): нет применимых ячеек для ${target.templateId}`
+          );
+          return;
+        }
+        await saveInstance(applySaldoToTarget(target, result.rows));
+        await refresh();
+        setStatus(
+          `Сальdo (a_tblsaldo, ${saldoDetailedType.toUpperCase()}): применено ${result.applied} ячеек`
+        );
+        return;
+      }
       const result = await transferSaldoByColumns({ source, target, phase: saldoPhase });
       await saveInstance(applySaldoToTarget(target, result.rows));
       await refresh();
       setStatus(
-        `Сальdo: ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}`
+        `Сальdo (FormCorrespondence): ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}`
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка переноса сальdo");
@@ -231,7 +271,13 @@ export function ToolsPage() {
       <h1>Администрирование</h1>
       <p className="tools-intro">
         Проверка, пересчёт, сальdo, агрегация и выгрузка комплекта — по правилам{" "}
-        <code>z261.mdb</code>.
+        <code>z261.mdb</code>. Комплект ZID/EID:{" "}
+        <Link to="/package">завести пустые формы</Link>. Редактирование:{" "}
+        <Link to="/admin/forms">Конструктор форм</Link>,{" "}
+        <Link to="/admin/checks">Редактор увязок</Link>,{" "}
+        <Link to="/admin/saldo">Сальдо</Link>,{" "}
+        <Link to="/admin/excel">Excel-маппинг</Link>,{" "}
+        <Link to="/admin/rash">Расшифровки</Link>.
       </p>
       {status && <div className="status-bar">{status}</div>}
 
@@ -338,7 +384,21 @@ export function ToolsPage() {
 
       <section className="tools-section">
         <h2>Перенос сальdo</h2>
+        <p className="tools-hint">
+          Как в ОКО: этап 1 — по колонкам FormCorrespondence (Yellow/Red); этап 2 — по
+          правилам <code>a_tblsaldo</code> (T/S/G). Исходная и целевая формы — один шаблон.
+        </p>
         <div className="tools-grid">
+          <label>
+            Способ
+            <select
+              value={saldoMode}
+              onChange={(e) => setSaldoMode(e.target.value as SaldoTransferMode)}
+            >
+              <option value="columns">FormCorrespondence (Yellow / Red)</option>
+              <option value="detailed">Правила a_tblsaldo (T / S / G)</option>
+            </select>
+          </label>
           <label>
             Исходная форма
             <select value={saldoSource} onChange={(e) => setSaldoSource(e.target.value)}>
@@ -361,17 +421,38 @@ export function ToolsPage() {
               ))}
             </select>
           </label>
-          <label>
-            Этап
-            <select
-              value={saldoPhase}
-              onChange={(e) => setSaldoPhase(e.target.value as SaldoPhase)}
-            >
-              <option value="previous_period">Предыдущий период (Yellow)</option>
-              <option value="analog_period">Аналог. период прошлого года (Red)</option>
-            </select>
-          </label>
+          {saldoMode === "columns" ? (
+            <label>
+              Этап
+              <select
+                value={saldoPhase}
+                onChange={(e) => setSaldoPhase(e.target.value as SaldoPhase)}
+              >
+                <option value="previous_period">Предыдущий период (Yellow)</option>
+                <option value="analog_period">Аналог. период прошлого года (Red)</option>
+              </select>
+            </label>
+          ) : (
+            <label>
+              Тип (a_tblsaldo)
+              <select
+                value={saldoDetailedType}
+                onChange={(e) => setSaldoDetailedType(e.target.value as "t" | "s" | "g")}
+              >
+                <option value="t">T — текущий период</option>
+                <option value="s">S — сальдо / входящие</option>
+                <option value="g">G — год / аналог</option>
+              </select>
+            </label>
+          )}
         </div>
+        {saldoMode === "detailed" && saldoTarget && saldoRuleCount !== null && (
+          <p className="tools-hint">
+            Правил для{" "}
+            {summaries.find((s) => s.instanceId === saldoTarget)?.templateId}:{" "}
+            <strong>{saldoRuleCount}</strong> (тип {saldoDetailedType.toUpperCase()})
+          </p>
+        )}
         <button type="button" className="btn btn-secondary" onClick={handleSaldo}>
           Перенести сальdo
         </button>

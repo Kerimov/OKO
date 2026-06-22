@@ -7,7 +7,13 @@ import { isKontrForm } from "../constants";
 import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
 import { failedCellsForForm } from "../engine/cellErrors";
 import { exportFormToExcel } from "../engine/exportExcel";
-import { recalcForm } from "../engine/recalcEngine";
+import {
+  countRashRulesForForm,
+  getRashData,
+  validateKontrRash,
+  type RashValidationIssue,
+} from "../engine/rashEngine";
+import { recalcForm, countRecalcRules } from "../engine/recalcEngine";
 import {
   deleteInstance,
   exportInstance,
@@ -44,6 +50,14 @@ export function FormPage() {
   const [recalcing, setRecalcing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
+  const [rashIssues, setRashIssues] = useState<RashValidationIssue[] | null>(null);
+  const [rashRuleCount, setRashRuleCount] = useState<number | null>(null);
+  const [checkingRash, setCheckingRash] = useState(false);
+  const [autoRecalc, setAutoRecalc] = useState(
+    () => localStorage.getItem("oko-auto-recalc") !== "0"
+  );
+  const [recalcRuleCount, setRecalcRuleCount] = useState<number | null>(null);
+  const recalcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
@@ -69,9 +83,37 @@ export function FormPage() {
   }, [instanceId]);
 
   useEffect(() => {
-    if (!kontrMode) return;
+    if (!kontrMode || !schema) return;
     loadKontrAgents().then(setKontrAgents).catch(() => setKontrAgents([]));
-  }, [kontrMode]);
+    getRashData()
+      .then((data) => setRashRuleCount(countRashRulesForForm(schema.id, data.rules)))
+      .catch(() => setRashRuleCount(null));
+  }, [kontrMode, schema]);
+
+  useEffect(() => {
+    if (!schema) return;
+    countRecalcRules(schema.id)
+      .then(setRecalcRuleCount)
+      .catch(() => setRecalcRuleCount(null));
+  }, [schema]);
+
+  const handleRowsChange = useCallback(
+    (next: RowData[]) => {
+      setRows(next);
+      if (!autoRecalc || !schema || !(recalcRuleCount && recalcRuleCount > 0)) return;
+      if (recalcTimer.current) clearTimeout(recalcTimer.current);
+      recalcTimer.current = setTimeout(() => {
+        void recalcForm(schema, next).then(setRows);
+      }, 450);
+    },
+    [autoRecalc, schema, recalcRuleCount]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (recalcTimer.current) clearTimeout(recalcTimer.current);
+    };
+  }, []);
 
   const cellErrors = useMemo(() => {
     if (!schema) return undefined;
@@ -195,6 +237,30 @@ export function FormPage() {
     }
   };
 
+  const handleCheckRash = async () => {
+    if (!schema || !kontrMode) return;
+    setCheckingRash(true);
+    setRashIssues(null);
+    try {
+      const data = await getRashData();
+      const numericColumns = schema.columns
+        .filter((c) => c.type === "number")
+        .map((c) => c.key);
+      const issues = validateKontrRash(schema.id, rows, numericColumns, data);
+      setRashIssues(issues);
+      setStatus(
+        issues.length === 0
+          ? "Расшифровки: замечаний нет"
+          : `Расшифровки: ${issues.filter((i) => i.severity === "error").length} ошибок, ${issues.filter((i) => i.severity === "warning").length} предупреждений`
+      );
+      setTimeout(() => setStatus(""), 5000);
+    } catch {
+      setError("Не удалось проверить расшифровки");
+    } finally {
+      setCheckingRash(false);
+    }
+  };
+
   const handleCheck = async () => {
     if (!schema || !instance) return;
     setChecking(true);
@@ -299,9 +365,28 @@ export function FormPage() {
             className="btn btn-secondary"
             onClick={handleRecalc}
             disabled={recalcing}
+            title={
+              recalcRuleCount != null
+                ? `Правил пересчёта: ${recalcRuleCount}`
+                : undefined
+            }
           >
             {recalcing ? "…" : "Пересчёт"}
           </button>
+          {(recalcRuleCount ?? 0) > 0 && (
+            <label className="auto-recalc-toggle" title="Пересчёт итоговых строк и граф">
+              <input
+                type="checkbox"
+                checked={autoRecalc}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setAutoRecalc(on);
+                  localStorage.setItem("oko-auto-recalc", on ? "1" : "0");
+                }}
+              />
+              Автопересчёт
+            </label>
+          )}
           <button
             type="button"
             className="btn btn-secondary"
@@ -313,6 +398,21 @@ export function FormPage() {
           <button type="button" className="btn btn-secondary" onClick={handleCheck} disabled={checking}>
             {checking ? "Проверка…" : "Проверить форму"}
           </button>
+          {kontrMode && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleCheckRash()}
+              disabled={checkingRash}
+              title={
+                rashRuleCount != null
+                  ? `Правил sp_rash для ${schema.id}: ${rashRuleCount}`
+                  : undefined
+              }
+            >
+              {checkingRash ? "Расшифровка…" : "Проверить расшифровки"}
+            </button>
+          )}
           <button type="button" className="btn btn-secondary" onClick={handleExport}>
             Экспорт JSON
           </button>
@@ -329,6 +429,29 @@ export function FormPage() {
       </div>
       {status && <div className="status-bar">{status}</div>}
       <CheckResultsPanel result={checkResult} loading={checking} />
+
+      {kontrMode && rashRuleCount != null && rashRuleCount > 0 && (
+        <p className="tools-hint" style={{ margin: "0.5rem 0" }}>
+          Форма с расшифровкой контрагентов: правил <code>sp_rash</code> —{" "}
+          <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн / 50 млн руб. (
+          <Link to="/admin/rash">настройки</Link>).
+        </p>
+      )}
+
+      {rashIssues && rashIssues.length > 0 && (
+        <details className="missing-forms" open style={{ marginBottom: "1rem" }}>
+          <summary>
+            Расшифровки ({rashIssues.filter((i) => i.severity === "error").length} ошибок)
+          </summary>
+          <ul>
+            {rashIssues.map((issue, idx) => (
+              <li key={idx} className={issue.severity === "error" ? "rash-error" : "rash-warn"}>
+                Строка {issue.rowIndex + 1} ({issue.rowLabel}), гр. {issue.column}: {issue.message}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <section className="form-meta-panel">
         <div className="meta-grid">
@@ -379,7 +502,7 @@ export function FormPage() {
       <FormTable
         columns={schema.columns}
         rows={rows}
-        onChange={setRows}
+        onChange={handleRowsChange}
         allowAddRows={schema.allowAddRows || kontrMode}
         kontrMode={kontrMode}
         kontrAgents={kontrAgents}

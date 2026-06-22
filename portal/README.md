@@ -82,6 +82,8 @@ python scripts/export_mdb_data.py             # правила, сальdo, Exce
 - Перенос сальdo, агрегация
 - Экспорт комплекта JSON / Excel
 
+**Конструктор форм** (`/admin/forms`), **редактор увязок** (`/admin/checks`), **сальдо** (`/admin/saldo`) и **Excel-маппинг** (`/admin/excel`) — требуют API-сервер.
+
 ## Структура
 
 - `portal/src/` — React-приложение

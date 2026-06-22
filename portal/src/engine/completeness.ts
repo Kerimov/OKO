@@ -12,12 +12,16 @@ export interface CompletenessItem {
 
 export async function getCompleteness(
   summaries: InstanceSummary[],
-  period?: { start: string; end: string }
+  filter?: { zid?: number; eid?: number; start?: string; end?: string }
 ): Promise<{ total: number; filled: number; items: CompletenessItem[] }> {
   const catalog = await loadCatalog();
   const filtered = summaries.filter((s) => {
-    if (period?.start && s.periodStart !== period.start) return false;
-    if (period?.end && s.periodEnd !== period.end) return false;
+    if (filter?.zid != null && s.zid !== filter.zid) return false;
+    if (filter?.eid != null && s.eid !== filter.eid) return false;
+    if (filter?.zid == null && filter?.eid == null) {
+      if (filter?.start && s.periodStart !== filter.start) return false;
+      if (filter?.end && s.periodEnd !== filter.end) return false;
+    }
     return true;
   });
 

@@ -6,6 +6,8 @@ import type {
   KontrAgent,
 } from "./types";
 import { buildInitialRows } from "./utils";
+import { apiFetch } from "./apiClient";
+import { initAuth } from "./auth";
 
 const INDEX_KEY = "oko-instances-index";
 const INSTANCE_PREFIX = "oko-instance-";
@@ -20,17 +22,17 @@ export function isBackendMode(): boolean {
   return useBackend;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err || res.statusText);
+export async function initStorage(): Promise<boolean> {
+  try {
+    await apiFetch<{ ok: boolean }>("/api/health");
+    useBackend = true;
+    await initAuth();
+    await migrateLocalToBackend();
+    return true;
+  } catch {
+    useBackend = false;
+    return false;
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }
 
 function readIndexLocal(): InstanceSummary[] {
@@ -56,6 +58,8 @@ function summaryFromInstance(inst: OkoFormInstance): InstanceSummary {
     organization: inst.meta.organization,
     periodStart: inst.meta.periodStart,
     periodEnd: inst.meta.periodEnd,
+    zid: inst.zid ?? null,
+    eid: inst.eid ?? null,
     createdAt: inst.createdAt,
     updatedAt: inst.updatedAt,
   };
@@ -110,18 +114,6 @@ async function migrateLocalToBackend(): Promise<void> {
   localStorage.setItem(MIGRATED_KEY, "1");
 }
 
-export async function initStorage(): Promise<boolean> {
-  try {
-    await apiFetch<{ ok: boolean }>("/api/health");
-    useBackend = true;
-    await migrateLocalToBackend();
-    return true;
-  } catch {
-    useBackend = false;
-    return false;
-  }
-}
-
 export async function loadGlobalMeta(): Promise<GlobalMeta> {
   const fallback: GlobalMeta = {
     organization: "",
@@ -160,13 +152,32 @@ export async function saveGlobalMeta(meta: GlobalMeta): Promise<void> {
 }
 
 export async function createInstance(schema: FormSchema): Promise<OkoFormInstance> {
+  const { loadWorkContext, listOrganizations, listPeriods } = await import("./packagesApi");
   const global = await loadGlobalMeta();
+  const work = await loadWorkContext();
   const now = new Date().toISOString();
+
+  let organization = global.organization;
+  let periodStart = global.periodStart;
+  let periodEnd = global.periodEnd;
+
+  if (work.zid != null && work.eid != null) {
+    const orgs = await listOrganizations();
+    const org = orgs.find((o) => o.zid === work.zid);
+    if (org) organization = org.name;
+    const periods = await listPeriods(work.zid);
+    const period = periods.find((p) => p.eid === work.eid);
+    if (period) {
+      periodStart = period.periodStart ?? periodStart;
+      periodEnd = period.periodEnd ?? periodEnd;
+    }
+  }
+
   const meta: FormMeta = {
-    organization: global.organization,
+    organization,
     enterpriseCode: global.enterpriseCode || schema.meta.enterpriseCode,
-    periodStart: global.periodStart,
-    periodEnd: global.periodEnd,
+    periodStart,
+    periodEnd,
     unit: global.unit || schema.meta.unit,
   };
   const signatures: Record<string, string> = {};
@@ -177,6 +188,8 @@ export async function createInstance(schema: FormSchema): Promise<OkoFormInstanc
     templateId: schema.id,
     templateTitle: schema.title,
     displayName: defaultDisplayName(schema.id, schema.title, meta),
+    zid: work.zid,
+    eid: work.eid,
     meta,
     rows: buildInitialRows(schema),
     signatures,
@@ -246,13 +259,23 @@ export async function deleteInstance(instanceId: string): Promise<void> {
   await apiFetch(`/api/instances/${instanceId}`, { method: "DELETE" });
 }
 
-export async function listInstances(): Promise<InstanceSummary[]> {
+export async function listInstances(filter?: {
+  zid?: number;
+  eid?: number;
+}): Promise<InstanceSummary[]> {
   if (!useBackend) {
-    return readIndexLocal().sort(
+    let list = readIndexLocal();
+    if (filter?.zid != null) list = list.filter((s) => s.zid === filter.zid);
+    if (filter?.eid != null) list = list.filter((s) => s.eid === filter.eid);
+    return list.sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   }
-  return apiFetch<InstanceSummary[]>("/api/instances");
+  const params = new URLSearchParams();
+  if (filter?.zid != null) params.set("zid", String(filter.zid));
+  if (filter?.eid != null) params.set("eid", String(filter.eid));
+  const q = params.toString();
+  return apiFetch<InstanceSummary[]>(`/api/instances${q ? `?${q}` : ""}`);
 }
 
 export async function loadAllInstances(): Promise<OkoFormInstance[]> {

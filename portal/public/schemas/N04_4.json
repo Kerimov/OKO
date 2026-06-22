@@ -32,7 +32,9 @@
       "key": "B",
       "label": "0-6 мес.",
       "type": "number",
-      "width": 90
+      "width": 90,
+      "fTotal": true,
+      "readonly": true
     },
     {
       "key": "C",

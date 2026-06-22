@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pyodbc
@@ -168,6 +169,124 @@ def export_row_formulas(cur) -> dict:
     }
 
 
+def export_recalc_rules(cur) -> dict:
+    cur.execute(
+        "SELECT TName, RowNo, kod, znak, Columns FROM a_stblROWs ORDER BY TName, Sort"
+    )
+    by_form: dict[str, list] = {}
+    for row in cur.fetchall():
+        d = row_to_dict(cur, row)
+        form = d["TName"]
+        row_no = int(d["RowNo"]) if d.get("RowNo") is not None else None
+        if row_no is None:
+            continue
+        kod = str(d.get("kod") or "").strip()
+        cols = str(d.get("Columns") or "").strip()
+        rules = by_form.setdefault(form, [])
+        if kod and re.search(r"[+-]", kod):
+            rules.append({"kind": "rows", "rowNo": row_no, "formula": kod, "sign": d.get("znak")})
+        elif kod and re.match(r"^\d+$", kod):
+            rules.append({"kind": "copyRow", "rowNo": row_no, "sourceRow": int(kod)})
+        if cols:
+            rules.append({"kind": "columnSum", "rowNo": row_no, "columns": cols})
+
+    cur.execute(
+        "SELECT TName, Pos, FName, Ftype, FTotal, FCaption FROM a_stblFIELDs ORDER BY TName, Pos"
+    )
+    skip = {"ZID", "EID", "Sort", "Number", "Name"}
+    fields_by_form: dict[str, list] = {}
+    for row in cur.fetchall():
+        d = row_to_dict(cur, row)
+        if d["FName"] in skip:
+            continue
+        fields_by_form.setdefault(d["TName"], []).append(d)
+
+    for form, flist in fields_by_form.items():
+        for i, f in enumerate(flist):
+            if str(f.get("FTotal") or "") not in ("1", "True", "-1"):
+                continue
+            cap = str(f.get("FCaption") or "").lower()
+            sources = []
+            for prev in flist[:i]:
+                if str(prev.get("Ftype") or "") != "4":
+                    continue
+                pc = str(prev.get("FCaption") or "").lower()
+                if "дебет" in cap and "дебет" in pc:
+                    sources.append(prev["FName"])
+                elif "кредит" in cap and "кредит" in pc:
+                    sources.append(prev["FName"])
+            if sources:
+                by_form.setdefault(form, []).append(
+                    {"kind": "horizontalSum", "column": f["FName"], "sourceColumns": sources}
+                )
+
+    total = sum(len(v) for v in by_form.values())
+    return {
+        "version": "2.0",
+        "source": str(MDB.name),
+        "formsCount": len(by_form),
+        "total": total,
+        "byForm": by_form,
+    }
+
+
+def export_rash(cur) -> dict:
+    cur.execute(
+        "SELECT kod, rName, rNote, rItogo, ref_rows, "
+        "ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title, "
+        "ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title "
+        "FROM sp_rash ORDER BY kod"
+    )
+    rules = []
+    for row in cur.fetchall():
+        d = row_to_dict(cur, row)
+        rules.append(
+            {
+                "kod": int(d["kod"]) if d["kod"] is not None else 0,
+                "name": d.get("rName") or "",
+                "note": d.get("rNote"),
+                "refRows": d.get("ref_rows"),
+                "totalFormula": d.get("rItogo"),
+                "refA1Name": d.get("ref_a1_name"),
+                "refA1Title": d.get("ref_a1_title"),
+                "refA2Name": d.get("ref_a2_name"),
+                "refA2Title": d.get("ref_a2_title"),
+                "refA3Name": d.get("ref_a3_name"),
+                "refA3Title": d.get("ref_a3_title"),
+                "refA4Name": d.get("ref_a4_name"),
+                "refA4Title": d.get("ref_a4_title"),
+            }
+        )
+
+    cur.execute("SELECT kod, Sort, sum_title, fld_type FROM sp_rash_addsum ORDER BY kod, Sort")
+    addsum = []
+    for row in cur.fetchall():
+        d = row_to_dict(cur, row)
+        addsum.append(
+            {
+                "kod": int(d["kod"]) if d["kod"] is not None else 0,
+                "sort": int(d["Sort"]) if d.get("Sort") is not None else 0,
+                "sumTitle": d.get("sum_title") or "",
+                "fldType": d.get("fld_type") or "Сумма",
+            }
+        )
+
+    return {
+        "version": "1.0",
+        "source": str(MDB.name),
+        "total": len(rules),
+        "rules": rules,
+        "addsum": addsum,
+        "thresholds": {
+            "level1": 1,
+            "level2": 5000,
+            "level3": 50000,
+            "unit": "тыс.руб.",
+            "labels": ["1 тыс. руб.", "5 млн руб.", "50 млн руб."],
+        },
+    }
+
+
 def export_kontr(cur) -> dict:
     cur.execute("SELECT id, RowName, OrgForm, inn, kpp FROM sp_kontr ORDER BY id")
     items = []
@@ -232,7 +351,9 @@ def main():
         ("saldo-rules.json", export_saldo),
         ("form-correspondence.json", export_form_correspondence),
         ("row-formulas.json", export_row_formulas),
+        ("recalc-rules.json", export_recalc_rules),
         ("kontr.json", export_kontr),
+        ("rash-rules.json", export_rash),
     ]
 
     for filename, fn in exports:

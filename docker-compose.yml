@@ -1,0 +1,19 @@
+# OKO API for VPS / Railway / local production
+# Portal: deploy separately (Vercel) with VITE_API_URL pointing to this API
+services:
+  api:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - oko-data:/app/data
+    environment:
+      PORT: "3001"
+      OKO_DB_PATH: /app/data/oko.db
+      # Set tokens for production (see .env.example)
+      OKO_ADMIN_TOKEN: ${OKO_ADMIN_TOKEN:-}
+      OKO_USER_TOKEN: ${OKO_USER_TOKEN:-}
+    restart: unless-stopped
+
+volumes:
+  oko-data:

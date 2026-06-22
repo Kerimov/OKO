@@ -1,0 +1,1590 @@
+{
+  "version": "2.0",
+  "source": "z261.mdb",
+  "formsCount": 77,
+  "total": 273,
+  "byForm": {
+    "N01_01": [
+      {
+        "kind": "horizontalSum",
+        "column": "Z",
+        "sourceColumns": [
+          "C",
+          "F",
+          "I",
+          "L",
+          "O",
+          "R",
+          "U",
+          "X"
+        ]
+      },
+      {
+        "kind": "horizontalSum",
+        "column": "Б",
+        "sourceColumns": [
+          "D",
+          "G",
+          "J",
+          "M",
+          "P",
+          "S",
+          "V",
+          "Y"
+        ]
+      }
+    ],
+    "N01_02": [
+      {
+        "kind": "horizontalSum",
+        "column": "Z",
+        "sourceColumns": [
+          "C",
+          "F",
+          "I",
+          "L",
+          "O",
+          "R",
+          "U",
+          "X"
+        ]
+      },
+      {
+        "kind": "horizontalSum",
+        "column": "Б",
+        "sourceColumns": [
+          "D",
+          "G",
+          "J",
+          "M",
+          "P",
+          "S",
+          "V",
+          "Y"
+        ]
+      }
+    ],
+    "N01_1": [
+      {
+        "kind": "rows",
+        "rowNo": 1110,
+        "formula": "1111+1119",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1170,
+        "formula": "1171+1172+1173+1174",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1190,
+        "sourceRow": 1191
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1191,
+        "formula": "1192+1193+1199",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1200,
+        "formula": "1210+1215+1220+1230+1240+1250+1260",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1210,
+        "formula": "1211+1212+1213+1214",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1230,
+        "formula": "1232+1233+1239",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1241,
+        "sourceRow": 1240
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1250,
+        "formula": "1251+1252+1259",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1400,
+        "formula": "1410+1420+1430+1450+1440",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1410,
+        "formula": "1411+1412",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1450,
+        "formula": "1451+1455",
+        "sign": ">="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1500,
+        "formula": "1510+1520+1530+1540+1550+1560",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1510,
+        "formula": "1511+1512+1513",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1520,
+        "formula": "1521+1522+1523+1524+1525+1526+1529",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1550,
+        "sourceRow": 1555
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1600,
+        "sourceRow": 1700
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1700,
+        "formula": "1300+1400+1500",
+        "sign": "="
+      }
+    ],
+    "N01_11": [
+      {
+        "kind": "copyRow",
+        "rowNo": 961,
+        "sourceRow": 960
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 971,
+        "sourceRow": 970
+      }
+    ],
+    "N01_111": [
+      {
+        "kind": "copyRow",
+        "rowNo": 911,
+        "sourceRow": 910
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 961,
+        "sourceRow": 960
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 971,
+        "sourceRow": 970
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1170,
+        "formula": "1171+1172+1173+1174",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1190,
+        "sourceRow": 1191
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1191,
+        "formula": "1192+1193+1199",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1230,
+        "formula": "1232+1233+1239",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1241,
+        "sourceRow": 1240
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1250,
+        "formula": "1251+1252+1259",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1450,
+        "formula": "1451+1455",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1700,
+        "sourceRow": 1600
+      }
+    ],
+    "N01_12": [
+      {
+        "kind": "rows",
+        "rowNo": 1170,
+        "formula": "1171+1172+1173+1174",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1190,
+        "sourceRow": 1191
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1191,
+        "formula": "1192+1193+1199",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1230,
+        "formula": "1232+1233+1239",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1241,
+        "sourceRow": 1240
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1250,
+        "formula": "1251+1252+1259",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1450,
+        "formula": "1451+1455",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1710,
+        "sourceRow": 1150
+      }
+    ],
+    "N01_13": [
+      {
+        "kind": "rows",
+        "rowNo": 1170,
+        "formula": "1171+1172+1173+1174",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1190,
+        "sourceRow": 1191
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1191,
+        "formula": "1192+1193+1199",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1230,
+        "formula": "1232+1233+1239",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1241,
+        "sourceRow": 1240
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1250,
+        "formula": "1251+1252+1259",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 1450,
+        "formula": "1451+1455",
+        "sign": ">="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1710,
+        "sourceRow": 1150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 1711,
+        "sourceRow": 1710
+      }
+    ],
+    "N01_2": [
+      {
+        "kind": "rows",
+        "rowNo": 2400,
+        "formula": "2300-2410-2460+2420-2462",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 2410,
+        "formula": "2411+2412+2413",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 2500,
+        "formula": "2400+2510+2520-2530",
+        "sign": "="
+      }
+    ],
+    "N01_22": [
+      {
+        "kind": "copyRow",
+        "rowNo": 30,
+        "sourceRow": 25
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 34,
+        "sourceRow": 22
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 35,
+        "sourceRow": 23
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 36,
+        "sourceRow": 25
+      }
+    ],
+    "N01_23": [
+      {
+        "kind": "copyRow",
+        "rowNo": 251,
+        "sourceRow": 80
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 252,
+        "sourceRow": 230
+      }
+    ],
+    "N01_30": [],
+    "N01_31": [],
+    "N01_34": [],
+    "N01_4": [
+      {
+        "kind": "rows",
+        "rowNo": 4119,
+        "formula": "4131+4132+4133+4134+4135+4136+4159",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 4219,
+        "formula": "4231+4232+4239",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 4222,
+        "formula": "4241+4242",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 4229,
+        "formula": "4244+4245+4246+4247+4249",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 4329,
+        "formula": "4341+4342+4343+4344+4349",
+        "sign": "="
+      }
+    ],
+    "N01_511": [
+      {
+        "kind": "copyRow",
+        "rowNo": 340,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 360,
+        "sourceRow": 300
+      }
+    ],
+    "N01_513": [
+      {
+        "kind": "rows",
+        "rowNo": 10,
+        "formula": "20-30-40",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 71,
+        "formula": "72-73-74",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 290,
+        "formula": "300-310-320",
+        "sign": "="
+      }
+    ],
+    "N01_54": [],
+    "N02_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 240,
+        "sourceRow": 230
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 250,
+        "sourceRow": 230
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 260,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 270,
+        "sourceRow": 120
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 280,
+        "sourceRow": 210
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 300,
+        "sourceRow": 230
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 301,
+        "sourceRow": 230
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 302,
+        "sourceRow": 301
+      }
+    ],
+    "N02_2": [
+      {
+        "kind": "copyRow",
+        "rowNo": 210,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 220,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 230,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 240,
+        "sourceRow": 90
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 250,
+        "sourceRow": 180
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 270,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 280,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 281,
+        "sourceRow": 280
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 410,
+        "sourceRow": 400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 411,
+        "sourceRow": 410
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 430,
+        "sourceRow": 400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 440,
+        "sourceRow": 340
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 450,
+        "sourceRow": 400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 460,
+        "sourceRow": 400
+      }
+    ],
+    "N02_3": [],
+    "N02_4": [
+      {
+        "kind": "copyRow",
+        "rowNo": 20,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 50,
+        "sourceRow": 180
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 130,
+        "sourceRow": 260
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 131,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 261,
+        "sourceRow": 260
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 401,
+        "sourceRow": 400
+      }
+    ],
+    "N02_6": [
+      {
+        "kind": "copyRow",
+        "rowNo": 31,
+        "sourceRow": 30
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 41,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 51,
+        "sourceRow": 50
+      },
+      {
+        "kind": "rows",
+        "rowNo": 100,
+        "formula": "30+40+50-60-70+80+85+99",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 101,
+        "sourceRow": 100
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 131,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 151,
+        "sourceRow": 150
+      },
+      {
+        "kind": "rows",
+        "rowNo": 200,
+        "formula": "130+140+150-160-170+180+199",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 201,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 231,
+        "sourceRow": 230
+      },
+      {
+        "kind": "rows",
+        "rowNo": 300,
+        "formula": "230+240-250-260-270+280+299",
+        "sign": "-"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 301,
+        "sourceRow": 300
+      }
+    ],
+    "N03_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 60,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 117,
+        "sourceRow": 113
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 118,
+        "sourceRow": 113
+      },
+      {
+        "kind": "rows",
+        "rowNo": 119,
+        "formula": "40+50",
+        "sign": "<="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 120,
+        "sourceRow": 80
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 130,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 140
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 170,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 180,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 190,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 200,
+        "sourceRow": 80
+      }
+    ],
+    "N03_2": [],
+    "N04_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 150,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 60
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 165,
+        "sourceRow": 95
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 170,
+        "sourceRow": 120
+      }
+    ],
+    "N04_2": [],
+    "N04_3": [
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 170,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 180,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 190,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 200,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 210,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 211,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 212,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 213,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 214,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 215,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 217,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 218,
+        "sourceRow": 150
+      }
+    ],
+    "N04_4": [],
+    "N04_5": [
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 170,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 180,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 190,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 200,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 210,
+        "sourceRow": 150
+      }
+    ],
+    "N04_6": [],
+    "N04_7": [
+      {
+        "kind": "copyRow",
+        "rowNo": 64,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 66,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 74,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 76,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 84,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 86,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 94,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 96,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 150,
+        "sourceRow": 140
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 140
+      }
+    ],
+    "N05_1": [
+      {
+        "kind": "columnSum",
+        "rowNo": 90,
+        "columns": "BCDEFGHIJKLMNOPQ"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 110,
+        "columns": "BQ"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 112,
+        "columns": "BQ"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 180,
+        "columns": "BCDEFGHIJKLMNOPQ"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 190,
+        "sourceRow": 170
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 210,
+        "columns": "BQ"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 212,
+        "columns": "BQ"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 370,
+        "columns": "BCDEFGHIJKLMNOPQ"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 380,
+        "sourceRow": 270
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 385,
+        "sourceRow": 370
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 391,
+        "sourceRow": 390
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 400,
+        "columns": "BCDEFGHIJKLMNOPQ"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 410,
+        "sourceRow": 80
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 420,
+        "sourceRow": 370
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 425,
+        "sourceRow": 170
+      }
+    ],
+    "N05_11": [],
+    "N05_2": [
+      {
+        "kind": "columnSum",
+        "rowNo": 50,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 55,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 100,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 150,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 180,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 210,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 215,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 220,
+        "columns": "BCDEJFGHIK"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 226,
+        "sourceRow": 220
+      }
+    ],
+    "N05_3": [],
+    "N05_4": [
+      {
+        "kind": "copyRow",
+        "rowNo": 51,
+        "sourceRow": 50
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 61,
+        "sourceRow": 60
+      }
+    ],
+    "N06_11": [],
+    "N06_111": [],
+    "N06_112": [],
+    "N06_113": [],
+    "N06_12": [
+      {
+        "kind": "rows",
+        "rowNo": 99,
+        "formula": "50+55+60+61",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 199,
+        "formula": "175+197",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 299,
+        "formula": "275+297",
+        "sign": "="
+      },
+      {
+        "kind": "rows",
+        "rowNo": 300,
+        "formula": "99+199+299",
+        "sign": "="
+      }
+    ],
+    "N06_13": [
+      {
+        "kind": "rows",
+        "rowNo": 300,
+        "formula": "205+299",
+        "sign": ""
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 300,
+        "columns": "="
+      }
+    ],
+    "N06_41": [],
+    "N06_7": [],
+    "N09_1": [],
+    "N09_2": [],
+    "N09_3": [],
+    "N09_31": [],
+    "N09_32": [],
+    "N09_4": [
+      {
+        "kind": "copyRow",
+        "rowNo": 65,
+        "sourceRow": 60
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 70,
+        "sourceRow": 60
+      }
+    ],
+    "N09_5": [],
+    "N09_6": [
+      {
+        "kind": "copyRow",
+        "rowNo": 31,
+        "sourceRow": 30
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 101,
+        "sourceRow": 100
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 102,
+        "sourceRow": 100
+      },
+      {
+        "kind": "rows",
+        "rowNo": 104,
+        "formula": "100-101",
+        "sign": "="
+      }
+    ],
+    "N10_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 150,
+        "sourceRow": 140
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 140
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 170,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 265,
+        "sourceRow": 10
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 266,
+        "sourceRow": 30
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 267,
+        "sourceRow": 140
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 268,
+        "sourceRow": 30
+      }
+    ],
+    "N10_2": [
+      {
+        "kind": "copyRow",
+        "rowNo": 120,
+        "sourceRow": 100
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 220,
+        "sourceRow": 200
+      }
+    ],
+    "N10_3": [],
+    "N10_4": [],
+    "N11_3": [],
+    "N12_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 100,
+        "sourceRow": 90
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 125,
+        "sourceRow": 100
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 130,
+        "sourceRow": 90
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 140,
+        "sourceRow": 90
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 150,
+        "sourceRow": 70
+      }
+    ],
+    "N12_2": [
+      {
+        "kind": "copyRow",
+        "rowNo": 900,
+        "sourceRow": 60
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 910,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 911,
+        "sourceRow": 71
+      }
+    ],
+    "N12_3": [
+      {
+        "kind": "copyRow",
+        "rowNo": 25,
+        "sourceRow": 20
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 33,
+        "sourceRow": 30
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 75,
+        "sourceRow": 70
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 300,
+        "sourceRow": 220
+      }
+    ],
+    "N12_4": [
+      {
+        "kind": "copyRow",
+        "rowNo": 400,
+        "sourceRow": 390
+      }
+    ],
+    "N12_5": [],
+    "N13_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 381,
+        "sourceRow": 380
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 425,
+        "sourceRow": 420
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 435,
+        "sourceRow": 430
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 446,
+        "sourceRow": 445
+      }
+    ],
+    "N13_2": [
+      {
+        "kind": "copyRow",
+        "rowNo": 26,
+        "sourceRow": 5
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 28,
+        "sourceRow": 6
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 30,
+        "sourceRow": 7
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 32,
+        "sourceRow": 7
+      }
+    ],
+    "N14_1": [
+      {
+        "kind": "copyRow",
+        "rowNo": 11605,
+        "sourceRow": 11600
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 19447,
+        "sourceRow": 19446
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29410,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29415,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29615,
+        "sourceRow": 29610
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29616,
+        "sourceRow": 29610
+      }
+    ],
+    "N14_11": [
+      {
+        "kind": "copyRow",
+        "rowNo": 11605,
+        "sourceRow": 11600
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 19447,
+        "sourceRow": 19446
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29410,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29415,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29615,
+        "sourceRow": 29610
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29616,
+        "sourceRow": 29610
+      }
+    ],
+    "N14_12": [
+      {
+        "kind": "copyRow",
+        "rowNo": 11605,
+        "sourceRow": 11600
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 19447,
+        "sourceRow": 19446
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29410,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29415,
+        "sourceRow": 29400
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29615,
+        "sourceRow": 29610
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 29616,
+        "sourceRow": 29610
+      }
+    ],
+    "N15_1": [
+      {
+        "kind": "rows",
+        "rowNo": 16,
+        "formula": "1+2+3+4+5+6+7+8+9+10+11+12+13",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 16,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 19,
+        "formula": "17+18",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 19,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 20,
+        "formula": "16+19",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 20,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 26,
+        "formula": "21+22+23+24+25",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 26,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 29,
+        "formula": "27+28",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 29,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 30,
+        "formula": "26+29",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 30,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "rows",
+        "rowNo": 31,
+        "formula": "20+30",
+        "sign": "<="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 32,
+        "sourceRow": 31
+      },
+      {
+        "kind": "rows",
+        "rowNo": 36,
+        "formula": "33+34+35",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 36,
+        "columns": "BCDEFHIJK"
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 37,
+        "sourceRow": 36
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 39,
+        "sourceRow": 1
+      },
+      {
+        "kind": "rows",
+        "rowNo": 69,
+        "formula": "60+63+65+66+67",
+        "sign": "="
+      },
+      {
+        "kind": "columnSum",
+        "rowNo": 69,
+        "columns": "BCDEFHIJK"
+      }
+    ],
+    "N15_11": [],
+    "N16_2": [
+      {
+        "kind": "copyRow",
+        "rowNo": 155,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 205,
+        "sourceRow": 200
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 232,
+        "sourceRow": 230
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 233,
+        "sourceRow": 232
+      }
+    ],
+    "N16_3": [
+      {
+        "kind": "rows",
+        "rowNo": 10,
+        "formula": "20+40+50",
+        "sign": "="
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 45,
+        "sourceRow": 40
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 55,
+        "sourceRow": 50
+      }
+    ],
+    "N16_4": [
+      {
+        "kind": "copyRow",
+        "rowNo": 140,
+        "sourceRow": 130
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 160,
+        "sourceRow": 150
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 220,
+        "sourceRow": 170
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 230,
+        "sourceRow": 170
+      },
+      {
+        "kind": "copyRow",
+        "rowNo": 235,
+        "sourceRow": 230
+      }
+    ],
+    "N19_1": [],
+    "ND2": [],
+    "ND3": [],
+    "ND4": [],
+    "ND7": []
+  }
+}
