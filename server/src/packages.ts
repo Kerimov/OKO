@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
-import { dateOrNull } from "./dbValues.js";
+import { dateOrNull, dateToString } from "./dbValues.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
 import { saveInstanceCells } from "./instances.js";
 import type { OkoFormInstance } from "./types.js";
@@ -157,8 +157,8 @@ function rowToPeriod(row: {
     eid: row.eid,
     zid: row.zid,
     name: row.name,
-    periodStart: row.period_start,
-    periodEnd: row.period_end,
+    periodStart: dateOrNull(row.period_start),
+    periodEnd: dateOrNull(row.period_end),
     quarter: row.quarter,
     year: row.year,
   };
@@ -428,8 +428,8 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
       organizationName: p.org_name,
       organizationCode: p.org_code,
       periodName: p.name,
-      periodStart: p.period_start,
-      periodEnd: p.period_end,
+      periodStart: dateOrNull(p.period_start),
+      periodEnd: dateOrNull(p.period_end),
       total: totalForms,
       filled: completeness.filled,
       draft: completeness.draft,
@@ -502,8 +502,8 @@ export async function createReportPackage(
         meta: {
           organization: org.name,
           enterpriseCode,
-          periodStart: period.period_start ?? "",
-          periodEnd: period.period_end ?? "",
+          periodStart: dateToString(period.period_start),
+          periodEnd: dateToString(period.period_end),
           unit: schema.meta.unit || "тыс.руб.",
         },
         rows: buildInitialRows(schema),

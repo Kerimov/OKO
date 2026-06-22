@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { OkoDb } from "./oko-db.js";
+import { dateToString } from "./dbValues.js";
 import { randomUUID } from "node:crypto";
 import { exportCatalog } from "./forms.js";
 import { loadInstance, upsertInstance } from "./instances.js";
@@ -421,8 +422,8 @@ export async function runPackageAggregation(
       meta: {
         organization: parent.name,
         enterpriseCode,
-        periodStart: period.period_start ?? "",
-        periodEnd: period.period_end ?? "",
+        periodStart: dateToString(period.period_start),
+        periodEnd: dateToString(period.period_end),
         unit: sources[0].meta.unit ?? "тыс.руб.",
       },
       createdAt: existing?.createdAt ?? now,
