@@ -1,5 +1,5 @@
 import type { OkoDb } from "./oko-db.js";
-import { dateOrNull } from "./dbValues.js";
+import { dateOrNull, dateToString } from "./dbValues.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -264,8 +264,8 @@ export async function loadInstanceFromDb(
     meta: {
       organization: header.organization ?? "",
       enterpriseCode: header.enterprise_code ?? "1@1",
-      periodStart: header.period_start ?? "",
-      periodEnd: header.period_end ?? "",
+      periodStart: dateToString(header.period_start),
+      periodEnd: dateToString(header.period_end),
       unit: header.unit ?? "тыс.руб.",
     },
     rows: rowsFromCells(cells),
@@ -330,8 +330,8 @@ export async function listInstanceSummaries(
       templateTitle: r.template_title ?? r.template_id,
       displayName: r.display_name,
       organization: r.organization ?? "",
-      periodStart: r.period_start ?? "",
-      periodEnd: r.period_end ?? "",
+      periodStart: dateToString(r.period_start),
+      periodEnd: dateToString(r.period_end),
       zid: r.zid,
       eid: r.eid,
       status: normalizeInstanceStatus(r.status),
@@ -364,8 +364,8 @@ export async function listInstanceSummaries(
     templateTitle: r.template_title,
     displayName: r.display_name,
     organization: r.organization,
-    periodStart: r.period_start,
-    periodEnd: r.period_end,
+    periodStart: dateToString(r.period_start),
+    periodEnd: dateToString(r.period_end),
     zid: null,
     eid: null,
     status: "draft" as const,
