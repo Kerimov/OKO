@@ -149,20 +149,32 @@ export function UsersAdminPage() {
           {role === "org" && (
             <label>
               Организация
-              <select
-                value={zid}
-                onChange={(e) => setZid(Number(e.target.value))}
-                required
-              >
-                {orgs.map((o) => (
-                  <option key={o.zid} value={o.zid}>
-                    {o.name} (zid={o.zid})
-                  </option>
-                ))}
-              </select>
+              {orgs.length === 0 ? (
+                <p className="tools-hint">
+                  В справочнике нет организаций. Создайте запись на странице{" "}
+                  <Link to="/package">Комплект</Link> (раздел «Добавить организацию») — не
+                  путать с полем «Организация» в <Link to="/settings">Настройках</Link>.
+                </p>
+              ) : (
+                <select
+                  value={zid}
+                  onChange={(e) => setZid(Number(e.target.value))}
+                  required
+                >
+                  {orgs.map((o) => (
+                    <option key={o.zid} value={o.zid}>
+                      {o.name} (zid={o.zid})
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
           )}
-          <button type="submit" className="btn btn-primary">
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={role === "org" && orgs.length === 0}
+          >
             Создать
           </button>
         </form>
