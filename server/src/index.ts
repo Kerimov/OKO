@@ -93,6 +93,15 @@ import {
   setWorkContext,
 } from "./packages.js";
 import {
+  deleteAggEntry,
+  exportAggPayload,
+  getAggStats,
+  listAggEntries,
+  reimportAggFromJson,
+  runPackageAggregation,
+  upsertAggEntry,
+} from "./aggregation.js";
+import {
   deleteRashRule,
   exportRashPayload,
   getRashRule,
