@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
+import { dateOrNull } from "./dbValues.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
 import { saveInstanceCells } from "./instances.js";
 import type { OkoFormInstance } from "./types.js";
@@ -118,7 +119,7 @@ export async function seedOrganizationsFromSettings(db: OkoDb): Promise<number> 
       `INSERT INTO periods (eid, zid, name, period_start, period_end)
      VALUES (1, 1, ?, ?, ?)`
     )
-    .run(periodName, periodStart || null, periodEnd || null);
+    .run(periodName, dateOrNull(periodStart), dateOrNull(periodEnd));
 
   const upsert = db.prepare(
     "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
@@ -256,8 +257,8 @@ export async function createPeriod(
       eid,
       input.zid,
       input.name.trim(),
-      input.periodStart || null,
-      input.periodEnd || null,
+      dateOrNull(input.periodStart),
+      dateOrNull(input.periodEnd),
       input.quarter ?? null,
       input.year ?? null
     );
@@ -265,8 +266,8 @@ export async function createPeriod(
     eid,
     zid: input.zid,
     name: input.name.trim(),
-    periodStart: input.periodStart || null,
-    periodEnd: input.periodEnd || null,
+    periodStart: dateOrNull(input.periodStart),
+    periodEnd: dateOrNull(input.periodEnd),
     quarter: input.quarter ?? null,
     year: input.year ?? null,
   };

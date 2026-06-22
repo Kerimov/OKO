@@ -1,4 +1,5 @@
 import type { OkoDb } from "./oko-db.js";
+import { dateOrNull } from "./dbValues.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -124,8 +125,8 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       inst.templateTitle,
       inst.displayName,
       inst.meta.organization ?? "",
-      inst.meta.periodStart ?? "",
-      inst.meta.periodEnd ?? "",
+      dateOrNull(inst.meta.periodStart),
+      dateOrNull(inst.meta.periodEnd),
       inst.meta.unit ?? "тыс.руб.",
       inst.meta.enterpriseCode ?? "1@1",
       signaturesJson,
@@ -425,8 +426,8 @@ export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<
       inst.templateTitle,
       inst.displayName,
       inst.meta.organization ?? "",
-      inst.meta.periodStart ?? "",
-      inst.meta.periodEnd ?? "",
+      dateOrNull(inst.meta.periodStart),
+      dateOrNull(inst.meta.periodEnd),
       JSON.stringify(inst),
       inst.createdAt,
       inst.updatedAt
