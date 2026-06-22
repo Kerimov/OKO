@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import type { DatabaseSync } from "node:sqlite";
+import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
 export interface RashRuleRow {
@@ -69,8 +69,9 @@ const DEFAULT_THRESHOLDS: RashThresholdsDto = {
   labels: ["1 тыс. руб.", "5 млн руб.", "50 млн руб."],
 };
 
-export function migrateRashTables(db: DatabaseSync): void {
-  db.exec(`
+export async function migrateRashTables(db: OkoDb): Promise<void> {
+  if (db.dialect === "sqlite") {
+    await db.exec(`
     CREATE TABLE IF NOT EXISTS rash_rules (
       kod INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -99,6 +100,7 @@ export function migrateRashTables(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
     CREATE INDEX IF NOT EXISTS idx_rash_rules_ref ON rash_rules(ref_rows);
   `);
+  }
 }
 
 function rowToDto(row: RashRuleRow): RashRuleDto {
@@ -161,29 +163,31 @@ function loadJsonPayload(): {
   return data;
 }
 
-function importPayload(db: DatabaseSync, data: ReturnType<typeof loadJsonPayload>): number {
+async function importPayload(
+  db: OkoDb,
+  data: ReturnType<typeof loadJsonPayload>
+): Promise<number> {
   if (!data) return 0;
 
-  const insertRule = db.prepare(
-    `INSERT INTO rash_rules (
+  return db.transaction(async (tx) => {
+    const insertRule = tx.prepare(
+      `INSERT INTO rash_rules (
       kod, name, note, ref_rows, total_formula,
       ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
       ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+    );
 
-  const insertAddsum = db.prepare(
-    `INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type)
+    const insertAddsum = tx.prepare(
+      `INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type)
      VALUES (?, ?, ?, ?)`
-  );
+    );
 
-  db.exec("BEGIN");
-  try {
-    db.exec("DELETE FROM rash_addsum");
-    db.exec("DELETE FROM rash_rules");
+    await tx.exec("DELETE FROM rash_addsum");
+    await tx.exec("DELETE FROM rash_rules");
     for (const rule of data.rules) {
       const r = dtoToRow(rule);
-      insertRule.run(
+      await insertRule.run(
         r.kod,
         r.name,
         r.note,
@@ -200,45 +204,44 @@ function importPayload(db: DatabaseSync, data: ReturnType<typeof loadJsonPayload
       );
     }
     for (const item of data.addsum) {
-      insertAddsum.run(item.kod, item.sort, item.sumTitle, item.fldType);
+      await insertAddsum.run(item.kod, item.sort, item.sumTitle, item.fldType);
     }
     if (data.thresholds) {
-      const upsert = db.prepare(
+      const upsert = tx.prepare(
         "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
       );
-      upsert.run("rashThresholds", JSON.stringify(data.thresholds));
+      await upsert.run("rashThresholds", JSON.stringify(data.thresholds));
     }
-    db.exec("COMMIT");
     return data.rules.length;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function seedRashFromJson(db: DatabaseSync): number {
-  const count = db.prepare("SELECT COUNT(*) AS c FROM rash_rules").get() as { c: number };
+export async function seedRashFromJson(db: OkoDb): Promise<number> {
+  const count = (await db.prepare("SELECT COUNT(*) AS c FROM rash_rules").get()) as { c: number };
   if (count.c > 0) return 0;
   return importPayload(db, loadJsonPayload());
 }
 
-export function reimportRashFromJson(db: DatabaseSync): number {
+export async function reimportRashFromJson(db: OkoDb): Promise<number> {
   return importPayload(db, loadJsonPayload());
 }
 
-export function getRashStats(db: DatabaseSync) {
-  const total = (db.prepare("SELECT COUNT(*) AS c FROM rash_rules").get() as { c: number }).c;
-  const addsum = (db.prepare("SELECT COUNT(*) AS c FROM rash_addsum").get() as { c: number }).c;
+export async function getRashStats(db: OkoDb) {
+  const total = ((await db.prepare("SELECT COUNT(*) AS c FROM rash_rules").get()) as { c: number }).c;
+  const addsum = ((await db.prepare("SELECT COUNT(*) AS c FROM rash_addsum").get()) as { c: number })
+    .c;
   const withFormula = (
-    db
-      .prepare("SELECT COUNT(*) AS c FROM rash_rules WHERE total_formula IS NOT NULL AND total_formula <> ''")
-      .get() as { c: number }
+    (await db
+      .prepare(
+        "SELECT COUNT(*) AS c FROM rash_rules WHERE total_formula IS NOT NULL AND total_formula <> ''"
+      )
+      .get()) as { c: number }
   ).c;
   return { total, addsum, withFormula };
 }
 
-export function getRashThresholds(db: DatabaseSync): RashThresholdsDto {
-  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'rashThresholds'").get() as
+export async function getRashThresholds(db: OkoDb): Promise<RashThresholdsDto> {
+  const row = (await db.prepare("SELECT value FROM app_settings WHERE key = 'rashThresholds'").get()) as
     | { value: string }
     | undefined;
   if (row) {
@@ -251,31 +254,36 @@ export function getRashThresholds(db: DatabaseSync): RashThresholdsDto {
   return DEFAULT_THRESHOLDS;
 }
 
-export function setRashThresholds(db: DatabaseSync, thresholds: RashThresholdsDto): RashThresholdsDto {
-  db.prepare(
-    "INSERT INTO app_settings (key, value) VALUES ('rashThresholds', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).run(JSON.stringify(thresholds));
+export async function setRashThresholds(
+  db: OkoDb,
+  thresholds: RashThresholdsDto
+): Promise<RashThresholdsDto> {
+  await db
+    .prepare(
+      "INSERT INTO app_settings (key, value) VALUES ('rashThresholds', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    )
+    .run(JSON.stringify(thresholds));
   return thresholds;
 }
 
-export function exportRashPayload(db: DatabaseSync) {
+export async function exportRashPayload(db: OkoDb) {
   const rules = (
-    db
+    (await db
       .prepare(
         `SELECT kod, name, note, ref_rows, total_formula,
                 ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
                 ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
          FROM rash_rules ORDER BY kod`
       )
-      .all() as RashRuleRow[]
+      .all()) as RashRuleRow[]
   ).map(rowToDto);
 
   const addsum = (
-    db
+    (await db
       .prepare(
         "SELECT id, kod, sort_order, sum_title, fld_type FROM rash_addsum ORDER BY kod, sort_order"
       )
-      .all() as RashAddsumRow[]
+      .all()) as RashAddsumRow[]
   ).map(addsumRowToDto);
 
   return {
@@ -284,35 +292,36 @@ export function exportRashPayload(db: DatabaseSync) {
     total: rules.length,
     rules,
     addsum,
-    thresholds: getRashThresholds(db),
+    thresholds: await getRashThresholds(db),
   };
 }
 
-export function getRashRule(db: DatabaseSync, kod: number): RashRuleDto | null {
-  const row = db
+export async function getRashRule(db: OkoDb, kod: number): Promise<RashRuleDto | null> {
+  const row = (await db
     .prepare(
       `SELECT kod, name, note, ref_rows, total_formula,
               ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
               ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
        FROM rash_rules WHERE kod = ?`
     )
-    .get(kod) as RashRuleRow | undefined;
+    .get(kod)) as RashRuleRow | undefined;
   return row ? rowToDto(row) : null;
 }
 
-export function listRashAddsum(db: DatabaseSync, kod: number): RashAddsumDto[] {
-  const rows = db
+export async function listRashAddsum(db: OkoDb, kod: number): Promise<RashAddsumDto[]> {
+  const rows = (await db
     .prepare(
       "SELECT id, kod, sort_order, sum_title, fld_type FROM rash_addsum WHERE kod = ? ORDER BY sort_order"
     )
-    .all(kod) as RashAddsumRow[];
+    .all(kod)) as RashAddsumRow[];
   return rows.map(addsumRowToDto);
 }
 
-export function upsertRashRule(db: DatabaseSync, dto: RashRuleDto): RashRuleDto {
+export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashRuleDto> {
   const r = dtoToRow(dto);
-  db.prepare(
-    `INSERT INTO rash_rules (
+  await db
+    .prepare(
+      `INSERT INTO rash_rules (
       kod, name, note, ref_rows, total_formula,
       ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
       ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
@@ -330,26 +339,27 @@ export function upsertRashRule(db: DatabaseSync, dto: RashRuleDto): RashRuleDto 
       ref_a3_title = excluded.ref_a3_title,
       ref_a4_name = excluded.ref_a4_name,
       ref_a4_title = excluded.ref_a4_title`
-  ).run(
-    r.kod,
-    r.name,
-    r.note,
-    r.ref_rows,
-    r.total_formula,
-    r.ref_a1_name,
-    r.ref_a1_title,
-    r.ref_a2_name,
-    r.ref_a2_title,
-    r.ref_a3_name,
-    r.ref_a3_title,
-    r.ref_a4_name,
-    r.ref_a4_title
-  );
+    )
+    .run(
+      r.kod,
+      r.name,
+      r.note,
+      r.ref_rows,
+      r.total_formula,
+      r.ref_a1_name,
+      r.ref_a1_title,
+      r.ref_a2_name,
+      r.ref_a2_title,
+      r.ref_a3_name,
+      r.ref_a3_title,
+      r.ref_a4_name,
+      r.ref_a4_title
+    );
   return dto;
 }
 
-export function deleteRashRule(db: DatabaseSync, kod: number): boolean {
-  const result = db.prepare("DELETE FROM rash_rules WHERE kod = ?").run(kod);
+export async function deleteRashRule(db: OkoDb, kod: number): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM rash_rules WHERE kod = ?").run(kod);
   return result.changes > 0;
 }
 

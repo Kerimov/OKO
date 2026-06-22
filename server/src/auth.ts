@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getDb } from "./db.js";
+import { getDb } from "./oko-db.js";
 import {
   countUsers,
   createSession,
@@ -25,12 +25,18 @@ declare global {
 const ADMIN_TOKEN = process.env.OKO_ADMIN_TOKEN?.trim() || "";
 const USER_TOKEN = process.env.OKO_USER_TOKEN?.trim() || "";
 
+let userAccountsCached = false;
+
+export async function refreshUserAccountsCache(): Promise<void> {
+  userAccountsCached = (await countUsers(await getDb())) > 0;
+}
+
 export function hasLegacyAuth(): boolean {
   return ADMIN_TOKEN.length > 0;
 }
 
 export function hasUserAccounts(): boolean {
-  return countUsers(getDb()) > 0;
+  return userAccountsCached;
 }
 
 export function isAuthEnabled(): boolean {
@@ -75,14 +81,15 @@ function applySessionUser(req: Request, user: SessionUser, token: string): void 
   req.apiRole = user.role === "admin" ? "admin" : "user";
 }
 
-export function resolveAuth(req: Request, token: string | null): boolean {
+export async function resolveAuth(req: Request, token: string | null): Promise<boolean> {
   if (!isAuthEnabled()) {
     req.apiRole = "admin";
     return true;
   }
 
   if (token) {
-    const sessionUser = resolveSessionUser(getDb(), token);
+    const db = await getDb();
+    const sessionUser = await resolveSessionUser(db, token);
     if (sessionUser) {
       applySessionUser(req, sessionUser, token);
       return true;
@@ -100,27 +107,35 @@ export function resolveAuth(req: Request, token: string | null): boolean {
 /** Public routes — no token required even when auth is enabled. */
 const PUBLIC_PATHS = new Set(["/api/health", "/api/auth/login", "/api/auth/me"]);
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  if (PUBLIC_PATHS.has(req.path)) {
+export async function authMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (PUBLIC_PATHS.has(req.path)) {
+      const token = extractToken(req);
+      if (token) await resolveAuth(req, token);
+      else if (!isAuthEnabled()) req.apiRole = "admin";
+      next();
+      return;
+    }
+
+    if (!isAuthEnabled()) {
+      req.apiRole = "admin";
+      next();
+      return;
+    }
+
     const token = extractToken(req);
-    if (token) resolveAuth(req, token);
-    else if (!isAuthEnabled()) req.apiRole = "admin";
+    if (!(await resolveAuth(req, token ?? null))) {
+      res.status(401).json({ error: "Unauthorized", authRequired: true });
+      return;
+    }
     next();
-    return;
+  } catch (e) {
+    next(e);
   }
-
-  if (!isAuthEnabled()) {
-    req.apiRole = "admin";
-    next();
-    return;
-  }
-
-  const token = extractToken(req);
-  if (!resolveAuth(req, token ?? null)) {
-    res.status(401).json({ error: "Unauthorized", authRequired: true });
-    return;
-  }
-  next();
 }
 
 const USER_WRITE_ALLOWED = [
@@ -164,7 +179,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   res.status(403).json({ error: "Admin required" });
 }
 
-export function loginHandler(req: Request, res: Response): void {
+export async function loginHandler(req: Request, res: Response): Promise<void> {
   if (!hasUserAccounts()) {
     res.status(400).json({ error: "User accounts are not enabled" });
     return;
@@ -175,20 +190,20 @@ export function loginHandler(req: Request, res: Response): void {
     return;
   }
 
-  const db = getDb();
-  const user = getUserByUsername(db, username);
+  const db = await getDb();
+  const user = await getUserByUsername(db, username);
   if (!user || !user.active || !verifyPassword(password, user.password_hash)) {
     res.status(401).json({ error: "Invalid username or password" });
     return;
   }
 
-  const token = createSession(db, user.id);
-  const sessionUser = resolveSessionUser(db, token)!;
+  const token = await createSession(db, user.id);
+  const sessionUser = (await resolveSessionUser(db, token))!;
   const org =
     sessionUser.zid != null
-      ? (db.prepare("SELECT name FROM organizations WHERE zid = ?").get(sessionUser.zid) as
-          | { name: string }
-          | undefined)
+      ? await db
+          .prepare("SELECT name FROM organizations WHERE zid = ?")
+          .get<{ name: string }>(sessionUser.zid)
       : undefined;
 
   res.json({
@@ -205,8 +220,8 @@ export function loginHandler(req: Request, res: Response): void {
   });
 }
 
-export function logoutHandler(req: Request, res: Response): void {
+export async function logoutHandler(req: Request, res: Response): Promise<void> {
   const token = req.sessionToken ?? extractToken(req);
-  if (token) deleteSession(getDb(), token);
+  if (token) await deleteSession(await getDb(), token);
   res.json({ ok: true });
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { OkoDb } from "./oko-db.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
 import { saveInstanceCells } from "./instances.js";
 import type { OkoFormInstance } from "./types.js";
@@ -68,23 +68,25 @@ export interface CreatePackageResult {
   instanceIds: string[];
 }
 
-export function migrateOrgTables(db: DatabaseSync): void {
-  db.exec(`
+export async function migrateOrgTables(db: OkoDb): Promise<void> {
+  await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_instances_zid_eid ON form_instances(zid, eid);
     CREATE INDEX IF NOT EXISTS idx_instances_package ON form_instances(zid, eid, template_id);
     CREATE INDEX IF NOT EXISTS idx_periods_zid ON periods(zid);
   `);
 }
 
-export function seedOrganizationsFromSettings(db: DatabaseSync): number {
-  const count = (db.prepare("SELECT COUNT(*) AS c FROM organizations").get() as { c: number }).c;
+export async function seedOrganizationsFromSettings(db: OkoDb): Promise<number> {
+  const count = (
+    (await db.prepare("SELECT COUNT(*) AS c FROM organizations").get()) as { c: number }
+  ).c;
   if (count > 0) return 0;
 
   let orgName = "Организация по умолчанию";
   let periodStart = "";
   let periodEnd = "";
 
-  const settings = db.prepare("SELECT key, value FROM app_settings").all() as Array<{
+  const settings = (await db.prepare("SELECT key, value FROM app_settings").all()) as Array<{
     key: string;
     value: string;
   }>;
@@ -104,23 +106,25 @@ export function seedOrganizationsFromSettings(db: DatabaseSync): number {
     }
   }
 
-  db.prepare("INSERT INTO organizations (zid, name, code) VALUES (1, ?, ?)").run(
+  await db.prepare("INSERT INTO organizations (zid, name, code) VALUES (1, ?, ?)").run(
     orgName,
     null
   );
 
   const periodName =
     periodStart && periodEnd ? `${periodStart} — ${periodEnd}` : "Текущий период";
-  db.prepare(
-    `INSERT INTO periods (eid, zid, name, period_start, period_end)
+  await db
+    .prepare(
+      `INSERT INTO periods (eid, zid, name, period_start, period_end)
      VALUES (1, 1, ?, ?, ?)`
-  ).run(periodName, periodStart || null, periodEnd || null);
+    )
+    .run(periodName, periodStart || null, periodEnd || null);
 
   const upsert = db.prepare(
     "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   );
-  upsert.run("workZid", "1");
-  upsert.run("workEid", "1");
+  await upsert.run("workZid", "1");
+  await upsert.run("workEid", "1");
 
   return 1;
 }
@@ -159,10 +163,10 @@ function rowToPeriod(row: {
   };
 }
 
-export function listOrganizations(db: DatabaseSync): OrganizationDto[] {
-  const rows = db
+export async function listOrganizations(db: OkoDb): Promise<OrganizationDto[]> {
+  const rows = (await db
     .prepare("SELECT zid, name, code, parent_zid FROM organizations ORDER BY name")
-    .all() as Array<{
+    .all()) as Array<{
     zid: number;
     name: string;
     code: string | null;
@@ -171,17 +175,17 @@ export function listOrganizations(db: DatabaseSync): OrganizationDto[] {
   return rows.map(rowToOrg);
 }
 
-export function createOrganization(
-  db: DatabaseSync,
+export async function createOrganization(
+  db: OkoDb,
   input: { name: string; code?: string; parentZid?: number }
-): OrganizationDto {
-  const max = db.prepare("SELECT COALESCE(MAX(zid), 0) AS m FROM organizations").get() as {
+): Promise<OrganizationDto> {
+  const max = (await db.prepare("SELECT COALESCE(MAX(zid), 0) AS m FROM organizations").get()) as {
     m: number;
   };
   const zid = max.m + 1;
-  db.prepare(
-    "INSERT INTO organizations (zid, name, code, parent_zid) VALUES (?, ?, ?, ?)"
-  ).run(zid, input.name.trim(), input.code?.trim() || null, input.parentZid ?? null);
+  await db
+    .prepare("INSERT INTO organizations (zid, name, code, parent_zid) VALUES (?, ?, ?, ?)")
+    .run(zid, input.name.trim(), input.code?.trim() || null, input.parentZid ?? null);
   return {
     zid,
     name: input.name.trim(),
@@ -190,14 +194,14 @@ export function createOrganization(
   };
 }
 
-export function listPeriods(db: DatabaseSync, zid?: number): PeriodDto[] {
+export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]> {
   if (zid) {
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT eid, zid, name, period_start, period_end, quarter, year
          FROM periods WHERE zid = ? ORDER BY period_start DESC, eid DESC`
       )
-      .all(zid) as Array<{
+      .all(zid)) as Array<{
       eid: number;
       zid: number;
       name: string;
@@ -208,12 +212,12 @@ export function listPeriods(db: DatabaseSync, zid?: number): PeriodDto[] {
     }>;
     return rows.map(rowToPeriod);
   }
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT eid, zid, name, period_start, period_end, quarter, year
        FROM periods ORDER BY zid, period_start DESC, eid DESC`
     )
-    .all() as Array<{
+    .all()) as Array<{
     eid: number;
     zid: number;
     name: string;
@@ -225,8 +229,8 @@ export function listPeriods(db: DatabaseSync, zid?: number): PeriodDto[] {
   return rows.map(rowToPeriod);
 }
 
-export function createPeriod(
-  db: DatabaseSync,
+export async function createPeriod(
+  db: OkoDb,
   input: {
     zid: number;
     name: string;
@@ -235,24 +239,28 @@ export function createPeriod(
     quarter?: number;
     year?: number;
   }
-): PeriodDto {
-  const org = db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(input.zid);
+): Promise<PeriodDto> {
+  const org = await db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(input.zid);
   if (!org) throw new Error("Organization not found");
 
-  const max = db.prepare("SELECT COALESCE(MAX(eid), 0) AS m FROM periods").get() as { m: number };
+  const max = (await db.prepare("SELECT COALESCE(MAX(eid), 0) AS m FROM periods").get()) as {
+    m: number;
+  };
   const eid = max.m + 1;
-  db.prepare(
-    `INSERT INTO periods (eid, zid, name, period_start, period_end, quarter, year)
+  await db
+    .prepare(
+      `INSERT INTO periods (eid, zid, name, period_start, period_end, quarter, year)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    eid,
-    input.zid,
-    input.name.trim(),
-    input.periodStart || null,
-    input.periodEnd || null,
-    input.quarter ?? null,
-    input.year ?? null
-  );
+    )
+    .run(
+      eid,
+      input.zid,
+      input.name.trim(),
+      input.periodStart || null,
+      input.periodEnd || null,
+      input.quarter ?? null,
+      input.year ?? null
+    );
   return {
     eid,
     zid: input.zid,
@@ -264,8 +272,8 @@ export function createPeriod(
   };
 }
 
-export function getWorkContext(db: DatabaseSync): WorkContextDto {
-  const rows = db.prepare("SELECT key, value FROM app_settings").all() as Array<{
+export async function getWorkContext(db: OkoDb): Promise<WorkContextDto> {
+  const rows = (await db.prepare("SELECT key, value FROM app_settings").all()) as Array<{
     key: string;
     value: string;
   }>;
@@ -278,14 +286,14 @@ export function getWorkContext(db: DatabaseSync): WorkContextDto {
   return { zid, eid };
 }
 
-export function setWorkContext(db: DatabaseSync, ctx: WorkContextDto): WorkContextDto {
+export async function setWorkContext(db: OkoDb, ctx: WorkContextDto): Promise<WorkContextDto> {
   const upsert = db.prepare(
     "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   );
-  if (ctx.zid != null) upsert.run("workZid", String(ctx.zid));
-  else db.prepare("DELETE FROM app_settings WHERE key = 'workZid'").run();
-  if (ctx.eid != null) upsert.run("workEid", String(ctx.eid));
-  else db.prepare("DELETE FROM app_settings WHERE key = 'workEid'").run();
+  if (ctx.zid != null) await upsert.run("workZid", String(ctx.zid));
+  else await db.prepare("DELETE FROM app_settings WHERE key = 'workZid'").run();
+  if (ctx.eid != null) await upsert.run("workEid", String(ctx.eid));
+  else await db.prepare("DELETE FROM app_settings WHERE key = 'workEid'").run();
   return getWorkContext(db);
 }
 
@@ -322,32 +330,30 @@ function defaultDisplayName(
   return `${templateId} — ${shortTitle}`;
 }
 
-function existingTemplatesForPackage(
-  db: DatabaseSync,
+async function existingTemplatesForPackage(
+  db: OkoDb,
   zid: number,
   eid: number
-): Set<string> {
-  const rows = db
-    .prepare(
-      `SELECT template_id FROM form_instances WHERE zid = ? AND eid = ?`
-    )
-    .all(zid, eid) as Array<{ template_id: string }>;
+): Promise<Set<string>> {
+  const rows = (await db
+    .prepare(`SELECT template_id FROM form_instances WHERE zid = ? AND eid = ?`)
+    .all(zid, eid)) as Array<{ template_id: string }>;
   return new Set(rows.map((r) => r.template_id));
 }
 
-export function getPackageCompleteness(
-  db: DatabaseSync,
+export async function getPackageCompleteness(
+  db: OkoDb,
   zid: number,
   eid: number
-): PackageCompletenessDto {
-  const catalog = exportCatalog(db);
-  const instances = db
+): Promise<PackageCompletenessDto> {
+  const catalog = await exportCatalog(db);
+  const instances = (await db
     .prepare(
       `SELECT instance_id, template_id, display_name, status, updated_at
        FROM form_instances WHERE zid = ? AND eid = ?
        ORDER BY updated_at DESC`
     )
-    .all(zid, eid) as Array<{
+    .all(zid, eid)) as Array<{
     instance_id: string;
     template_id: string;
     display_name: string;
@@ -390,11 +396,11 @@ export function getPackageCompleteness(
   return { zid, eid, total: items.length, filled, draft, submitted, items };
 }
 
-export function getPackagesDashboard(db: DatabaseSync): PackageDashboardRow[] {
-  const catalog = exportCatalog(db);
+export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardRow[]> {
+  const catalog = await exportCatalog(db);
   const totalForms = catalog.forms.length;
 
-  const periods = db
+  const periods = (await db
     .prepare(
       `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end,
               o.name AS org_name, o.code AS org_code
@@ -402,7 +408,7 @@ export function getPackagesDashboard(db: DatabaseSync): PackageDashboardRow[] {
        JOIN organizations o ON o.zid = p.zid
        ORDER BY o.name, p.period_start DESC, p.eid DESC`
     )
-    .all() as unknown as Array<{
+    .all()) as unknown as Array<{
     eid: number;
     zid: number;
     name: string;
@@ -414,7 +420,7 @@ export function getPackagesDashboard(db: DatabaseSync): PackageDashboardRow[] {
 
   const rows: PackageDashboardRow[] = [];
   for (const p of periods) {
-    const completeness = getPackageCompleteness(db, p.zid, p.eid);
+    const completeness = await getPackageCompleteness(db, p.zid, p.eid);
     rows.push({
       zid: p.zid,
       eid: p.eid,
@@ -433,36 +439,34 @@ export function getPackagesDashboard(db: DatabaseSync): PackageDashboardRow[] {
   return rows;
 }
 
-export function createReportPackage(
-  db: DatabaseSync,
+export async function createReportPackage(
+  db: OkoDb,
   zid: number,
   eid: number
-): CreatePackageResult {
-  const org = db
+): Promise<CreatePackageResult> {
+  const org = (await db
     .prepare("SELECT name FROM organizations WHERE zid = ?")
-    .get(zid) as { name: string } | undefined;
+    .get(zid)) as { name: string } | undefined;
   if (!org) throw new Error("Organization not found");
 
-  const period = db
-    .prepare(
-      "SELECT name, period_start, period_end FROM periods WHERE eid = ? AND zid = ?"
-    )
-    .get(eid, zid) as
+  const period = (await db
+    .prepare("SELECT name, period_start, period_end FROM periods WHERE eid = ? AND zid = ?")
+    .get(eid, zid)) as
     | { name: string; period_start: string | null; period_end: string | null }
     | undefined;
   if (!period) throw new Error("Period not found");
 
-  const catalog = exportCatalog(db);
-  const existing = existingTemplatesForPackage(db, zid, eid);
+  const catalog = await exportCatalog(db);
+  const existing = await existingTemplatesForPackage(db, zid, eid);
   const now = new Date().toISOString();
   const instanceIds: string[] = [];
   let created = 0;
   let skipped = 0;
 
-  const enterpriseCode = (() => {
-    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'globalMeta'").get() as
-      | { value: string }
-      | undefined;
+  const enterpriseCode = await (async () => {
+    const row = (await db
+      .prepare("SELECT value FROM app_settings WHERE key = 'globalMeta'")
+      .get()) as { value: string } | undefined;
     if (!row) return "1@1";
     try {
       const meta = JSON.parse(row.value) as { enterpriseCode?: string };
@@ -472,14 +476,13 @@ export function createReportPackage(
     }
   })();
 
-  db.exec("BEGIN");
-  try {
+  await db.transaction(async (tx) => {
     for (const form of catalog.forms) {
       if (existing.has(form.id)) {
         skipped++;
         continue;
       }
-      const schema = loadFormSchema(db, form.id);
+      const schema = await loadFormSchema(tx, form.id);
       if (!schema) {
         skipped++;
         continue;
@@ -509,15 +512,11 @@ export function createReportPackage(
         updatedAt: now,
       };
 
-      saveInstanceCells(db, inst);
+      await saveInstanceCells(tx, inst);
       instanceIds.push(inst.instanceId);
       created++;
     }
-    db.exec("COMMIT");
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 
   return { created, skipped, total: catalog.forms.length, instanceIds };
 }

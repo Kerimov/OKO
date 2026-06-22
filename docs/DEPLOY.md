@@ -5,23 +5,49 @@
 | Компонент | Где хостить | Примечание |
 |-----------|-------------|------------|
 | **Портал** (`portal/`) | Vercel, Netlify, nginx | Статика, Root Directory: `portal` |
-| **API** (`server/`) | VPS, Railway, Docker | SQLite в volume, Node 22+ |
+| **API** (`server/`) | Render, Railway, Docker | PostgreSQL (prod) или SQLite (dev) |
 
 Портал на Vercel **не** запускает API. Нужен отдельный хост с `docker compose` или `npm start` в `server/`.
 
 ---
 
-## Быстрый старт: Docker
+## PostgreSQL (production, Render / Railway)
+
+Данные **не пропадают** при redeploy — БД живёт отдельно от контейнера API.
+
+1. На Render: **New → PostgreSQL**, создайте базу (например `oko`).
+2. В **Web Service** (API): **Connect → Link Resource** к этой PostgreSQL.
+3. Render подставит `DATABASE_URL` автоматически.
+4. Persistent Disk для SQLite **не нужен** — можно отключить.
+5. Переменные API:
+   - `DATABASE_URL` — из linked PostgreSQL
+   - `OKO_BOOTSTRAP_ADMIN_USER` / `OKO_BOOTSTRAP_ADMIN_PASSWORD`
+6. При первом старте API применит `data/schema.postgresql.sql` и засеет шаблоны из JSON.
+
+Проверка:
 
 ```bash
-cp .env.example .env
-# Отредактируйте OKO_ADMIN_TOKEN и OKO_USER_TOKEN
-
-docker compose up -d --build
-curl http://localhost:3001/api/health
+curl -s https://your-api.onrender.com/api/health
+# {"ok":true,"db":"postgresql",...}
 ```
 
-Данные SQLite: volume `oko-data` → `/app/data/oko.db`.
+Локально с PostgreSQL:
+
+```bash
+docker compose --profile postgres up -d
+export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
+cd server && npm run dev
+```
+
+---
+
+## SQLite (локально / Docker без Postgres)
+
+```bash
+docker compose up -d --build
+```
+
+Данные SQLite: volume `oko-data` → `/app/data/oko.db`. **На Render без volume данные теряются при каждом deploy** — для prod используйте PostgreSQL.
 
 ---
 
@@ -97,15 +123,7 @@ VITE_API_URL=https://oko-api.example.com npm run build
 cd server && npm ci && npm start
 ```
 
-Переменные окружения: `OKO_DB_PATH`, `OKO_ADMIN_TOKEN`, `OKO_USER_TOKEN`, `PORT`.
-
-Положите рядом каталоги `portal/public` и `data/schema.sql` (структура репозитория).
-
----
-
-## PostgreSQL (опционально, не в MVP)
-
-Схема в `data/schema.sql` совместима с PostgreSQL. Для prod на больших объёмах — отдельная миграция драйвера (Phase 3).
+Переменные: `DATABASE_URL` (PostgreSQL) **или** `OKO_DB_PATH` (SQLite), `OKO_BOOTSTRAP_ADMIN_*`, `PORT`.
 
 ---
 
@@ -116,4 +134,4 @@ curl -s http://localhost:3001/api/health | jq
 curl -s -H "Authorization: Bearer $OKO_ADMIN_TOKEN" http://localhost:3001/api/auth/me | jq
 ```
 
-В браузере: бейдж **SQLite** + роль в настройках; редакторы `/admin/*` видны только admin.
+В браузере: бейдж **PostgreSQL** / **SQLite** + роль в настройках; редакторы `/admin/*` видны только admin.

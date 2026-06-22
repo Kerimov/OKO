@@ -48,7 +48,8 @@ import {
   type SaldoRuleDto,
   type SaldoRuleRow,
 } from "./saldo.js";
-import { getDb } from "./db.js";
+import { bootstrapDatabase, getDb } from "./db.js";
+import { isPostgresMode } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 import {
   auditMiddleware,
@@ -59,6 +60,7 @@ import {
   getAuthConfig,
   loginHandler,
   logoutHandler,
+  refreshUserAccountsCache,
   requireAdmin,
   userWriteGuard,
 } from "./auth.js";
@@ -127,23 +129,31 @@ import {
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
 
+type AsyncHandler = (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<void | express.Response>;
+
+function asyncRoute(handler: AsyncHandler): express.RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
+
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
-app.get("/api/health", (_req, res) => {
-  const stats = getInstanceStorageStats(getDb());
-  res.json({ ok: true, db: "sqlite", cells: stats, auth: getAuthConfig() });
-});
+app.get("/api/health", asyncRoute(async (_req, res) => {
+  const stats = await getInstanceStorageStats(await getDb());
+  res.json({ ok: true, db: isPostgresMode() ? "postgresql" : "sqlite", cells: stats, auth: getAuthConfig() });
+}));
 
-app.use(authMiddleware);
+app.use(asyncRoute(authMiddleware));
 app.use(auditMiddleware);
 app.use(userWriteGuard);
 
-app.get("/api/auth/me", (req, res) => {
+app.get("/api/auth/me", asyncRoute(async (req, res) => {
   const config = getAuthConfig();
   let user: Record<string, unknown> | null = null;
   if (req.apiUser) {
-    const dto = getUserById(getDb(), req.apiUser.id);
+    const dto = await getUserById(await getDb(), req.apiUser.id);
     if (dto) {
       user = {
         id: dto.id,
@@ -160,71 +170,63 @@ app.get("/api/auth/me", (req, res) => {
     user,
     ...config,
   });
-});
+}));
 
-app.post("/api/auth/login", loginHandler);
-app.post("/api/auth/logout", logoutHandler);
+app.post("/api/auth/login", asyncRoute(loginHandler));
+app.post("/api/auth/logout", asyncRoute(logoutHandler));
 
-app.get("/api/audit", requireAdmin, (req, res) => {
+app.get("/api/audit", requireAdmin, asyncRoute(async (req, res) => {
   const q = String(req.query.q ?? "");
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  res.json(listAuditLog(getDb(), { q, limit, offset }));
-});
+  res.json(await listAuditLog(await getDb(), { q, limit, offset }));
+}));
 
-app.get("/api/settings", (_req, res) => {
-  const db = getDb();
-  const rows = db.prepare("SELECT key, value FROM app_settings").all() as Array<{
+app.get("/api/settings", asyncRoute(async (_req, res) => {
+  const db = await getDb();
+  const rows = await db.prepare("SELECT key, value FROM app_settings").all() as Array<{
     key: string;
     value: string;
   }>;
   const settings: Record<string, string> = {};
   for (const r of rows) settings[r.key] = r.value;
   res.json(settings);
-});
+}));
 
-app.put("/api/settings", (req, res) => {
-  const db = getDb();
+app.put("/api/settings", asyncRoute(async (req, res) => {
+  const db = await getDb();
   const body = req.body as Record<string, string>;
-  const upsert = db.prepare(
-    "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  );
-  const tx = () => {
-    db.exec("BEGIN");
-    try {
-      for (const [key, value] of Object.entries(body)) {
-        const stored = typeof value === "string" ? value : JSON.stringify(value);
-        upsert.run(key, stored);
-      }
-      db.exec("COMMIT");
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
+  await db.transaction(async (tx) => {
+    const upsert = tx.prepare(
+      "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    );
+    for (const [key, value] of Object.entries(body)) {
+      const stored = typeof value === "string" ? value : JSON.stringify(value);
+      await upsert.run(key, stored);
     }
-  };
-  tx();
+  });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/instances/stats", (_req, res) => {
-  res.json(getInstanceStorageStats(getDb()));
-});
+app.get("/api/instances/stats", asyncRoute(async (_req, res) => {
+  res.json(await getInstanceStorageStats(await getDb()));
+}));
 
-app.get("/api/instances/eval-snapshot", (req, res) => {
+app.get("/api/instances/eval-snapshot", asyncRoute(async (req, res) => {
   const zid = userZid(req);
-  res.json(buildEvalSnapshotFromDb(getDb(), zid ?? undefined));
-});
+  res.json(await buildEvalSnapshotFromDb(await getDb(), zid ?? undefined));
+}));
 
-app.post("/api/instances/normalize", (_req, res) => {
+app.post("/api/instances/normalize", asyncRoute(async (_req, res) => {
   try {
-    const count = migratePortalPayloadsToCells(getDb());
+    const count = await migratePortalPayloadsToCells(await getDb());
     res.json({ migrated: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "normalize failed" });
   }
-});
+}));
 
-app.get("/api/instances", (req, res) => {
+app.get("/api/instances", asyncRoute(async (req, res) => {
   const zidRaw = req.query.zid;
   const eidRaw = req.query.eid;
   const filter =
@@ -234,11 +236,11 @@ app.get("/api/instances", (req, res) => {
           eid: eidRaw != null ? Number(eidRaw) : undefined,
         }
       : undefined;
-  res.json(listInstanceSummaries(getDb(), mergeOrgFilter(req, filter)));
-});
+  res.json(await listInstanceSummaries(await getDb(), mergeOrgFilter(req, filter)));
+}));
 
-app.get("/api/instances/:id", (req, res) => {
-  const inst = loadInstance(getDb(), req.params.id);
+app.get("/api/instances/:id", asyncRoute(async (req, res) => {
+  const inst = await loadInstance(await getDb(), req.params.id);
   if (!inst) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -250,34 +252,34 @@ app.get("/api/instances/:id", (req, res) => {
     throw e;
   }
   res.json(inst);
-});
+}));
 
-app.post("/api/instances", (req, res) => {
+app.post("/api/instances", asyncRoute(async (req, res) => {
   try {
     const inst = enforceOrgInstanceWrite(req, req.body as OkoFormInstance);
     if (!inst.status) inst.status = "draft";
-    upsertInstance(getDb(), inst);
+    await upsertInstance(await getDb(), inst);
     res.status(201).json(inst);
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "save failed" });
   }
-});
+}));
 
-app.put("/api/instances/:id", (req, res) => {
+app.put("/api/instances/:id", asyncRoute(async (req, res) => {
   const inst = req.body as OkoFormInstance;
   if (inst.instanceId !== req.params.id) {
     res.status(400).json({ error: "ID mismatch" });
     return;
   }
   try {
-    const existing = loadInstance(getDb(), req.params.id);
+    const existing = await loadInstance(await getDb(), req.params.id);
     if (existing) {
       assertOrgInstanceAccess(req, existing);
       assertInstanceEditable(existing, req.apiRole === "admin");
     }
     const scoped = enforceOrgInstanceWrite(req, inst);
-    upsertInstance(getDb(), scoped);
+    await upsertInstance(await getDb(), scoped);
     res.json(scoped);
   } catch (e) {
     const err = e as Error & { status?: number };
@@ -288,16 +290,16 @@ app.put("/api/instances/:id", (req, res) => {
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "save failed" });
   }
-});
+}));
 
-app.patch("/api/instances/:id/status", (req, res) => {
+app.patch("/api/instances/:id/status", asyncRoute(async (req, res) => {
   const { status } = req.body as { status?: string };
   if (status !== "draft" && status !== "submitted") {
     res.status(400).json({ error: "status must be draft or submitted" });
     return;
   }
   try {
-    const existing = loadInstance(getDb(), req.params.id);
+    const existing = await loadInstance(await getDb(), req.params.id);
     if (!existing) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -307,7 +309,7 @@ app.patch("/api/instances/:id/status", (req, res) => {
       res.status(403).json({ error: "Only admin can reopen submitted forms" });
       return;
     }
-    const updated = setInstanceStatus(getDb(), req.params.id, status);
+    const updated = await setInstanceStatus(await getDb(), req.params.id, status);
     if (!updated) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -317,52 +319,53 @@ app.patch("/api/instances/:id/status", (req, res) => {
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "status update failed" });
   }
-});
+}));
 
-app.delete("/api/instances/:id", (req, res) => {
+app.delete("/api/instances/:id", asyncRoute(async (req, res) => {
   try {
-    const existing = loadInstance(getDb(), req.params.id);
+    const existing = await loadInstance(await getDb(), req.params.id);
     if (existing) assertOrgInstanceAccess(req, existing);
-    deleteInstanceFromDb(getDb(), req.params.id);
+    await deleteInstanceFromDb(await getDb(), req.params.id);
     res.json({ ok: true });
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "delete failed" });
   }
-});
+}));
 
-app.post("/api/instances/migrate", (req, res) => {
+app.post("/api/instances/migrate", asyncRoute(async (req, res) => {
   const { instances, settings } = req.body as {
     instances?: OkoFormInstance[];
     settings?: Record<string, string>;
   };
   if (settings) {
-    const db = getDb();
+    const db = await getDb();
     const upsert = db.prepare(
       "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     );
     for (const [key, value] of Object.entries(settings)) {
       const stored = typeof value === "string" ? value : JSON.stringify(value);
-      upsert.run(key, stored);
+      await upsert.run(key, stored);
     }
   }
   let count = 0;
+  const db = await getDb();
   for (const inst of instances ?? []) {
-    upsertInstance(getDb(), inst);
+    await upsertInstance(db, inst);
     count++;
   }
   res.json({ migrated: count });
-});
+}));
 
 // --- Organizations / periods / report packages (ZID / EID) ---
 
-app.get("/api/organizations", (req, res) => {
+app.get("/api/organizations", asyncRoute(async (req, res) => {
   const orgZid = userZid(req);
-  const all = listOrganizations(getDb());
+  const all = await listOrganizations(await getDb());
   res.json(orgZid != null ? all.filter((o) => o.zid === orgZid) : all);
-});
+}));
 
-app.post("/api/organizations", requireAdmin, (req, res) => {
+app.post("/api/organizations", requireAdmin, asyncRoute(async (req, res) => {
   const { name, code, parentZid } = req.body as {
     name?: string;
     code?: string;
@@ -373,20 +376,20 @@ app.post("/api/organizations", requireAdmin, (req, res) => {
     return;
   }
   try {
-    const org = createOrganization(getDb(), { name, code, parentZid });
+    const org = await createOrganization(await getDb(), { name, code, parentZid });
     res.status(201).json(org);
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "create failed" });
   }
-});
+}));
 
-app.get("/api/periods", (req, res) => {
+app.get("/api/periods", asyncRoute(async (req, res) => {
   const orgZid = userZid(req);
   const zid = orgZid ?? (req.query.zid != null ? Number(req.query.zid) : undefined);
-  res.json(listPeriods(getDb(), zid));
-});
+  res.json(await listPeriods(await getDb(), zid));
+}));
 
-app.post("/api/periods", requireAdmin, (req, res) => {
+app.post("/api/periods", requireAdmin, asyncRoute(async (req, res) => {
   const { zid, name, periodStart, periodEnd, quarter, year } = req.body as {
     zid?: number;
     name?: string;
@@ -400,7 +403,7 @@ app.post("/api/periods", requireAdmin, (req, res) => {
     return;
   }
   try {
-    const period = createPeriod(getDb(), {
+    const period = await createPeriod(await getDb(), {
       zid,
       name,
       periodStart,
@@ -412,30 +415,30 @@ app.post("/api/periods", requireAdmin, (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
   }
-});
+}));
 
-app.get("/api/work-context", (req, res) => {
-  const ctx = getWorkContext(getDb());
+app.get("/api/work-context", asyncRoute(async (req, res) => {
+  const ctx = await getWorkContext(await getDb());
   const orgZid = userZid(req);
   if (orgZid != null) {
     res.json({ zid: orgZid, eid: ctx.eid });
     return;
   }
   res.json(ctx);
-});
+}));
 
-app.put("/api/work-context", (req, res) => {
+app.put("/api/work-context", asyncRoute(async (req, res) => {
   const body = req.body as { zid?: number | null; eid?: number | null };
   const orgZid = userZid(req);
   res.json(
-    setWorkContext(getDb(), {
+    await setWorkContext(await getDb(), {
       zid: orgZid ?? body.zid ?? null,
       eid: body.eid ?? null,
     })
   );
-});
+}));
 
-app.get("/api/packages/completeness", (req, res) => {
+app.get("/api/packages/completeness", asyncRoute(async (req, res) => {
   const zid = Number(req.query.zid);
   const eid = Number(req.query.eid);
   if (!Number.isFinite(zid) || !Number.isFinite(eid)) {
@@ -444,14 +447,14 @@ app.get("/api/packages/completeness", (req, res) => {
   }
   try {
     assertOrgZidParam(req, zid);
-    res.json(getPackageCompleteness(getDb(), zid, eid));
+    res.json(await getPackageCompleteness(await getDb(), zid, eid));
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
   }
-});
+}));
 
-app.post("/api/packages/create", (req, res) => {
+app.post("/api/packages/create", asyncRoute(async (req, res) => {
   const { zid, eid } = req.body as { zid?: number; eid?: number };
   if (!zid || !eid) {
     res.status(400).json({ error: "zid and eid required" });
@@ -459,25 +462,25 @@ app.post("/api/packages/create", (req, res) => {
   }
   try {
     assertOrgZidParam(req, zid);
-    const result = createReportPackage(getDb(), zid, eid);
+    const result = await createReportPackage(await getDb(), zid, eid);
     res.status(201).json(result);
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
   }
-});
+}));
 
-app.get("/api/packages/dashboard", requireAdmin, (_req, res) => {
-  res.json(getPackagesDashboard(getDb()));
-});
+app.get("/api/packages/dashboard", requireAdmin, asyncRoute(async (_req, res) => {
+  res.json(await getPackagesDashboard(await getDb()));
+}));
 
 // --- User accounts (org cabinets) ---
 
-app.get("/api/users", requireAdmin, (_req, res) => {
-  res.json(listUsers(getDb()));
-});
+app.get("/api/users", requireAdmin, asyncRoute(async (_req, res) => {
+  res.json(await listUsers(await getDb()));
+}));
 
-app.post("/api/users", requireAdmin, (req, res) => {
+app.post("/api/users", requireAdmin, asyncRoute(async (req, res) => {
   const body = req.body as {
     username?: string;
     password?: string;
@@ -486,20 +489,21 @@ app.post("/api/users", requireAdmin, (req, res) => {
     zid?: number | null;
   };
   try {
-    const user = createUser(getDb(), {
+    const user = await createUser(await getDb(), {
       username: body.username ?? "",
       password: body.password ?? "",
       displayName: body.displayName,
       role: body.role ?? "org",
       zid: body.zid,
     });
+    await refreshUserAccountsCache();
     res.status(201).json(user);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
   }
-});
+}));
 
-app.put("/api/users/:id", requireAdmin, (req, res) => {
+app.put("/api/users/:id", requireAdmin, asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "invalid id" });
@@ -513,7 +517,7 @@ app.put("/api/users/:id", requireAdmin, (req, res) => {
     active?: boolean;
   };
   try {
-    const user = updateUser(getDb(), id, body);
+    const user = await updateUser(await getDb(), id, body);
     if (!user) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -522,33 +526,33 @@ app.put("/api/users/:id", requireAdmin, (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "update failed" });
   }
-});
+}));
 
 // --- Aggregation (a_tblAgg_List) ---
 
-app.get("/api/aggregation/stats", (_req, res) => {
-  res.json(getAggStats(getDb()));
-});
+app.get("/api/aggregation/stats", asyncRoute(async (_req, res) => {
+  res.json(await getAggStats(await getDb()));
+}));
 
-app.get("/api/aggregation/export", (_req, res) => {
-  res.json(exportAggPayload(getDb()));
-});
+app.get("/api/aggregation/export", asyncRoute(async (_req, res) => {
+  res.json(await exportAggPayload(await getDb()));
+}));
 
-app.post("/api/aggregation/reimport", requireAdmin, (_req, res) => {
+app.post("/api/aggregation/reimport", requireAdmin, asyncRoute(async (_req, res) => {
   try {
-    const count = reimportAggFromJson(getDb());
+    const count = await reimportAggFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
-app.get("/api/aggregation/list", (req, res) => {
+app.get("/api/aggregation/list", asyncRoute(async (req, res) => {
   const parentZid = req.query.parentZid != null ? Number(req.query.parentZid) : undefined;
-  res.json(listAggEntries(getDb(), parentZid));
-});
+  res.json(await listAggEntries(await getDb(), parentZid));
+}));
 
-app.post("/api/aggregation/list", requireAdmin, (req, res) => {
+app.post("/api/aggregation/list", requireAdmin, asyncRoute(async (req, res) => {
   const body = req.body as {
     parentZid?: number;
     childZid?: number;
@@ -559,7 +563,7 @@ app.post("/api/aggregation/list", requireAdmin, (req, res) => {
     return;
   }
   try {
-    const entry = upsertAggEntry(getDb(), {
+    const entry = await upsertAggEntry(await getDb(), {
       parentZid: body.parentZid,
       childZid: body.childZid,
       included: body.included,
@@ -568,9 +572,9 @@ app.post("/api/aggregation/list", requireAdmin, (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
   }
-});
+}));
 
-app.put("/api/aggregation/list/:id", requireAdmin, (req, res) => {
+app.put("/api/aggregation/list/:id", requireAdmin, asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
   const body = req.body as {
     parentZid?: number;
@@ -583,7 +587,7 @@ app.put("/api/aggregation/list/:id", requireAdmin, (req, res) => {
   }
   try {
     res.json(
-      upsertAggEntry(getDb(), {
+      await upsertAggEntry(await getDb(), {
         id,
         parentZid: body.parentZid,
         childZid: body.childZid,
@@ -593,23 +597,23 @@ app.put("/api/aggregation/list/:id", requireAdmin, (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "update failed" });
   }
-});
+}));
 
-app.delete("/api/aggregation/list/:id", requireAdmin, (req, res) => {
+app.delete("/api/aggregation/list/:id", requireAdmin, asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "invalid id" });
     return;
   }
-  const ok = deleteAggEntry(getDb(), id);
+  const ok = await deleteAggEntry(await getDb(), id);
   if (!ok) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/aggregation/run", (req, res) => {
+app.post("/api/aggregation/run", asyncRoute(async (req, res) => {
   const { parentZid, eid } = req.body as { parentZid?: number; eid?: number };
   if (!parentZid || !eid) {
     res.status(400).json({ error: "parentZid and eid required" });
@@ -617,34 +621,34 @@ app.post("/api/aggregation/run", (req, res) => {
   }
   try {
     assertOrgZidParam(req, parentZid);
-    const result = runPackageAggregation(getDb(), parentZid, eid);
+    const result = await runPackageAggregation(await getDb(), parentZid, eid);
     res.json(result);
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(400).json({ error: e instanceof Error ? e.message : "aggregation failed" });
   }
-});
+}));
 
 // --- Rash rules (sp_rash / sp_rash_addsum) ---
 
-app.get("/api/rash/stats", (_req, res) => {
-  res.json(getRashStats(getDb()));
-});
+app.get("/api/rash/stats", asyncRoute(async (_req, res) => {
+  res.json(await getRashStats(await getDb()));
+}));
 
-app.get("/api/rash/thresholds", (_req, res) => {
-  res.json(getRashThresholds(getDb()));
-});
+app.get("/api/rash/thresholds", asyncRoute(async (_req, res) => {
+  res.json(await getRashThresholds(await getDb()));
+}));
 
-app.put("/api/rash/thresholds", (req, res) => {
-  res.json(setRashThresholds(getDb(), req.body as RashThresholdsDto));
-});
+app.put("/api/rash/thresholds", asyncRoute(async (req, res) => {
+  res.json(await setRashThresholds(await getDb(), req.body as RashThresholdsDto));
+}));
 
-app.get("/api/rash/export", (_req, res) => {
-  res.json(exportRashPayload(getDb()));
-});
+app.get("/api/rash/export", asyncRoute(async (_req, res) => {
+  res.json(await exportRashPayload(await getDb()));
+}));
 
-app.get("/api/rash", (req, res) => {
-  const db = getDb();
+app.get("/api/rash", asyncRoute(async (req, res) => {
+  const db = await getDb();
   const limit = Math.min(Number(req.query.limit) || 50, 500);
   const offset = Number(req.query.offset) || 0;
   const q = String(req.query.q ?? "").trim();
@@ -665,10 +669,10 @@ app.get("/api/rash", (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM rash_rules ${where}`).get(...params) as { c: number }
+    await db.prepare(`SELECT COUNT(*) AS c FROM rash_rules ${where}`).get(...params) as { c: number }
   ).c;
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT kod, name, note, ref_rows, total_formula,
               ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
@@ -685,62 +689,62 @@ app.get("/api/rash", (req, res) => {
     offset,
     items: rows.map(rashRowToDto),
   });
-});
+}));
 
-app.get("/api/rash/:kod", (req, res) => {
+app.get("/api/rash/:kod", asyncRoute(async (req, res) => {
   const kod = Number(req.params.kod);
-  const rule = getRashRule(getDb(), kod);
+  const rule = await getRashRule(await getDb(), kod);
   if (!rule) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json({
     ...rule,
-    addsum: listRashAddsum(getDb(), kod),
+    addsum: await listRashAddsum(await getDb(), kod),
   });
-});
+}));
 
-app.post("/api/rash", (req, res) => {
+app.post("/api/rash", asyncRoute(async (req, res) => {
   const dto = req.body as RashRuleDto;
   if (!dto.kod || !dto.name?.trim()) {
     res.status(400).json({ error: "kod and name required" });
     return;
   }
   try {
-    upsertRashRule(getDb(), dto);
+    await upsertRashRule(await getDb(), dto);
     res.status(201).json(dto);
   } catch (e) {
     res.status(409).json({ error: e instanceof Error ? e.message : "insert failed" });
   }
-});
+}));
 
-app.put("/api/rash/:kod", (req, res) => {
+app.put("/api/rash/:kod", asyncRoute(async (req, res) => {
   const kod = Number(req.params.kod);
   const dto = req.body as RashRuleDto;
   if (dto.kod !== kod) {
     res.status(400).json({ error: "kod mismatch" });
     return;
   }
-  upsertRashRule(getDb(), dto);
+  await upsertRashRule(await getDb(), dto);
   res.json(dto);
-});
+}));
 
-app.delete("/api/rash/:kod", (req, res) => {
-  if (!deleteRashRule(getDb(), Number(req.params.kod))) {
+app.delete("/api/rash/:kod", asyncRoute(async (req, res) => {
+  if (!(await deleteRashRule(await getDb(), Number(req.params.kod)))) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/rash/reimport", (_req, res) => {
+app.post("/api/rash/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportRashFromJson(getDb());
+    const count = await reimportRashFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
 const RECALC_JSON = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
 
@@ -752,9 +756,9 @@ app.get("/api/recalc/export", (_req, res) => {
   res.json(JSON.parse(fs.readFileSync(RECALC_JSON, "utf-8")));
 });
 
-app.get("/api/kontr", (_req, res) => {
-  const db = getDb();
-  const rows = db
+app.get("/api/kontr", asyncRoute(async (_req, res) => {
+  const db = await getDb();
+  const rows = await db
     .prepare("SELECT id, name, org_form, inn, kpp FROM kontragents ORDER BY name")
     .all();
   res.json(
@@ -775,25 +779,25 @@ app.get("/api/kontr", (_req, res) => {
       };
     })
   );
-});
+}));
 
-app.post("/api/kontr", (req, res) => {
+app.post("/api/kontr", asyncRoute(async (req, res) => {
   const { name, orgForm, inn, kpp } = req.body as {
     name: string;
     orgForm?: string;
     inn?: string;
     kpp?: string;
   };
-  const db = getDb();
-  const maxId = db.prepare("SELECT COALESCE(MAX(id), 0) AS m FROM kontragents").get() as {
+  const db = await getDb();
+  const maxId = await db.prepare("SELECT COALESCE(MAX(id), 0) AS m FROM kontragents").get() as {
     m: number;
   };
   const id = maxId.m + 1;
-  db.prepare(
+  await db.prepare(
     "INSERT INTO kontragents (id, name, org_form, inn, kpp) VALUES (?, ?, ?, ?, ?)"
   ).run(id, name, orgForm ?? null, inn ?? null, kpp ?? null);
   res.status(201).json({ id, name, orgForm, inn, kpp });
-});
+}));
 
 app.get("/api/templates/minfin", (_req, res) => {
   const templatePath = path.join(ROOT, "reference", "ШаблоныФорм-МинФин.xlsx");
@@ -806,16 +810,16 @@ app.get("/api/templates/minfin", (_req, res) => {
 
 // --- Check rules (a_tblchecks analog) ---
 
-app.get("/api/checks/stats", (_req, res) => {
-  res.json(getChecksStats(getDb()));
-});
+app.get("/api/checks/stats", asyncRoute(async (_req, res) => {
+  res.json(await getChecksStats(await getDb()));
+}));
 
-app.get("/api/checks/export", (_req, res) => {
-  res.json(exportChecksPayload(getDb()));
-});
+app.get("/api/checks/export", asyncRoute(async (_req, res) => {
+  res.json(await exportChecksPayload(await getDb()));
+}));
 
-app.get("/api/checks", (req, res) => {
-  const db = getDb();
+app.get("/api/checks", asyncRoute(async (req, res) => {
+  const db = await getDb();
   const limit = Math.min(Number(req.query.limit) || 50, 500);
   const offset = Number(req.query.offset) || 0;
   const q = String(req.query.q ?? "").trim();
@@ -846,10 +850,10 @@ app.get("/api/checks", (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM check_rules ${where}`).get(...params) as { c: number }
+    await db.prepare(`SELECT COUNT(*) AS c FROM check_rules ${where}`).get(...params) as { c: number }
   ).c;
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT number, expression, expression_alt, message,
               for_aggr_only, first_level, active, period_active, period, info
@@ -865,11 +869,11 @@ app.get("/api/checks", (req, res) => {
     offset,
     items: rows.map(rowToDto),
   });
-});
+}));
 
-app.get("/api/checks/:number", (req, res) => {
-  const db = getDb();
-  const row = db
+app.get("/api/checks/:number", asyncRoute(async (req, res) => {
+  const db = await getDb();
+  const row = await db
     .prepare(
       `SELECT number, expression, expression_alt, message,
               for_aggr_only, first_level, active, period_active, period, info
@@ -881,18 +885,18 @@ app.get("/api/checks/:number", (req, res) => {
     return;
   }
   res.json(rowToDto(row));
-});
+}));
 
-app.post("/api/checks", (req, res) => {
+app.post("/api/checks", asyncRoute(async (req, res) => {
   const dto = req.body as CheckRuleDto;
   if (!dto.number || !dto.expression?.trim()) {
     res.status(400).json({ error: "number and expression required" });
     return;
   }
-  const db = getDb();
+  const db = await getDb();
   const r = dtoToRow(dto);
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO check_rules (
         number, expression, expression_alt, message,
         for_aggr_only, first_level, active, period_active, period, info
@@ -913,18 +917,18 @@ app.post("/api/checks", (req, res) => {
   } catch {
     res.status(409).json({ error: "Rule number already exists" });
   }
-});
+}));
 
-app.put("/api/checks/:number", (req, res) => {
+app.put("/api/checks/:number", asyncRoute(async (req, res) => {
   const dto = req.body as CheckRuleDto;
   const num = Number(req.params.number);
   if (dto.number !== num) {
     res.status(400).json({ error: "number mismatch" });
     return;
   }
-  const db = getDb();
+  const db = await getDb();
   const r = dtoToRow(dto);
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE check_rules SET
         expression = ?, expression_alt = ?, message = ?,
@@ -949,56 +953,58 @@ app.put("/api/checks/:number", (req, res) => {
     return;
   }
   res.json(dto);
-});
+}));
 
-app.delete("/api/checks/:number", (req, res) => {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM check_rules WHERE number = ?").run(Number(req.params.number));
+app.delete("/api/checks/:number", asyncRoute(async (req, res) => {
+  const db = await getDb();
+  const result = await db.prepare("DELETE FROM check_rules WHERE number = ?").run(Number(req.params.number));
   if (result.changes === 0) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/checks/reimport", (_req, res) => {
+app.post("/api/checks/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportCheckRulesFromJson(getDb());
+    const count = await reimportCheckRulesFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
 // --- Form templates (a_stblROWs / a_stblFIELDs analog) ---
 
-app.get("/api/forms/catalog", (_req, res) => {
-  res.json(exportCatalog(getDb()));
-});
+app.get("/api/forms/catalog", asyncRoute(async (_req, res) => {
+  res.json(await exportCatalog(await getDb()));
+}));
 
-app.get("/api/forms/:id", (req, res) => {
-  const schema = loadFormSchema(getDb(), req.params.id);
+app.get("/api/forms/:id", asyncRoute(async (req, res) => {
+  const schema = await loadFormSchema(await getDb(), req.params.id);
   if (!schema) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
   res.json(schema);
-});
+}));
 
-app.put("/api/forms/:id/meta", (req, res) => {
+app.put("/api/forms/:id/meta", asyncRoute(async (req, res) => {
   const formId = req.params.id;
-  const exists = loadFormSchema(getDb(), formId);
+  const db = await getDb();
+  const exists = await loadFormSchema(db, formId);
   if (!exists) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
-  updateFormMeta(getDb(), formId, req.body);
-  res.json(loadFormSchema(getDb(), formId));
-});
+  await updateFormMeta(db, formId, req.body);
+  res.json(await loadFormSchema(db, formId));
+}));
 
-app.put("/api/forms/:id/columns", (req, res) => {
+app.put("/api/forms/:id/columns", asyncRoute(async (req, res) => {
   const formId = req.params.id;
-  if (!loadFormSchema(getDb(), formId)) {
+  const db = await getDb();
+  if (!(await loadFormSchema(db, formId))) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
@@ -1007,13 +1013,14 @@ app.put("/api/forms/:id/columns", (req, res) => {
     res.status(400).json({ error: "columns array required" });
     return;
   }
-  replaceFormColumns(getDb(), formId, columns);
-  res.json(loadFormSchema(getDb(), formId));
-});
+  await replaceFormColumns(db, formId, columns);
+  res.json(await loadFormSchema(db, formId));
+}));
 
-app.put("/api/forms/:id/rows", (req, res) => {
+app.put("/api/forms/:id/rows", asyncRoute(async (req, res) => {
   const formId = req.params.id;
-  if (!loadFormSchema(getDb(), formId)) {
+  const db = await getDb();
+  if (!(await loadFormSchema(db, formId))) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
@@ -1022,54 +1029,55 @@ app.put("/api/forms/:id/rows", (req, res) => {
     res.status(400).json({ error: "rows array required" });
     return;
   }
-  replaceFormRows(getDb(), formId, rows);
-  res.json(loadFormSchema(getDb(), formId));
-});
+  await replaceFormRows(db, formId, rows);
+  res.json(await loadFormSchema(db, formId));
+}));
 
-app.put("/api/forms/:id/schema", (req, res) => {
+app.put("/api/forms/:id/schema", asyncRoute(async (req, res) => {
   const formId = req.params.id;
   const body = req.body as FormSchemaDto;
   if (body.id !== formId) {
     res.status(400).json({ error: "id mismatch" });
     return;
   }
-  if (!loadFormSchema(getDb(), formId)) {
+  const db = await getDb();
+  if (!(await loadFormSchema(db, formId))) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
-  updateFormMeta(getDb(), formId, {
+  await updateFormMeta(db, formId, {
     title: body.title,
     pages: body.pages,
     allowAddRows: body.allowAddRows,
     kontrForm: body.kontrForm,
     signatures: body.signatures,
   });
-  replaceFormColumns(getDb(), formId, body.columns);
-  replaceFormRows(getDb(), formId, body.rows);
-  res.json(loadFormSchema(getDb(), formId));
-});
+  await replaceFormColumns(db, formId, body.columns);
+  await replaceFormRows(db, formId, body.rows);
+  res.json(await loadFormSchema(db, formId));
+}));
 
-app.post("/api/forms/reimport", (_req, res) => {
+app.post("/api/forms/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportFormsFromJson(getDb());
+    const count = await reimportFormsFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
 // --- Saldo rules (a_tblsaldo) + FormCorrespondence ---
 
-app.get("/api/saldo/stats", (_req, res) => {
-  res.json(getSaldoStats(getDb()));
-});
+app.get("/api/saldo/stats", asyncRoute(async (_req, res) => {
+  res.json(await getSaldoStats(await getDb()));
+}));
 
-app.get("/api/saldo/export", (_req, res) => {
-  res.json(exportSaldoPayload(getDb()));
-});
+app.get("/api/saldo/export", asyncRoute(async (_req, res) => {
+  res.json(await exportSaldoPayload(await getDb()));
+}));
 
-app.get("/api/saldo", (req, res) => {
-  const db = getDb();
+app.get("/api/saldo", asyncRoute(async (req, res) => {
+  const db = await getDb();
   const limit = Math.min(Number(req.query.limit) || 50, 500);
   const offset = Number(req.query.offset) || 0;
   const q = String(req.query.q ?? "").trim();
@@ -1096,10 +1104,10 @@ app.get("/api/saldo", (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM saldo_rules ${where}`).get(...params) as { c: number }
+    await db.prepare(`SELECT COUNT(*) AS c FROM saldo_rules ${where}`).get(...params) as { c: number }
   ).c;
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT number, target_form, target_column, target_row,
               source_form, source_column, source_row,
@@ -1117,11 +1125,11 @@ app.get("/api/saldo", (req, res) => {
     offset,
     items: rows.map(saldoRowToDto),
   });
-});
+}));
 
-app.get("/api/saldo/:number", (req, res) => {
-  const db = getDb();
-  const row = db
+app.get("/api/saldo/:number", asyncRoute(async (req, res) => {
+  const db = await getDb();
+  const row = await db
     .prepare(
       `SELECT number, target_form, target_column, target_row,
               source_form, source_column, source_row,
@@ -1135,18 +1143,18 @@ app.get("/api/saldo/:number", (req, res) => {
     return;
   }
   res.json(saldoRowToDto(row));
-});
+}));
 
-app.post("/api/saldo", (req, res) => {
+app.post("/api/saldo", asyncRoute(async (req, res) => {
   const dto = req.body as SaldoRuleDto;
   if (!dto.number || !dto.targetForm?.trim()) {
     res.status(400).json({ error: "number and targetForm required" });
     return;
   }
-  const db = getDb();
+  const db = await getDb();
   const r = saldoDtoToRow(dto);
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO saldo_rules (
         number, target_form, target_column, target_row,
         source_form, source_column, source_row,
@@ -1174,14 +1182,14 @@ app.post("/api/saldo", (req, res) => {
   } catch (e) {
     res.status(409).json({ error: e instanceof Error ? e.message : "insert failed" });
   }
-});
+}));
 
-app.put("/api/saldo/:number", (req, res) => {
+app.put("/api/saldo/:number", asyncRoute(async (req, res) => {
   const dto = req.body as SaldoRuleDto;
   const number = Number(req.params.number);
-  const db = getDb();
+  const db = await getDb();
   const r = saldoDtoToRow({ ...dto, number });
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE saldo_rules SET
         target_form = ?, target_column = ?, target_row = ?,
@@ -1212,10 +1220,11 @@ app.put("/api/saldo/:number", (req, res) => {
     return;
   }
   res.json(saldoRowToDto(r));
-});
+}));
 
-app.delete("/api/saldo/:number", (req, res) => {
-  const result = getDb()
+app.delete("/api/saldo/:number", asyncRoute(async (req, res) => {
+  const db = await getDb();
+  const result = await db
     .prepare("DELETE FROM saldo_rules WHERE number = ?")
     .run(Number(req.params.number));
   if (result.changes === 0) {
@@ -1223,62 +1232,62 @@ app.delete("/api/saldo/:number", (req, res) => {
     return;
   }
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/saldo/reimport", (_req, res) => {
+app.post("/api/saldo/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportSaldoRulesFromJson(getDb());
+    const count = await reimportSaldoRulesFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
-app.get("/api/correspondence/export", (_req, res) => {
-  res.json(exportFormCorrespondencePayload(getDb()));
-});
+app.get("/api/correspondence/export", asyncRoute(async (_req, res) => {
+  res.json(await exportFormCorrespondencePayload(await getDb()));
+}));
 
-app.get("/api/correspondence/:formId", (req, res) => {
-  const item = getFormCorrespondence(getDb(), req.params.formId);
+app.get("/api/correspondence/:formId", asyncRoute(async (req, res) => {
+  const item = await getFormCorrespondence(await getDb(), req.params.formId);
   if (!item) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
   res.json(item);
-});
+}));
 
-app.put("/api/correspondence/:formId", (req, res) => {
+app.put("/api/correspondence/:formId", asyncRoute(async (req, res) => {
   const formId = req.params.formId;
   const body = req.body as FormCorrespondenceDto;
-  const updated = updateFormCorrespondence(getDb(), formId, { ...body, formId });
+  const updated = await updateFormCorrespondence(await getDb(), formId, { ...body, formId });
   if (!updated) {
     res.status(404).json({ error: "Form not found" });
     return;
   }
   res.json(updated);
-});
+}));
 
-app.post("/api/correspondence/reimport", (_req, res) => {
+app.post("/api/correspondence/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportFormCorrespondenceFromJson(getDb());
+    const count = await reimportFormCorrespondenceFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
 // --- Excel mappings (tblExcelExport) ---
 
-app.get("/api/excel/stats", (_req, res) => {
-  res.json(getExcelStats(getDb()));
-});
+app.get("/api/excel/stats", asyncRoute(async (_req, res) => {
+  res.json(await getExcelStats(await getDb()));
+}));
 
-app.get("/api/excel/export", (_req, res) => {
-  res.json(exportExcelPayload(getDb()));
-});
+app.get("/api/excel/export", asyncRoute(async (_req, res) => {
+  res.json(await exportExcelPayload(await getDb()));
+}));
 
-app.get("/api/excel", (req, res) => {
-  const db = getDb();
+app.get("/api/excel", asyncRoute(async (req, res) => {
+  const db = await getDb();
   const limit = Math.min(Number(req.query.limit) || 50, 500);
   const offset = Number(req.query.offset) || 0;
   const q = String(req.query.q ?? "").trim();
@@ -1301,10 +1310,10 @@ app.get("/api/excel", (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM excel_mappings ${where}`).get(...params) as { c: number }
+    await db.prepare(`SELECT COUNT(*) AS c FROM excel_mappings ${where}`).get(...params) as { c: number }
   ).c;
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT id, form_name, sheet_name, excel_row, excel_column,
               form_column, form_row, period, add_text
@@ -1320,59 +1329,66 @@ app.get("/api/excel", (req, res) => {
     offset,
     items: rows.map(excelRowToDto),
   });
-});
+}));
 
-app.get("/api/excel/:id", (req, res) => {
-  const item = getExcelMapping(getDb(), Number(req.params.id));
+app.get("/api/excel/:id", asyncRoute(async (req, res) => {
+  const item = await getExcelMapping(await getDb(), Number(req.params.id));
   if (!item) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json(item);
-});
+}));
 
-app.post("/api/excel", (req, res) => {
+app.post("/api/excel", asyncRoute(async (req, res) => {
   const dto = req.body as ExcelMappingDto;
   if (!dto.formName?.trim()) {
     res.status(400).json({ error: "formName required" });
     return;
   }
   try {
-    const created = createExcelMapping(getDb(), dto);
+    const created = await createExcelMapping(await getDb(), dto);
     res.status(201).json(created);
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "insert failed" });
   }
-});
+}));
 
-app.put("/api/excel/:id", (req, res) => {
+app.put("/api/excel/:id", asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
-  const updated = updateExcelMapping(getDb(), id, req.body as ExcelMappingDto);
+  const updated = await updateExcelMapping(await getDb(), id, req.body as ExcelMappingDto);
   if (!updated) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json(updated);
-});
+}));
 
-app.delete("/api/excel/:id", (req, res) => {
-  if (!deleteExcelMapping(getDb(), Number(req.params.id))) {
+app.delete("/api/excel/:id", asyncRoute(async (req, res) => {
+  if (!(await deleteExcelMapping(await getDb(), Number(req.params.id)))) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/excel/reimport", (_req, res) => {
+app.post("/api/excel/reimport", asyncRoute(async (_req, res) => {
   try {
-    const count = reimportExcelMappingsFromJson(getDb());
+    const count = await reimportExcelMappingsFromJson(await getDb());
     res.json({ reimported: count });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "reimport failed" });
   }
-});
+}));
 
-app.listen(PORT, () => {
-  getDb();
-  console.log(`OKO API http://localhost:${PORT}`);
-});
+bootstrapDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      const dialect = isPostgresMode() ? "postgresql" : "sqlite";
+      console.log(`OKO API http://localhost:${PORT} (${dialect})`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to start OKO API:", err);
+    process.exit(1);
+  });

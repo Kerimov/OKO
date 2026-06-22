@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import type { DatabaseSync } from "node:sqlite";
+import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
 export interface SaldoRuleRow {
@@ -57,35 +57,31 @@ const INSERT_SALDO = `INSERT INTO saldo_rules (
   saldo_t, saldo_s, saldo_g, name, conditional
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-export function migrateSaldoTables(db: DatabaseSync): void {
-  const cols = db.prepare("PRAGMA table_info(saldo_rules)").all() as Array<{ name: string }>;
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("saldo_t")) {
-    db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_t INTEGER DEFAULT 0");
+export async function migrateSaldoTables(db: OkoDb): Promise<void> {
+  if (!(await db.columnExists("saldo_rules", "saldo_t"))) {
+    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_t INTEGER DEFAULT 0");
   }
-  if (!names.has("saldo_s")) {
-    db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_s INTEGER DEFAULT 0");
+  if (!(await db.columnExists("saldo_rules", "saldo_s"))) {
+    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_s INTEGER DEFAULT 0");
   }
-  if (!names.has("saldo_g")) {
-    db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_g INTEGER DEFAULT 0");
+  if (!(await db.columnExists("saldo_rules", "saldo_g"))) {
+    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_g INTEGER DEFAULT 0");
   }
-  if (!names.has("name")) {
-    db.exec("ALTER TABLE saldo_rules ADD COLUMN name TEXT");
+  if (!(await db.columnExists("saldo_rules", "name"))) {
+    await db.exec("ALTER TABLE saldo_rules ADD COLUMN name TEXT");
   }
-  if (!names.has("conditional")) {
-    db.exec("ALTER TABLE saldo_rules ADD COLUMN conditional INTEGER DEFAULT 0");
+  if (!(await db.columnExists("saldo_rules", "conditional"))) {
+    await db.exec("ALTER TABLE saldo_rules ADD COLUMN conditional INTEGER DEFAULT 0");
   }
 
-  const tplCols = db.prepare("PRAGMA table_info(form_templates)").all() as Array<{ name: string }>;
-  const tplNames = new Set(tplCols.map((c) => c.name));
-  if (!tplNames.has("saldo_yellow")) {
-    db.exec("ALTER TABLE form_templates ADD COLUMN saldo_yellow TEXT");
+  if (!(await db.columnExists("form_templates", "saldo_yellow"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_yellow TEXT");
   }
-  if (!tplNames.has("saldo_red")) {
-    db.exec("ALTER TABLE form_templates ADD COLUMN saldo_red TEXT");
+  if (!(await db.columnExists("form_templates", "saldo_red"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_red TEXT");
   }
-  if (!tplNames.has("saldo_blue")) {
-    db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue TEXT");
+  if (!(await db.columnExists("form_templates", "saldo_blue"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue TEXT");
   }
 }
 
@@ -129,11 +125,11 @@ export function dtoToRow(dto: SaldoRuleDto): SaldoRuleRow {
   };
 }
 
-function insertSaldoRules(db: DatabaseSync, rules: SaldoRuleDto[]): void {
+async function insertSaldoRules(db: OkoDb, rules: SaldoRuleDto[]): Promise<void> {
   const insert = db.prepare(INSERT_SALDO);
   for (const dto of rules) {
     const r = dtoToRow(dto);
-    insert.run(
+    await insert.run(
       r.number,
       r.target_form,
       r.target_column,
@@ -153,54 +149,51 @@ function insertSaldoRules(db: DatabaseSync, rules: SaldoRuleDto[]): void {
   }
 }
 
-export function seedSaldoRulesFromJson(db: DatabaseSync): number {
+export async function seedSaldoRulesFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(SALDO_JSON)) return 0;
-  const count = db.prepare("SELECT COUNT(*) AS c FROM saldo_rules").get() as { c: number };
+  const count = (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules").get()) as { c: number };
   if (count.c > 0) return 0;
 
   const data = JSON.parse(fs.readFileSync(SALDO_JSON, "utf-8")) as { rules: SaldoRuleDto[] };
-  db.exec("BEGIN");
-  try {
-    insertSaldoRules(db, data.rules);
-    db.exec("COMMIT");
+  return db.transaction(async (tx) => {
+    await insertSaldoRules(tx, data.rules);
     return data.rules.length;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function reimportSaldoRulesFromJson(db: DatabaseSync): number {
+export async function reimportSaldoRulesFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(SALDO_JSON)) throw new Error("saldo-rules.json not found");
   const data = JSON.parse(fs.readFileSync(SALDO_JSON, "utf-8")) as { rules: SaldoRuleDto[] };
-  db.exec("DELETE FROM saldo_rules");
-  db.exec("BEGIN");
-  try {
-    insertSaldoRules(db, data.rules);
-    db.exec("COMMIT");
+  await db.exec("DELETE FROM saldo_rules");
+  return db.transaction(async (tx) => {
+    await insertSaldoRules(tx, data.rules);
     return data.rules.length;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function getSaldoStats(db: DatabaseSync) {
-  const total = (db.prepare("SELECT COUNT(*) AS c FROM saldo_rules").get() as { c: number }).c;
+export async function getSaldoStats(db: OkoDb) {
+  const total = ((await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules").get()) as { c: number })
+    .c;
   const typeT = (
-    db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_t = 1").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_t = 1").get()) as {
+      c: number;
+    }
   ).c;
   const typeS = (
-    db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_s = 1").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_s = 1").get()) as {
+      c: number;
+    }
   ).c;
   const typeG = (
-    db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_g = 1").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_g = 1").get()) as {
+      c: number;
+    }
   ).c;
   return { total, typeT, typeS, typeG };
 }
 
-export function exportSaldoPayload(db: DatabaseSync) {
-  const rows = db
+export async function exportSaldoPayload(db: OkoDb) {
+  const rows = (await db
     .prepare(
       `SELECT number, target_form, target_column, target_row,
               source_form, source_column, source_row,
@@ -208,8 +201,8 @@ export function exportSaldoPayload(db: DatabaseSync) {
               saldo_t, saldo_s, saldo_g, name, conditional
        FROM saldo_rules ORDER BY number`
     )
-    .all() as SaldoRuleRow[];
-  const stats = getSaldoStats(db);
+    .all()) as SaldoRuleRow[];
+  const stats = await getSaldoStats(db);
   return {
     version: "2.0",
     source: "sqlite:saldo_rules",
@@ -218,10 +211,12 @@ export function exportSaldoPayload(db: DatabaseSync) {
   };
 }
 
-export function seedFormCorrespondenceFromJson(db: DatabaseSync): number {
+export async function seedFormCorrespondenceFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(CORRESPONDENCE_JSON)) return 0;
   const seeded = (
-    db.prepare("SELECT COUNT(*) AS c FROM form_templates WHERE saldo_yellow IS NOT NULL").get() as {
+    (await db
+      .prepare("SELECT COUNT(*) AS c FROM form_templates WHERE saldo_yellow IS NOT NULL")
+      .get()) as {
       c: number;
     }
   ).c;
@@ -233,7 +228,7 @@ export function seedFormCorrespondenceFromJson(db: DatabaseSync): number {
   return applyCorrespondenceList(db, data.forms);
 }
 
-export function reimportFormCorrespondenceFromJson(db: DatabaseSync): number {
+export async function reimportFormCorrespondenceFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(CORRESPONDENCE_JSON)) throw new Error("form-correspondence.json not found");
   const data = JSON.parse(fs.readFileSync(CORRESPONDENCE_JSON, "utf-8")) as {
     forms: FormCorrespondenceDto[];
@@ -241,18 +236,17 @@ export function reimportFormCorrespondenceFromJson(db: DatabaseSync): number {
   return applyCorrespondenceList(db, data.forms);
 }
 
-function applyCorrespondenceList(db: DatabaseSync, forms: FormCorrespondenceDto[]): number {
-  const update = db.prepare(
-    `UPDATE form_templates SET
+async function applyCorrespondenceList(db: OkoDb, forms: FormCorrespondenceDto[]): Promise<number> {
+  return db.transaction(async (tx) => {
+    const update = tx.prepare(
+      `UPDATE form_templates SET
       saldo_yellow = ?, saldo_red = ?, saldo_blue = ?,
       pages = COALESCE(?, pages)
      WHERE form_id = ?`
-  );
-  let n = 0;
-  db.exec("BEGIN");
-  try {
+    );
+    let n = 0;
     for (const f of forms) {
-      const result = update.run(
+      const result = await update.run(
         f.saldoYellow ?? null,
         f.saldoRed ?? null,
         f.saldoBlue ?? null,
@@ -261,21 +255,17 @@ function applyCorrespondenceList(db: DatabaseSync, forms: FormCorrespondenceDto[
       );
       if (result.changes > 0) n++;
     }
-    db.exec("COMMIT");
     return n;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  });
 }
 
-export function exportFormCorrespondencePayload(db: DatabaseSync) {
-  const rows = db
+export async function exportFormCorrespondencePayload(db: OkoDb) {
+  const rows = (await db
     .prepare(
       `SELECT form_id, pages, saldo_yellow, saldo_red, saldo_blue
        FROM form_templates ORDER BY sort_order, form_id`
     )
-    .all() as Array<{
+    .all()) as Array<{
     form_id: string;
     pages: number;
     saldo_yellow: string | null;
@@ -299,13 +289,16 @@ export function exportFormCorrespondencePayload(db: DatabaseSync) {
   };
 }
 
-export function getFormCorrespondence(db: DatabaseSync, formId: string): FormCorrespondenceDto | null {
-  const row = db
+export async function getFormCorrespondence(
+  db: OkoDb,
+  formId: string
+): Promise<FormCorrespondenceDto | null> {
+  const row = (await db
     .prepare(
       `SELECT form_id, pages, saldo_yellow, saldo_red, saldo_blue
        FROM form_templates WHERE form_id = ?`
     )
-    .get(formId) as
+    .get(formId)) as
     | {
         form_id: string;
         pages: number;
@@ -324,19 +317,21 @@ export function getFormCorrespondence(db: DatabaseSync, formId: string): FormCor
   };
 }
 
-export function updateFormCorrespondence(
-  db: DatabaseSync,
+export async function updateFormCorrespondence(
+  db: OkoDb,
   formId: string,
   patch: FormCorrespondenceDto
-): FormCorrespondenceDto | null {
-  const exists = db.prepare("SELECT 1 FROM form_templates WHERE form_id = ?").get(formId);
+): Promise<FormCorrespondenceDto | null> {
+  const exists = await db.prepare("SELECT 1 FROM form_templates WHERE form_id = ?").get(formId);
   if (!exists) return null;
 
-  db.prepare(
-    `UPDATE form_templates SET
+  await db
+    .prepare(
+      `UPDATE form_templates SET
       saldo_yellow = ?, saldo_red = ?, saldo_blue = ?
      WHERE form_id = ?`
-  ).run(patch.saldoYellow ?? null, patch.saldoRed ?? null, patch.saldoBlue ?? null, formId);
+    )
+    .run(patch.saldoYellow ?? null, patch.saldoRed ?? null, patch.saldoBlue ?? null, formId);
 
   return getFormCorrespondence(db, formId);
 }
