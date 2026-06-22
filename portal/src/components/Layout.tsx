@@ -9,8 +9,43 @@ import {
 } from "../auth";
 import { isBackendMode } from "../storage";
 
-export function Layout() {
+type NavItem = {
+  to: string;
+  label: string;
+  isActive: (pathname: string) => boolean;
+};
+
+type NavSection = {
+  title?: string;
+  items: NavItem[];
+};
+
+function SidebarLink({ item }: { item: NavItem }) {
   const { pathname } = useLocation();
+  const active = item.isActive(pathname);
+  return (
+    <li>
+      <Link to={item.to} className={active ? "active" : ""}>
+        {item.label}
+      </Link>
+    </li>
+  );
+}
+
+function SidebarSection({ section }: { section: NavSection }) {
+  return (
+    <div className="sidebar-section">
+      {section.title && <div className="sidebar-section-title">{section.title}</div>}
+      <ul className="sidebar-nav">
+        {section.items.map((item) => (
+          <SidebarLink key={item.to} item={item} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function Layout() {
   const adminNav = isBackendMode() && isAdminRole();
   const orgUser = isOrgUser();
   const user = getCurrentUser();
@@ -20,111 +55,104 @@ export function Layout() {
     window.location.href = "/login";
   };
 
+  const workSection: NavSection = {
+    title: "Работа",
+    items: [
+      { to: "/", label: "Каталог", isActive: (p) => p === "/" },
+      { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
+      { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
+    ],
+  };
+
+  const sections: NavSection[] = [workSection];
+
+  if (!orgUser) {
+    sections.push({
+      title: "Операции",
+      items: [
+        { to: "/tools", label: "Сводка и импорт", isActive: (p) => p === "/tools" },
+      ],
+    });
+  }
+
+  if (adminNav) {
+    sections.push({
+      title: "Редакторы",
+      items: [
+        { to: "/admin/forms", label: "Формы", isActive: (p) => p === "/admin/forms" },
+        {
+          to: "/admin/checks",
+          label: "Увязки",
+          isActive: (p) => p.startsWith("/admin/checks"),
+        },
+        { to: "/admin/saldo", label: "Сальдо", isActive: (p) => p === "/admin/saldo" },
+        { to: "/admin/excel", label: "Excel", isActive: (p) => p === "/admin/excel" },
+        { to: "/admin/rash", label: "Расшифровки", isActive: (p) => p === "/admin/rash" },
+        {
+          to: "/admin/aggregation",
+          label: "Агрегация",
+          isActive: (p) => p === "/admin/aggregation",
+        },
+      ],
+    });
+    sections.push({
+      title: "Администрирование",
+      items: [
+        {
+          to: "/admin/packages",
+          label: "Комплекты",
+          isActive: (p) => p === "/admin/packages",
+        },
+        { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" },
+        { to: "/admin/audit", label: "Аудит", isActive: (p) => p === "/admin/audit" },
+      ],
+    });
+  }
+
+  sections.push({
+    items: [{ to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" }],
+  });
+
   return (
     <div className="app">
-      <header className="header">
-        <Link to="/" className="logo">
-          <span className="logo-mark">ОКО</span>
-          <span className="logo-text">Портал форм корпоративной отчётности</span>
+      <aside className="sidebar">
+        <Link to="/" className="sidebar-brand">
+          <span className="sidebar-brand-mark">ОКО</span>
+          <span className="sidebar-brand-text">
+            <span className="sidebar-brand-title">Портал</span>
+            <span className="sidebar-brand-sub">Корп. отчётность</span>
+          </span>
         </Link>
-        <nav className="header-nav">
-          <Link to="/" className={pathname === "/" ? "active" : ""}>
-            Каталог шаблонов
-          </Link>
-          <Link
-            to="/my"
-            className={pathname.startsWith("/my") ? "active" : ""}
-          >
-            Мои формы ОКО
-          </Link>
-          {!orgUser && (
-            <Link to="/tools" className={pathname === "/tools" ? "active" : ""}>
-              Администрирование
-            </Link>
+
+        <nav className="sidebar-menu">
+          {sections.map((section, i) => (
+            <SidebarSection key={section.title ?? `section-${i}`} section={section} />
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          {user && (
+            <div className="sidebar-user" title={user.username}>
+              <span className="sidebar-user-name">{user.displayName || user.username}</span>
+              {user.organizationName && (
+                <span className="sidebar-user-org">{user.organizationName}</span>
+              )}
+            </div>
           )}
-          <Link to="/package" className={pathname === "/package" ? "active" : ""}>
-            Комплект
-          </Link>
-          {adminNav && (
-            <>
-              <Link
-                to="/admin/forms"
-                className={pathname === "/admin/forms" ? "active" : ""}
-              >
-                Конструктор
-              </Link>
-              <Link
-                to="/admin/checks"
-                className={pathname.startsWith("/admin/checks") ? "active" : ""}
-              >
-                Увязки
-              </Link>
-              <Link
-                to="/admin/saldo"
-                className={pathname === "/admin/saldo" ? "active" : ""}
-              >
-                Сальдо
-              </Link>
-              <Link
-                to="/admin/excel"
-                className={pathname === "/admin/excel" ? "active" : ""}
-              >
-                Excel
-              </Link>
-              <Link
-                to="/admin/rash"
-                className={pathname === "/admin/rash" ? "active" : ""}
-              >
-                Расшифровки
-              </Link>
-              <Link
-                to="/admin/aggregation"
-                className={pathname === "/admin/aggregation" ? "active" : ""}
-              >
-                Агрегация
-              </Link>
-              <Link
-                to="/admin/packages"
-                className={pathname === "/admin/packages" ? "active" : ""}
-              >
-                Комплекты
-              </Link>
-              <Link
-                to="/admin/users"
-                className={pathname === "/admin/users" ? "active" : ""}
-              >
-                Пользователи
-              </Link>
-              <Link
-                to="/admin/audit"
-                className={pathname === "/admin/audit" ? "active" : ""}
-              >
-                Аудит
-              </Link>
-            </>
-          )}
-          <Link to="/settings" className={pathname === "/settings" ? "active" : ""}>
-            Настройки
-          </Link>
           {isBackendMode() && getApiRole() && isLoginAvailable() && (
-            <button type="button" className="header-logout" onClick={handleLogout}>
+            <button type="button" className="sidebar-logout" onClick={handleLogout}>
               Выйти
             </button>
           )}
-        </nav>
-        {user && (
-          <div className="header-user" title={user.username}>
-            {user.displayName || user.username}
-            {user.organizationName ? ` · ${user.organizationName}` : ""}
-          </div>
-        )}
-      </header>
-      <main className="main">
-        <Outlet />
-      </main>
-      <footer className="footer">
-        Формы корпоративной (специализированной) отчётности · 76 форм
-      </footer>
+        </div>
+      </aside>
+
+      <div className="app-main">
+        <main className="main">
+          <Outlet />
+        </main>
+        <footer className="footer">Формы корпоративной отчётности · 76 форм</footer>
+      </div>
     </div>
   );
 }
