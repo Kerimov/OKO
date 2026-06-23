@@ -11,7 +11,7 @@ import {
   type RashRule,
 } from "../api";
 import { KONTR_FORM_IDS } from "../constants";
-import { parseTotalColumn } from "../engine/rashEngine";
+import { getRashRulesForForm, parseTotalColumn } from "../engine/rashEngine";
 import type { RashThresholds } from "../types";
 import { isBackendMode } from "../storage";
 import { useAdminAccess } from "../components/AdminAccessGate";
@@ -85,7 +85,7 @@ export function RashEditorPage() {
           );
         }
         if (formFilter) {
-          filtered = filtered.filter((r) => (r.refRows ?? "").includes(formFilter));
+          filtered = getRashRulesForForm(filtered, formFilter);
         }
         setTotal(filtered.length);
         setItems(filtered.slice(offset, offset + limit));

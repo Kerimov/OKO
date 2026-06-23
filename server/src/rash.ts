@@ -149,6 +149,30 @@ function addsumRowToDto(row: RashAddsumRow): RashAddsumDto {
   };
 }
 
+function formIdFromRashRefRow(ref: string): string {
+  const parts = ref.trim().split("_");
+  if (parts.length < 2) return ref.trim();
+  if (parts[0].startsWith("N") && parts.length >= 3) {
+    return `${parts[0]}_${parts[1]}`;
+  }
+  return ref.trim();
+}
+
+export function rashRuleMatchesForm(
+  rule: Pick<RashRuleDto, "name" | "refRows">,
+  formId: string
+): boolean {
+  const name = rule.name ?? "";
+  if (name === formId || name.startsWith(`${formId}_`)) return true;
+  if (!rule.refRows) return false;
+  return rule.refRows.split(",").some((token) => {
+    const trimmed = token.trim();
+    if (!trimmed) return false;
+    const fid = formIdFromRashRefRow(trimmed);
+    return fid === formId || trimmed === formId || trimmed.startsWith(`${formId}_`);
+  });
+}
+
 function loadJsonPayload(): {
   rules: RashRuleDto[];
   addsum: RashAddsumDto[];

@@ -724,8 +724,8 @@ app.get("/api/rash", asyncRoute(async (req, res) => {
     params.push(like, like, like, like);
   }
   if (formId) {
-    conditions.push("ref_rows LIKE ?");
-    params.push(`%${formId}%`);
+    conditions.push("(name = ? OR name LIKE ? OR ref_rows LIKE ?)");
+    params.push(formId, `${formId}_%`, `%${formId}%`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
