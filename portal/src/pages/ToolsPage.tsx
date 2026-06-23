@@ -250,13 +250,19 @@ export function ToolsPage() {
     }
   };
 
-  const handlePackageJson = () => {
+  const handlePackageJson = async () => {
     if (periodInstances.length === 0) {
       setStatus("Нет форм за текущий период");
       return;
     }
-    downloadReportPackage(periodInstances);
-    setStatus(`Экспорт JSON: ${periodInstances.length} форм`);
+    try {
+      await downloadReportPackage(periodInstances);
+      setStatus(
+        `Экспорт JSON: ${periodInstances.length} форм (с правилами проверок и расшифровок)`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка экспорта JSON");
+    }
   };
 
   const handleImportPackage = async (file: File) => {
