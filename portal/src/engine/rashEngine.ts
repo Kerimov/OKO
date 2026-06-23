@@ -40,6 +40,7 @@ export function formIdFromRefRow(ref: string): string {
 
 export function getRashRulesForForm(rules: RashRule[], formId: string): RashRule[] {
   return rules.filter((r) => {
+    if (r.name === formId || r.name.startsWith(`${formId}_`)) return true;
     if (!r.refRows) return false;
     return r.refRows.split(",").some((token) => {
       const fid = formIdFromRefRow(token.trim());
