@@ -1,15 +1,16 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../apiClient";
-import { isAdminRole } from "../auth";
 import type { UserDto } from "../auth";
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 export function UsersAdminPage() {
   const backend = isBackendMode();
-  const admin = isAdminRole();
+  const auth = useAuth();
+  const admin = !auth.authRequired || auth.role === "admin";
   const [users, setUsers] = useState<UserDto[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [error, setError] = useState("");

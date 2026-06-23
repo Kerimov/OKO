@@ -1,15 +1,17 @@
 import { Link } from "react-router-dom";
-import { isAdminRole } from "../auth";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 export function useAdminAccess(): { ok: boolean; reason: "backend" | "admin" | null } {
+  const auth = useAuth();
   if (!isBackendMode()) return { ok: false, reason: "backend" };
-  if (!isAdminRole()) return { ok: false, reason: "admin" };
+  if (auth.authRequired && auth.role !== "admin") return { ok: false, reason: "admin" };
   return { ok: true, reason: null };
 }
 
 export function AdminAccessGate({ title }: { title: string }) {
   const access = useAdminAccess();
+  const auth = useAuth();
   if (access.ok) return null;
   if (access.reason === "backend") {
     return (
@@ -26,8 +28,16 @@ export function AdminAccessGate({ title }: { title: string }) {
     <div className="admin-page">
       <h1>{title}</h1>
       <div className="error-box">
-        Нужна роль <strong>admin</strong>. Укажите admin-токен в{" "}
-        <Link to="/settings">настройках</Link>.
+        Нужна роль <strong>admin</strong>.{" "}
+        {auth.loginAvailable ? (
+          <>
+            Войдите через <Link to="/login">/login</Link>.
+          </>
+        ) : (
+          <>
+            Укажите admin-токен в <Link to="/settings">настройках</Link>.
+          </>
+        )}
       </div>
     </div>
   );

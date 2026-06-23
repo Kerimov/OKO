@@ -15,18 +15,32 @@ export function apiUrl(path: string): string {
 
 export function getApiToken(): string | null {
   try {
-    return sessionStorage.getItem(TOKEN_KEY);
+    const ls = localStorage.getItem(TOKEN_KEY);
+    if (ls) return ls;
+    const ss = sessionStorage.getItem(TOKEN_KEY);
+    // one-time migration (older builds used sessionStorage)
+    if (ss) {
+      localStorage.setItem(TOKEN_KEY, ss);
+      sessionStorage.removeItem(TOKEN_KEY);
+      return ss;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
 export function setApiToken(token: string): void {
-  sessionStorage.setItem(TOKEN_KEY, token.trim());
+  localStorage.setItem(TOKEN_KEY, token.trim());
 }
 
 export function clearApiToken(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function apiHeaders(extra?: HeadersInit): HeadersInit {
