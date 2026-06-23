@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { downloadReportPackage } from "../engine/packageExport";
-import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
+import { loadWorkPackageInstances } from "../engine/workPackageInstances";
+import { listOrganizations, listPeriods } from "../packagesApi";
 import { isOfflineKitMode } from "../offlineMode";
-import { loadAllInstances } from "../storage";
 import type { OkoFormInstance } from "../types";
 
 export function OfflineExportPage() {
@@ -15,22 +15,18 @@ export function OfflineExportPage() {
 
   useEffect(() => {
     (async () => {
-      const [work, orgs, all] = await Promise.all([
-        loadWorkContext(),
-        listOrganizations(),
-        loadAllInstances(),
-      ]);
-      const org = orgs.find((o) => o.zid === work.zid);
-      setOrgName(org?.name ?? "—");
-      if (work.zid != null && work.eid != null) {
-        const periods = await listPeriods(work.zid);
-        const period = periods.find((p) => p.eid === work.eid);
+      const { instances, zid, eid } = await loadWorkPackageInstances();
+      setInstances(instances);
+      if (zid != null && eid != null) {
+        const orgs = await listOrganizations();
+        const org = orgs.find((o) => Number(o.zid) === zid);
+        setOrgName(org?.name ?? "—");
+        const periods = await listPeriods(zid);
+        const period = periods.find((p) => Number(p.eid) === eid);
         setPeriodLabel(period?.name ?? "—");
-        setInstances(
-          all.filter((i) => i.zid === work.zid && i.eid === work.eid)
-        );
       } else {
-        setInstances(all);
+        setOrgName("—");
+        setPeriodLabel("—");
       }
     })();
   }, []);

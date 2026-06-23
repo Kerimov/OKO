@@ -284,8 +284,14 @@ export async function listInstances(filter?: {
 }): Promise<InstanceSummary[]> {
   if (!useBackend) {
     let list = readIndexLocal();
-    if (filter?.zid != null) list = list.filter((s) => s.zid === filter.zid);
-    if (filter?.eid != null) list = list.filter((s) => s.eid === filter.eid);
+    if (filter?.zid != null) {
+      const zid = Number(filter.zid);
+      list = list.filter((s) => Number(s.zid) === zid);
+    }
+    if (filter?.eid != null) {
+      const eid = Number(filter.eid);
+      list = list.filter((s) => Number(s.eid) === eid);
+    }
     return list.sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
