@@ -1,4 +1,5 @@
 import type { OkoFormInstance } from "../types";
+import type { PackageRulesBundle } from "./packageRules";
 
 export interface ReportPackage {
   version: string;
@@ -10,13 +11,20 @@ export interface ReportPackage {
   eid?: number | null;
   instanceCount: number;
   instances: OkoFormInstance[];
+  /** Правила проверок и справочники с ЦО (v1.2+). */
+  rules?: PackageRulesBundle;
 }
 
-export function buildReportPackage(instances: OkoFormInstance[]): ReportPackage {
+export async function buildReportPackage(
+  instances: OkoFormInstance[],
+  options?: { includeRules?: boolean }
+): Promise<ReportPackage> {
   const meta = instances[0]?.meta;
   const first = instances[0];
-  return {
-    version: "1.1",
+  const { loadPackageRulesBundle } = await import("./packageRules");
+
+  const pkg: ReportPackage = {
+    version: "1.2",
     exportedAt: new Date().toISOString(),
     organization: meta?.organization ?? "",
     periodStart: meta?.periodStart ?? "",
@@ -26,13 +34,19 @@ export function buildReportPackage(instances: OkoFormInstance[]): ReportPackage 
     instanceCount: instances.length,
     instances,
   };
+
+  if (options?.includeRules !== false) {
+    pkg.rules = await loadPackageRulesBundle();
+  }
+
+  return pkg;
 }
 
-export function downloadReportPackage(
+export async function downloadReportPackage(
   instances: OkoFormInstance[],
   filename?: string
-): void {
-  const pkg = buildReportPackage(instances);
+): Promise<void> {
+  const pkg = await buildReportPackage(instances);
   const blob = new Blob([JSON.stringify(pkg, null, 2)], {
     type: "application/json",
   });
@@ -93,6 +107,7 @@ export function parseReportPackageFile(text: string): ReportPackage {
     eid: data.eid ?? data.instances[0]?.eid ?? null,
     instanceCount: data.instances.length,
     instances: data.instances as OkoFormInstance[],
+    rules: data.rules,
   };
 }
 

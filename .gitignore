@@ -3,6 +3,11 @@
 portal/node_modules
 portal/dist
 server/node_modules
+desktop/filler/node_modules
+desktop/filler/dist
+desktop/filler/dist-electron
+desktop/filler/release
+desktop/filler/installer
 
 # SQLite database
 data/oko.db
