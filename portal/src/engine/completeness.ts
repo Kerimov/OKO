@@ -10,15 +10,23 @@ export interface CompletenessItem {
   displayName?: string;
 }
 
+function numId(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 export async function getCompleteness(
   summaries: InstanceSummary[],
   filter?: { zid?: number; eid?: number; start?: string; end?: string }
 ): Promise<{ total: number; filled: number; items: CompletenessItem[] }> {
   const catalog = await loadCatalog();
+  const filterZid = filter?.zid != null ? numId(filter.zid) : null;
+  const filterEid = filter?.eid != null ? numId(filter.eid) : null;
   const filtered = summaries.filter((s) => {
-    if (filter?.zid != null && s.zid !== filter.zid) return false;
-    if (filter?.eid != null && s.eid !== filter.eid) return false;
-    if (filter?.zid == null && filter?.eid == null) {
+    if (filterZid != null && numId(s.zid) !== filterZid) return false;
+    if (filterEid != null && numId(s.eid) !== filterEid) return false;
+    if (filterZid == null && filterEid == null) {
       if (filter?.start && s.periodStart !== filter.start) return false;
       if (filter?.end && s.periodEnd !== filter.end) return false;
     }

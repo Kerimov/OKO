@@ -1,5 +1,5 @@
 import type { OkoDb } from "./oko-db.js";
-import { dateOrNull, dateToString } from "./dbValues.js";
+import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -258,8 +258,8 @@ export async function loadInstanceFromDb(
     templateId: header.template_id,
     templateTitle: header.template_title ?? header.template_id,
     displayName: header.display_name,
-    zid: header.zid,
-    eid: header.eid,
+    zid: intOrNull(header.zid),
+    eid: intOrNull(header.eid),
     status: normalizeInstanceStatus(header.status),
     meta: {
       organization: header.organization ?? "",
@@ -323,28 +323,32 @@ export async function listInstanceSummaries(
     updated_at: string;
   }>;
 
-  if (normalized.length > 0 || where) {
-    return normalized.map((r) => ({
-      instanceId: r.instance_id,
-      templateId: r.template_id,
-      templateTitle: r.template_title ?? r.template_id,
-      displayName: r.display_name,
-      organization: r.organization ?? "",
-      periodStart: dateToString(r.period_start),
-      periodEnd: dateToString(r.period_end),
-      zid: r.zid,
-      eid: r.eid,
-      status: normalizeInstanceStatus(r.status),
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
-  }
+  const mapRow = (r: (typeof normalized)[0]) => ({
+    instanceId: r.instance_id,
+    templateId: r.template_id,
+    templateTitle: r.template_title ?? r.template_id,
+    displayName: r.display_name,
+    organization: r.organization ?? "",
+    periodStart: dateToString(r.period_start),
+    periodEnd: dateToString(r.period_end),
+    zid: intOrNull(r.zid),
+    eid: intOrNull(r.eid),
+    status: normalizeInstanceStatus(r.status),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  });
 
-  const legacy = (await db
+  let results = normalized.map(mapRow);
+
+  const legacyOnly = (await db
     .prepare(
-      `SELECT instance_id, template_id, template_title, display_name, organization,
-              period_start, period_end, created_at, updated_at
-       FROM portal_instances ORDER BY updated_at DESC`
+      `SELECT p.instance_id, p.template_id, p.template_title, p.display_name, p.organization,
+              p.period_start, p.period_end, p.payload, p.created_at, p.updated_at
+       FROM portal_instances p
+       WHERE NOT EXISTS (
+         SELECT 1 FROM form_instances f WHERE f.instance_id = p.instance_id
+       )
+       ORDER BY p.updated_at DESC`
     )
     .all()) as Array<{
     instance_id: string;
@@ -354,24 +358,84 @@ export async function listInstanceSummaries(
     organization: string;
     period_start: string;
     period_end: string;
+    payload: string;
     created_at: string;
     updated_at: string;
   }>;
 
-  return legacy.map((r) => ({
-    instanceId: r.instance_id,
-    templateId: r.template_id,
-    templateTitle: r.template_title,
-    displayName: r.display_name,
-    organization: r.organization,
-    periodStart: dateToString(r.period_start),
-    periodEnd: dateToString(r.period_end),
-    zid: null,
-    eid: null,
-    status: "draft" as const,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
+  for (const r of legacyOnly) {
+    let zid: number | null = null;
+    let eid: number | null = null;
+    try {
+      const inst = JSON.parse(r.payload) as OkoFormInstance;
+      zid = intOrNull(inst.zid);
+      eid = intOrNull(inst.eid);
+    } catch {
+      /* ignore invalid payload */
+    }
+    results.push({
+      instanceId: r.instance_id,
+      templateId: r.template_id,
+      templateTitle: r.template_title,
+      displayName: r.display_name,
+      organization: r.organization,
+      periodStart: dateToString(r.period_start),
+      periodEnd: dateToString(r.period_end),
+      zid,
+      eid,
+      status: "draft" as const,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    });
+  }
+
+  if (results.length === 0) {
+    const legacy = (await db
+      .prepare(
+        `SELECT instance_id, template_id, template_title, display_name, organization,
+                period_start, period_end, created_at, updated_at
+         FROM portal_instances ORDER BY updated_at DESC`
+      )
+      .all()) as Array<{
+      instance_id: string;
+      template_id: string;
+      template_title: string;
+      display_name: string;
+      organization: string;
+      period_start: string;
+      period_end: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+
+    results = legacy.map((r) => ({
+      instanceId: r.instance_id,
+      templateId: r.template_id,
+      templateTitle: r.template_title,
+      displayName: r.display_name,
+      organization: r.organization,
+      periodStart: dateToString(r.period_start),
+      periodEnd: dateToString(r.period_end),
+      zid: null,
+      eid: null,
+      status: "draft" as const,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  if (filter?.zid != null || filter?.eid != null) {
+    results = results.filter((s) => {
+      if (filter.zid != null && intOrNull(s.zid) !== filter.zid) return false;
+      if (filter.eid != null && intOrNull(s.eid) !== filter.eid) return false;
+      return true;
+    });
+  }
+
+  results.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+  return results;
 }
 
 export async function deleteInstanceFromDb(db: OkoDb, instanceId: string): Promise<void> {

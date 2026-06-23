@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loadSchema } from "../api";
 import { listAggEntries, runPackageAggregation } from "../aggregationApi";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
@@ -15,10 +15,10 @@ import { getCompleteness, type CompletenessItem } from "../engine/completeness";
 import { exportPackageToExcel } from "../engine/exportExcel";
 import {
   downloadReportPackage,
-  filterInstancesByPeriod,
   readReportPackageFile,
 } from "../engine/packageExport";
 import { downloadOfflineKit } from "../engine/offlineKitDownload";
+import { loadWorkPackageInstances } from "../engine/workPackageInstances";
 import { loadWorkContext, listOrganizations, listPeriods, importReportPackage } from "../packagesApi";
 import { recalcForm } from "../engine/recalcEngine";
 import {
@@ -40,6 +40,7 @@ import type { InstanceSummary, OkoFormInstance } from "../types";
 
 export function ToolsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [summaries, setSummaries] = useState<InstanceSummary[]>([]);
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
   const [checking, setChecking] = useState(false);
@@ -114,18 +115,12 @@ export function ToolsPage() {
 
   useEffect(() => {
     (async () => {
-      const work = await loadWorkContext();
-      setWorkZid(work.zid);
-      setWorkEid(work.eid);
-      const all = await loadAllInstances();
-      if (work.zid != null && work.eid != null) {
-        setPeriodInstances(all.filter((i) => i.zid === work.zid && i.eid === work.eid));
-      } else {
-        const meta = await loadGlobalMeta();
-        setPeriodInstances(filterInstancesByPeriod(all, meta.periodStart, meta.periodEnd));
-      }
+      const { instances, zid, eid } = await loadWorkPackageInstances();
+      setWorkZid(zid);
+      setWorkEid(eid);
+      setPeriodInstances(instances);
     })();
-  }, [summaries]);
+  }, [summaries, location.pathname]);
 
   const byTemplate = useMemo(() => {
     const map = new Map<string, InstanceSummary[]>();
@@ -513,6 +508,13 @@ export function ToolsPage() {
           />
           Перезаписать существующие формы комплекта (иначе — только новые шаблоны)
         </label>
+        {periodInstances.length === 0 && workZid != null && workEid != null && (
+          <p className="hint-text" style={{ marginTop: "0.75rem" }}>
+            Формы для ZID={workZid}, EID={workEid} не найдены. В разделе{" "}
+            <Link to="/package">Комплект</Link> выберите эту организацию и период, затем
+            нажмите «Завести пустые формы».
+          </p>
+        )}
       </section>
 
       <section className="tools-section">

@@ -18,3 +18,10 @@ export function dateOrNull(value: unknown): string | null {
 export function dateToString(value: unknown): string {
   return dateOrNull(value) ?? "";
 }
+
+/** Normalize integer IDs from PostgreSQL/SQLite/API (may arrive as strings). */
+export function intOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
