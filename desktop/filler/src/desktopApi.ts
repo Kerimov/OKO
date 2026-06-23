@@ -1,4 +1,6 @@
-import type { OkoFormInstance, InstanceSummary, FormSchema, FormCatalog } from "@portal/types";
+import type { OkoFormInstance, InstanceSummary, FormSchema, FormCatalog, RowData, KontrAgent } from "@portal/types";
+import type { CheckRunResult } from "@portal/engine/checkRunCore";
+import type { RashValidationIssue } from "@portal/engine/rashEngine";
 import type { OpenPackageResult, SessionInfo } from "./types";
 
 export interface OkoDesktopApi {
@@ -29,7 +31,17 @@ export interface OkoDesktopApi {
   loadSchema: (formId: string) => Promise<FormSchema>;
   loadCatalog: () => Promise<FormCatalog>;
   readPublicJson: (relativePath: string) => Promise<unknown>;
+  runFormChecks: (
+    formId: string,
+    live?: { instanceId: string; rows: RowData[] }
+  ) => Promise<CheckRunResult>;
+  runRashChecks: (formId: string, rows: RowData[]) => Promise<RashValidationIssue[]>;
+  recalcForm: (formId: string, rows: RowData[]) => Promise<RowData[]>;
+  getFormRuleCounts: (formId: string) => Promise<{ rashRuleCount: number; recalcRuleCount: number }>;
+  getKontrAgents: () => Promise<KontrAgent[]>;
   saveInstance: (inst: OkoFormInstance, userName?: string) => Promise<OkoFormInstance>;
+  saveInstanceJson: (fileName: string, content: string) => Promise<boolean>;
+  saveExcelFile: (fileName: string, base64: string) => Promise<boolean>;
   exportJson: () => Promise<{ filePath: string; fileName: string }>;
   saveExportAs: () => Promise<string | null>;
 }

@@ -237,35 +237,40 @@ export async function importJsonPackage(
     enterpriseCode: pkg.instances[0]?.meta?.enterpriseCode ?? "1@1",
   };
 
-  const result = await createPackageInFolder(folderPath, meta, { skipSeed: true });
-  const db = session!.db;
-  const now = new Date().toISOString();
+  try {
+    const result = await createPackageInFolder(folderPath, meta, { skipSeed: true });
+    const db = session!.db;
+    const now = new Date().toISOString();
 
-  db.transaction(() => {
-    db.prepare("DELETE FROM form_instances WHERE zid = ? AND eid = ?").run(zid, eid);
-    for (const raw of pkg.instances) {
-      const inst: OkoFormInstance = {
-        ...raw,
-        zid,
-        eid,
-        status: raw.status === "submitted" ? "submitted" : "draft",
-        updatedAt: now,
-        meta: {
-          ...raw.meta,
-          organization: pkg.organization || raw.meta.organization,
-        },
-      };
-      saveInstance(db, inst);
-    }
-    if (pkg.rules) {
-      importRulesBundle(db, pkg.rules);
-    }
-  });
+    db.transaction(() => {
+      db.prepare("DELETE FROM form_instances WHERE zid = ? AND eid = ?").run(zid, eid);
+      for (const raw of pkg.instances) {
+        const inst: OkoFormInstance = {
+          ...raw,
+          zid,
+          eid,
+          status: raw.status === "submitted" ? "submitted" : "draft",
+          updatedAt: now,
+          meta: {
+            ...raw.meta,
+            organization: pkg.organization || raw.meta.organization,
+          },
+        };
+        saveInstance(db, inst);
+      }
+      if (pkg.rules) {
+        importRulesBundle(db, pkg.rules);
+      }
+    });
 
-  return {
-    ...result,
-    instanceCount: countInstances(db, zid, eid),
-  };
+    return {
+      ...result,
+      instanceCount: countInstances(db, zid, eid),
+    };
+  } catch (e) {
+    closePackage();
+    throw e;
+  }
 }
 
 export function listPackageInstances() {
@@ -290,6 +295,29 @@ export function loadAllPackageInstances(): OkoFormInstance[] {
   const summaries = listSummaries(session.db, session.meta.zid, session.meta.eid);
   const instances: OkoFormInstance[] = [];
   for (const s of summaries) {
+    const inst = loadInstance(session.db, s.instanceId);
+    if (inst) instances.push(inst);
+  }
+  return instances;
+}
+
+/** Latest instance per template, only for requested template ids (checks / cross-form refs). */
+export function loadPackageInstancesForTemplates(
+  templateIds: Iterable<string>
+): OkoFormInstance[] {
+  if (!session) throw new Error("Комплект не открыт");
+  const want = new Set(templateIds);
+  const summaries = listSummaries(session.db, session.meta.zid, session.meta.eid);
+  const latest = new Map<string, (typeof summaries)[number]>();
+  for (const s of summaries) {
+    if (!want.has(s.templateId)) continue;
+    const prev = latest.get(s.templateId);
+    if (!prev || s.updatedAt > prev.updatedAt) {
+      latest.set(s.templateId, s);
+    }
+  }
+  const instances: OkoFormInstance[] = [];
+  for (const s of latest.values()) {
     const inst = loadInstance(session.db, s.instanceId);
     if (inst) instances.push(inst);
   }

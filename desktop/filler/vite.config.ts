@@ -8,11 +8,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const portalPublic = path.resolve(__dirname, "../../portal/public");
 const portalSrc = path.resolve(__dirname, "../../portal/src");
 const portalStorage = path.resolve(portalSrc, "storage.ts");
+const portalApi = path.resolve(portalSrc, "api.ts");
 
 const sharedAlias = {
   "@portal": portalSrc,
   [path.resolve(portalSrc, "apiClient.ts")]: path.resolve(__dirname, "src/desktopApiClient.ts"),
   [portalStorage]: path.resolve(__dirname, "src/desktopStorage.ts"),
+};
+
+const mainAlias = {
+  ...sharedAlias,
+  [portalApi]: path.resolve(__dirname, "electron/mainPortalApiLite.ts"),
+  [portalStorage]: path.resolve(__dirname, "electron/mainStorageStub.ts"),
 };
 
 export default defineConfig({
@@ -23,7 +30,7 @@ export default defineConfig({
       main: {
         entry: "electron/main.ts",
         vite: {
-          resolve: { alias: sharedAlias },
+          resolve: { alias: mainAlias },
           build: {
             outDir: "dist-electron",
             rollupOptions: {

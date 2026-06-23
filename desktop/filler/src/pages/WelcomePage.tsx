@@ -107,6 +107,8 @@ export function WelcomePage() {
       if (info) setSession(info);
       navigate("/package");
     } catch (e) {
+      await window.oko.closePackage();
+      setSession(null);
       setError(e instanceof Error ? e.message : "Ошибка импорта");
     } finally {
       setBusy(false);

@@ -3,21 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { CheckResultsPanel } from "@portal/components/CheckResultsPanel";
 import { FormTable } from "@portal/components/FormTable";
 import { isKontrForm } from "@portal/constants";
-import { runFormChecks, type CheckRunResult } from "@portal/engine/checkEngine";
+import { type CheckRunResult } from "@portal/engine/checkRunCore";
 import { failedCellsForForm } from "@portal/engine/cellErrors";
 import { exportFormToExcel } from "@portal/engine/exportExcel";
-import {
-  countRashRulesForForm,
-  getRashData,
-  validateKontrRash,
-  type RashValidationIssue,
-} from "@portal/engine/rashEngine";
-import { recalcForm, countRecalcRules } from "@portal/engine/recalcEngine";
+import type { RashValidationIssue } from "@portal/engine/rashEngine";
 import {
   exportInstance,
-  loadAllInstances,
-  loadInstance,
-  loadKontrAgents,
   saveGlobalMeta,
   saveInstance,
   setInstanceStatus,
@@ -33,6 +24,11 @@ import type {
 } from "@portal/types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "@portal/utils";
 import { usePackage } from "../context/PackageContext";
+import {
+  getCachedForm,
+  patchCachedInstance,
+  setCachedForm,
+} from "../formLoadCache";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -64,6 +60,8 @@ export function FormPage() {
   );
   const [recalcRuleCount, setRecalcRuleCount] = useState<number | null>(null);
   const recalcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [formLoading, setFormLoading] = useState(true);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
@@ -75,43 +73,80 @@ export function FormPage() {
 
   useEffect(() => {
     if (!instanceId) return;
+    let cancelled = false;
     setError("");
     setCheckResult(null);
     setRashIssues(null);
-    void loadInstance(instanceId).then((inst) => {
-      if (!inst) {
-        setError("Форма не найдена");
-        return;
-      }
-      setInstance(inst);
-      setDisplayName(inst.displayName);
-      setMeta(inst.meta);
-      setRows(inst.rows);
-      setSignatures(inst.signatures ?? {});
 
-      void window.oko
-        .loadSchema(inst.templateId)
-        .then(setSchema)
-        .catch((e: Error) => setError(e.message));
-    });
+    const cached = getCachedForm(instanceId);
+    if (cached) {
+      setInstance(cached.instance);
+      setSchema(cached.schema);
+      setDisplayName(cached.instance.displayName);
+      setMeta(cached.instance.meta);
+      setRows(cached.instance.rows);
+      setSignatures(cached.instance.signatures ?? {});
+      setFormLoading(false);
+    } else {
+      setFormLoading(true);
+    }
+
+    void (async () => {
+      try {
+        const inst = await window.oko.loadInstance(instanceId);
+        if (cancelled) return;
+        const sch = await window.oko.loadSchema(inst.templateId);
+        if (cancelled) return;
+        setInstance(inst);
+        setDisplayName(inst.displayName);
+        setMeta(inst.meta);
+        setRows(inst.rows);
+        setSignatures(inst.signatures ?? {});
+        setSchema(sch);
+        setCachedForm(instanceId, inst, sch);
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : "Ошибка загрузки формы";
+        if (msg.includes("не открыт")) {
+          setError("Комплект не открыт. Вернитесь на главную и откройте папку комплекта.");
+        } else if (msg.includes("не найдена")) {
+          setError(
+            "Форма не найдена в базе. Вернитесь к комплекту и откройте форму заново (после импорта список обновляется)."
+          );
+        } else {
+          setError(msg);
+        }
+      } finally {
+        if (!cancelled) setFormLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [instanceId]);
 
   useEffect(() => {
-    if (!kontrMode || !schema) return;
-    void loadKontrAgents()
-      .then(setKontrAgents)
-      .catch(() => setKontrAgents([]));
-    void getRashData()
-      .then((data) => setRashRuleCount(countRashRulesForForm(schema.id, data.rules)))
-      .catch(() => setRashRuleCount(null));
+    if (!schema) return;
+    void window.oko
+      .getFormRuleCounts(schema.id)
+      .then(({ rashRuleCount: rash, recalcRuleCount: recalc }) => {
+        setRashRuleCount(kontrMode ? rash : null);
+        setRecalcRuleCount(recalc);
+      })
+      .catch(() => {
+        setRashRuleCount(null);
+        setRecalcRuleCount(null);
+      });
   }, [kontrMode, schema]);
 
   useEffect(() => {
-    if (!schema) return;
-    void countRecalcRules(schema.id)
-      .then(setRecalcRuleCount)
-      .catch(() => setRecalcRuleCount(null));
-  }, [schema]);
+    if (!kontrMode || !schema) return;
+    void window.oko
+      .getKontrAgents()
+      .then(setKontrAgents)
+      .catch(() => setKontrAgents([]));
+  }, [kontrMode, schema]);
 
   const handleRowsChange = useCallback(
     (next: RowData[]) => {
@@ -119,7 +154,7 @@ export function FormPage() {
       if (!autoRecalc || !schema || !(recalcRuleCount && recalcRuleCount > 0)) return;
       if (recalcTimer.current) clearTimeout(recalcTimer.current);
       recalcTimer.current = setTimeout(() => {
-        void recalcForm(schema, next).then(setRows);
+        void window.oko.recalcForm(schema.id, next).then(setRows);
       }, 450);
     },
     [autoRecalc, schema, recalcRuleCount]
@@ -128,6 +163,7 @@ export function FormPage() {
   useEffect(() => {
     return () => {
       if (recalcTimer.current) clearTimeout(recalcTimer.current);
+      if (persistTimer.current) clearTimeout(persistTimer.current);
     };
   }, []);
 
@@ -152,17 +188,36 @@ export function FormPage() {
       const saved = await saveInstance(updated);
       await saveGlobalMeta(updated.meta);
       setInstance(saved);
+      if (instanceId) patchCachedInstance(instanceId, saved);
       return saved;
     },
-    [instance, schema, displayName, meta, rows, signatures]
+    [instance, schema, displayName, meta, rows, signatures, instanceId]
   );
+
+  const schedulePersist = useCallback(
+    (overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>) => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = setTimeout(() => {
+        void persist(overrides);
+      }, 500);
+    },
+    [persist]
+  );
+
+  const flushPersist = useCallback(async () => {
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
+    return persist();
+  }, [persist]);
 
   const handleSave = useCallback(async () => {
     if (!instance || isLocked) return;
-    await persist();
+    await flushPersist();
     setStatus("Сохранено " + new Date().toLocaleTimeString("ru-RU"));
     setTimeout(() => setStatus(""), 3000);
-  }, [instance, isLocked, persist]);
+  }, [instance, isLocked, flushPersist]);
 
   const handleSubmitForm = async () => {
     if (!instance || instanceStatus === "submitted") return;
@@ -173,7 +228,7 @@ export function FormPage() {
     ) {
       return;
     }
-    await persist();
+    await flushPersist();
     const updated = await setInstanceStatus(instance.instanceId, "submitted");
     setInstance(updated);
     setStatus("Форма отмечена готовой");
@@ -216,7 +271,8 @@ export function FormPage() {
     if (!schema) return;
     setRecalcing(true);
     try {
-      const next = await recalcForm(schema, rows);
+      await flushPersist();
+      const next = await window.oko.recalcForm(schema.id, rows);
       setRows(next);
       await persist({ rows: next });
       setStatus("Строки пересчитаны");
@@ -232,12 +288,19 @@ export function FormPage() {
     if (!schema || !instance) return;
     setExportingExcel(true);
     try {
-      await persist();
+      await flushPersist();
       await exportFormToExcel({
         schema,
         displayName,
         meta,
         rows,
+        saveAs: async (fileName, data) => {
+          let binary = "";
+          for (let i = 0; i < data.length; i++) {
+            binary += String.fromCharCode(data[i]);
+          }
+          await window.oko.saveExcelFile(fileName, btoa(binary));
+        },
       });
       setStatus("Excel сохранён");
       setTimeout(() => setStatus(""), 3000);
@@ -253,11 +316,7 @@ export function FormPage() {
     setCheckingRash(true);
     setRashIssues(null);
     try {
-      const data = await getRashData();
-      const numericColumns = schema.columns
-        .filter((c) => c.type === "number")
-        .map((c) => c.key);
-      const issues = validateKontrRash(schema.id, rows, numericColumns, data);
+      const issues = await window.oko.runRashChecks(schema.id, rows);
       setRashIssues(issues);
       setStatus(
         issues.length === 0
@@ -276,23 +335,28 @@ export function FormPage() {
     if (!schema || !instance) return;
     setChecking(true);
     setCheckResult(null);
+    setError("");
+    await new Promise<void>((r) => setTimeout(r, 0));
     try {
-      await persist();
-      const all = await loadAllInstances();
-      const result = await runFormChecks(schema.id, all);
+      await flushPersist();
+      const result = await window.oko.runFormChecks(schema.id, {
+        instanceId: instance.instanceId,
+        rows,
+      });
       setCheckResult(result);
       setStatus(
         result.failed === 0 ? "Проверка пройдена" : `Ошибок увязок: ${result.failed}`
       );
       setTimeout(() => setStatus(""), 5000);
-    } catch {
-      setError("Не удалось выполнить проверку");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Не удалось выполнить проверку";
+      setError(msg);
     } finally {
       setChecking(false);
     }
   };
 
-  if (error && !schema) {
+  if (error && !schema && !instance) {
     return (
       <div className="content form-page">
         <p className="error">{error}</p>
@@ -301,8 +365,17 @@ export function FormPage() {
     );
   }
 
-  if (!schema || !instance) {
+  if (formLoading && (!schema || !instance)) {
     return <div className="content muted loading">Загрузка формы…</div>;
+  }
+
+  if (!schema || !instance) {
+    return (
+      <div className="content form-page">
+        <p className="error">{error || "Не удалось открыть форму"}</p>
+        <Link to="/package">← К комплекту</Link>
+      </div>
+    );
   }
 
   return (
@@ -321,7 +394,7 @@ export function FormPage() {
               value={displayName}
               disabled={isLocked}
               onChange={(e) => setDisplayName(e.target.value)}
-              onBlur={() => void persist({ displayName })}
+              onBlur={() => schedulePersist({ displayName })}
             />
           </label>
           <div className="form-subtitle">
@@ -470,7 +543,7 @@ export function FormPage() {
               value={meta.enterpriseCode}
               disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, enterpriseCode: e.target.value })}
-              onBlur={() => void persist({ meta })}
+              onBlur={() => schedulePersist({ meta })}
             />
           </label>
           <label className="meta-wide">
@@ -479,7 +552,7 @@ export function FormPage() {
               value={meta.organization}
               disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, organization: e.target.value })}
-              onBlur={() => void persist({ meta })}
+              onBlur={() => schedulePersist({ meta })}
               placeholder="Наименование организации"
             />
           </label>
@@ -490,7 +563,7 @@ export function FormPage() {
               value={meta.periodStart}
               disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, periodStart: e.target.value })}
-              onBlur={() => void persist({ meta })}
+              onBlur={() => schedulePersist({ meta })}
             />
           </label>
           <label>
@@ -500,7 +573,7 @@ export function FormPage() {
               value={meta.periodEnd}
               disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, periodEnd: e.target.value })}
-              onBlur={() => void persist({ meta })}
+              onBlur={() => schedulePersist({ meta })}
             />
           </label>
           <label>
@@ -509,7 +582,7 @@ export function FormPage() {
               value={meta.unit}
               disabled={isLocked}
               onChange={(e) => setMeta({ ...meta, unit: e.target.value })}
-              onBlur={() => void persist({ meta })}
+              onBlur={() => schedulePersist({ meta })}
             />
           </label>
         </div>
@@ -540,7 +613,7 @@ export function FormPage() {
                   value={signatures[name] ?? ""}
                   disabled={isLocked}
                   onChange={(e) => setSignatures((s) => ({ ...s, [name]: e.target.value }))}
-                  onBlur={() => void persist({ signatures })}
+                  onBlur={() => schedulePersist({ signatures })}
                   placeholder="ФИО"
                 />
               </label>

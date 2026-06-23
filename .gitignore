@@ -23,3 +23,7 @@ reference/*.mde
 12345/*.mdb
 *.mde
 .env
+desktop/filler/.env.signing
+desktop/filler/build/*.pfx
+desktop/filler/build/*.cer
+*.pfx

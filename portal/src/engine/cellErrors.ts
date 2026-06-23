@@ -1,5 +1,5 @@
 import { extractCellRefs } from "./cellExpression";
-import type { CheckRunResult } from "./checkEngine";
+import type { CheckRunResult } from "./checkRunCore";
 
 /** Cell key: `${rowNo}:${column}` -> error message */
 export function failedCellsForForm(

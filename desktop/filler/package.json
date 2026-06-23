@@ -3,14 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "description": "ОКО Заполнение — десктоп для дочерних организаций",
+  "author": "OKO",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "predist": "node scripts/kill-and-clean-release.mjs",
-    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable",
-    "dist:setup": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis",
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable -c.win.signExecutable=false",
+    "dist:signed": "node scripts/dist-signed.mjs",
+    "dist:setup": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis -c.win.signExecutable=false",
+    "dist:setup:signed": "node scripts/dist-signed.mjs --nsis",
     "dist:dir": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
@@ -65,7 +68,8 @@
         }
       ],
       "icon": "../../reference/icon-OKO.ico",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "verifyUpdateCodeSignature": false
     },
     "portable": {
       "artifactName": "OKO-Zapolnenie-${version}.exe"

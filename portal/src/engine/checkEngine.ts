@@ -12,6 +12,7 @@ import {
   loadEvalContextForChecks,
   loadInstancesForCheck,
 } from "./instanceIndex";
+import { runFormChecksWithData } from "./checkRunCore";
 
 export interface CheckRule {
   number: number;
@@ -147,14 +148,9 @@ export async function runFormChecks(
   mode: CheckMode = "period"
 ): Promise<CheckRunResult> {
   const data = await loadChecks();
-  const rules = pickRules(data.checks, {
-    formId,
-    mode,
-    excludeAggr: true,
-  });
   const inst =
     instances ?? latestInstancePerTemplate(await loadInstancesForCheck());
-  return runRules(rules, evalContextFromInstances(inst));
+  return runFormChecksWithData(data.checks, formId, inst, mode);
 }
 
 export async function runAllChecks(

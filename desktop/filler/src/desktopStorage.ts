@@ -45,20 +45,12 @@ export async function saveGlobalMeta(_meta: FormMeta): Promise<void> {
 }
 
 export async function loadKontrAgents(): Promise<KontrAgent[]> {
-  const data = (await window.oko.readPublicJson("data/kontr.json")) as {
-    items?: KontrAgent[];
-  };
-  return data.items ?? [];
+  return (await window.oko.getKontrAgents()) as KontrAgent[];
 }
 
 export function exportInstance(instance: OkoFormInstance): void {
-  const blob = new Blob([JSON.stringify(instance, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `oko_${instance.templateId}_${instance.displayName.replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_").slice(0, 60)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const fileName = `oko_${instance.templateId}_${instance.displayName
+    .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")
+    .slice(0, 60)}.json`;
+  void window.oko.saveInstanceJson(fileName, JSON.stringify(instance, null, 2));
 }

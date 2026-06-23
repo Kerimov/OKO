@@ -58,8 +58,26 @@ const api = {
   loadCatalog: () => ipcRenderer.invoke("oko:loadCatalog"),
   readPublicJson: (relativePath: string) =>
     ipcRenderer.invoke("oko:readPublicJson", relativePath),
+  runFormChecks: (
+    formId: string,
+    live?: { instanceId: string; rows: import("@portal/types").RowData[] }
+  ) => ipcRenderer.invoke("oko:runFormChecks", formId, live),
+  runRashChecks: (formId: string, rows: import("@portal/types").RowData[]) =>
+    ipcRenderer.invoke("oko:runRashChecks", formId, rows),
+  recalcForm: (formId: string, rows: import("@portal/types").RowData[]) =>
+    ipcRenderer.invoke("oko:recalcForm", formId, rows),
+  getFormRuleCounts: (formId: string) =>
+    ipcRenderer.invoke("oko:getFormRuleCounts", formId) as Promise<{
+      rashRuleCount: number;
+      recalcRuleCount: number;
+    }>,
+  getKontrAgents: () => ipcRenderer.invoke("oko:getKontrAgents"),
   saveInstance: (inst: OkoFormInstance, userName?: string): Promise<OkoFormInstance> =>
     ipcRenderer.invoke("oko:saveInstance", inst, userName),
+  saveInstanceJson: (fileName: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:saveInstanceJson", fileName, content),
+  saveExcelFile: (fileName: string, base64: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:saveExcelFile", fileName, base64),
   exportJson: (): Promise<{ filePath: string; fileName: string }> =>
     ipcRenderer.invoke("oko:exportJson"),
   saveExportAs: (): Promise<string | null> => ipcRenderer.invoke("oko:saveExportAs"),
