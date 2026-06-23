@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { initStorage, isBackendMode } from "./storage";
 import { initAuth } from "./auth";
-import { initOfflineKit, isOfflineKitMode } from "./offlineMode";
 import "./index.css";
 import { useAuth } from "./useAuth";
 
@@ -15,9 +14,6 @@ function Bootstrap() {
   useEffect(() => {
     (async () => {
       const ok = await initStorage();
-      if (isOfflineKitMode()) {
-        await initOfflineKit();
-      }
       setBackend(ok && isBackendMode());
       await initAuth();
       setReady(true);
@@ -34,7 +30,7 @@ function Bootstrap() {
 
   return (
     <>
-      {backend && !isOfflineKitMode() && (
+      {backend && (
         <div
           className="backend-badge"
           title={

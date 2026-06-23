@@ -13,7 +13,6 @@
 | [PORTAL-GUIDE.md](PORTAL-GUIDE.md) | Руководство пользователя и администратора портала |
 | [../CHANGELOG.md](../CHANGELOG.md) | Хронология разработки |
 | [CHAT-LOG.md](CHAT-LOG.md) | Журнал решений из чата разработки |
-| [OFFLINE-EXCHANGE.md](OFFLINE-EXCHANGE.md) | Офлайн-обмен с дочерними организациями |
 
 ---
 

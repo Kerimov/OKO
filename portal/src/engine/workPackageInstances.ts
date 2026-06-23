@@ -45,7 +45,7 @@ async function loadInstancesFromSummaries(
   return instances;
 }
 
-/** Forms of the current work package (ZID/EID from Комплект), for export and offline-kit. */
+/** Forms of the current work package (ZID/EID from Комплект), for JSON export/import. */
 export async function loadWorkPackageInstances(): Promise<{
   instances: OkoFormInstance[];
   zid: number | null;

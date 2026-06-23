@@ -2,7 +2,6 @@
 *.local
 portal/node_modules
 portal/dist
-portal/dist-offline
 server/node_modules
 
 # SQLite database
@@ -11,9 +10,6 @@ data/oko.db-*
 
 # PDF-образцы форм (локально, не публикуются в репозиторий)
 portal/public/pdf/*.pdf
-# Seed-комплект для offline-kit (генерируется при сборке)
-portal/public/offline-package.json
-portal/public/offline-kit-template.zip
 
 # Исходный комплект ОКО (бинарники)
 reference/*.mdb

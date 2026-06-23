@@ -79,7 +79,7 @@ data/                 — изменения схемы БД (оба файла:
 | Режим | Условие | Хранение |
 |-------|---------|----------|
 | **Backend** | API доступен, `isBackendMode()` = true | PostgreSQL / SQLite через API |
-| **Offline** | API недоступен | localStorage + JSON из `public/` |
+| **Локальный** | API недоступен | localStorage + JSON из `public/` |
 
 Проверка: в UI отображается `POSTGRESQL` или `SQLITE` в углу.
 

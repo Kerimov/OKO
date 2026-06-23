@@ -7,7 +7,6 @@ import type {
 } from "./types";
 import { buildInitialRows } from "./utils";
 import { apiFetch } from "./apiClient";
-import { isOfflineKitMode } from "./buildFlags";
 import { initAuth } from "./auth";
 
 const INDEX_KEY = "oko-instances-index";
@@ -24,12 +23,6 @@ export function isBackendMode(): boolean {
 }
 
 export async function initStorage(): Promise<boolean> {
-  // Offline-kit — только localStorage, без обращений к API
-  if (isOfflineKitMode()) {
-    useBackend = false;
-    return true;
-  }
-
   try {
     await apiFetch<{ ok: boolean }>("/api/health");
     useBackend = true;

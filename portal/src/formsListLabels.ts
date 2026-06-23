@@ -1,5 +1,4 @@
 import type { AuthSnapshot } from "./auth";
-import { isOfflineKitMode } from "./offlineMode";
 
 export function isOrgFormsUser(auth: AuthSnapshot): boolean {
   return auth.user?.role === "org";
@@ -7,7 +6,6 @@ export function isOrgFormsUser(auth: AuthSnapshot): boolean {
 
 /** Администратор ЦО: видит все формы, не «мои». */
 export function isAdminFormsView(auth: AuthSnapshot): boolean {
-  if (isOfflineKitMode()) return false;
   if (isOrgFormsUser(auth)) return false;
   return !auth.authRequired || auth.role === "admin";
 }

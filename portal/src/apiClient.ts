@@ -1,10 +1,7 @@
-import { isOfflineKitMode } from "./buildFlags";
-
 const TOKEN_KEY = "oko-api-token";
 
-const API_BASE = isOfflineKitMode()
-  ? ""
-  : ((import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "");
+const API_BASE =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export function getApiBase(): string {
   return API_BASE;
@@ -22,7 +19,6 @@ export function getApiToken(): string | null {
     const ls = localStorage.getItem(TOKEN_KEY);
     if (ls) return ls;
     const ss = sessionStorage.getItem(TOKEN_KEY);
-    // one-time migration (older builds used sessionStorage)
     if (ss) {
       localStorage.setItem(TOKEN_KEY, ss);
       sessionStorage.removeItem(TOKEN_KEY);
@@ -61,11 +57,6 @@ export function apiHeaders(extra?: HeadersInit): HeadersInit {
 }
 
 export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
-  if (isOfflineKitMode() && path.startsWith("/api/")) {
-    throw new Error(
-      "Offline-kit работает без сервера. Откройте формы в «Мои формы» или создайте их в «Каталог»."
-    );
-  }
   const headers = new Headers(apiHeaders(init?.headers));
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
