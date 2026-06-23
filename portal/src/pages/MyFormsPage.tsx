@@ -99,6 +99,7 @@ function InstanceCard({
   deleting,
   showPackageIds,
   hideOrgLine,
+  compact,
   onToggle,
   onDelete,
 }: {
@@ -107,6 +108,7 @@ function InstanceCard({
   deleting: boolean;
   showPackageIds: boolean;
   hideOrgLine?: boolean;
+  compact?: boolean;
   onToggle: (id: string, checked: boolean) => void;
   onDelete: (inst: InstanceSummary) => void;
 }) {
@@ -129,7 +131,6 @@ function InstanceCard({
         </Link>
         <div className="instance-card-meta">
           <span className="form-card-id">{inst.templateId}</span>
-          <span>{inst.templateTitle}</span>
           <span className={`status-badge ${inst.status ?? "draft"}`}>
             {formStatusLabel(inst.status)}
           </span>
@@ -139,12 +140,15 @@ function InstanceCard({
             </span>
           )}
         </div>
-        {inst.organization && !hideOrgLine && (
+        <p className="instance-card-template-title">{inst.templateTitle}</p>
+        {inst.organization && !hideOrgLine && !compact && (
           <p className="instance-org">{inst.organization}</p>
         )}
-        <p className="instance-period">
-          {formatPeriod(inst.periodStart, inst.periodEnd)}
-        </p>
+        {!compact && (
+          <p className="instance-period">
+            {formatPeriod(inst.periodStart, inst.periodEnd)}
+          </p>
+        )}
         <p className="instance-dates">
           Создано: {new Date(inst.createdAt).toLocaleString("ru-RU")}
           {" · "}
@@ -475,6 +479,7 @@ export function MyFormsPage() {
                 deleting={deleting}
                 showPackageIds={adminView}
                 hideOrgLine={hideOrgOnCards}
+                compact={nested || groupByPackage}
                 onToggle={toggleOne}
                 onDelete={handleDelete}
               />

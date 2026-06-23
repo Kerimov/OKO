@@ -849,7 +849,14 @@ a:hover {
 }
 
 .forms-package-group-nested {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+}
+
+.forms-package-group-nested .forms-package-group-header {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
 }
 
 .forms-org-group {
@@ -902,6 +909,16 @@ a:hover {
   text-align: left;
   cursor: pointer;
   color: inherit;
+}
+
+.forms-tree-toggle:focus {
+  outline: none;
+}
+
+.forms-tree-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .forms-tree-toggle:hover .forms-package-group-title,
@@ -1011,6 +1028,11 @@ a:hover {
   box-shadow: var(--shadow);
 }
 
+.instance-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
 .instance-card-selected {
   border-color: var(--primary);
   background: #f8fbff;
@@ -1050,6 +1072,15 @@ a:hover {
   flex-wrap: wrap;
   font-size: 0.85rem;
   color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.instance-card-template-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-word;
 }
 
 .instance-org {
