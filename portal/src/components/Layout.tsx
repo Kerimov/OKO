@@ -49,13 +49,13 @@ export function Layout() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   const workSection: NavSection = {
     title: "Работа",
     items: [
-      { to: "/", label: "Каталог", isActive: (p) => p === "/" },
+      { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
       { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
       { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
     ],
@@ -113,7 +113,7 @@ export function Layout() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <Link to="/" className="sidebar-brand">
+        <Link to="/catalog" className="sidebar-brand">
           <span className="sidebar-brand-mark">ОКО</span>
           <span className="sidebar-brand-text">
             <span className="sidebar-brand-title">Портал</span>
@@ -129,7 +129,7 @@ export function Layout() {
 
         <div className="sidebar-footer">
           {isBackendMode() && auth.authRequired && !auth.role && (
-            <Link to="/login" className="sidebar-login">
+            <Link to="/" className="sidebar-login">
               Войти
             </Link>
           )}

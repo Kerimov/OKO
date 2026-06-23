@@ -1,21 +1,27 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { login } from "../auth";
+import { defaultAppPath, needsAuthentication } from "../authRouting";
+import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
   const auth = useAuth();
+  const fromState = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+  const from =
+    fromState && fromState !== "/" && fromState !== "/login"
+      ? fromState
+      : defaultAppPath(auth);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!auth.authRequired && auth.role) {
-    return <Navigate to="/" replace />;
+  if (!needsAuthentication(isBackendMode(), auth) && auth.role) {
+    return <Navigate to={defaultAppPath(auth)} replace />;
   }
 
   const handleSubmit = async (e: FormEvent) => {

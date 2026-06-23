@@ -42,7 +42,7 @@ export function SettingsPage() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/login";
+    window.location.href = "/";
   };
   const handleClearToken = () => {
     removeApiToken();
@@ -124,7 +124,7 @@ export function SettingsPage() {
           <p className="settings-desc">
             {loginMode ? (
               <>
-                Вход по логину и паролю — на странице <Link to="/login">/login</Link>.
+                Вход по логину и паролю — на <Link to="/">главной странице</Link>.
               </>
             ) : (
               <>
@@ -138,7 +138,7 @@ export function SettingsPage() {
             <div className="error-box" style={{ marginTop: "0.75rem" }}>
               В браузере сохранён Bearer-токен (режим legacy), поэтому вы видите роль{" "}
               <strong>{auth.role}</strong> и урезанный функционал. Нажмите «Сбросить токен» и
-              войдите через <Link to="/login">/login</Link>.
+              войдите на <Link to="/">главной странице</Link>.
               <div style={{ marginTop: "0.75rem" }}>
                 <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
                   Сбросить токен
