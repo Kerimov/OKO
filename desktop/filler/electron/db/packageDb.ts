@@ -128,7 +128,8 @@ export async function openPackageFolder(folderPath: string): Promise<OpenPackage
 
 export async function createPackageInFolder(
   folderPath: string,
-  metaInput: Omit<PackageMeta, "formatVersion" | "createdAt">
+  metaInput: Omit<PackageMeta, "formatVersion" | "createdAt">,
+  options?: { skipSeed?: boolean }
 ): Promise<OpenPackageResult> {
   closePackage();
   fs.mkdirSync(folderPath, { recursive: true });
@@ -153,7 +154,9 @@ export async function createPackageInFolder(
   migrateDb(db);
   session = { folderPath, dbPath, meta, db };
 
-  seedEmptyPackage(db, meta);
+  if (!options?.skipSeed) {
+    seedEmptyPackage(db, meta);
+  }
 
   return {
     folderPath,
@@ -234,11 +237,12 @@ export async function importJsonPackage(
     enterpriseCode: pkg.instances[0]?.meta?.enterpriseCode ?? "1@1",
   };
 
-  const result = await createPackageInFolder(folderPath, meta);
+  const result = await createPackageInFolder(folderPath, meta, { skipSeed: true });
   const db = session!.db;
   const now = new Date().toISOString();
 
   db.transaction(() => {
+    db.prepare("DELETE FROM form_instances WHERE zid = ? AND eid = ?").run(zid, eid);
     for (const raw of pkg.instances) {
       const inst: OkoFormInstance = {
         ...raw,
