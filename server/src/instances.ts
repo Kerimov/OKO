@@ -340,90 +340,6 @@ export async function listInstanceSummaries(
 
   let results = normalized.map(mapRow);
 
-  const legacyOnly = (await db
-    .prepare(
-      `SELECT p.instance_id, p.template_id, p.template_title, p.display_name, p.organization,
-              p.period_start, p.period_end, p.payload, p.created_at, p.updated_at
-       FROM portal_instances p
-       WHERE NOT EXISTS (
-         SELECT 1 FROM form_instances f WHERE f.instance_id = p.instance_id
-       )
-       ORDER BY p.updated_at DESC`
-    )
-    .all()) as Array<{
-    instance_id: string;
-    template_id: string;
-    template_title: string;
-    display_name: string;
-    organization: string;
-    period_start: string;
-    period_end: string;
-    payload: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-
-  for (const r of legacyOnly) {
-    let zid: number | null = null;
-    let eid: number | null = null;
-    try {
-      const inst = JSON.parse(r.payload) as OkoFormInstance;
-      zid = intOrNull(inst.zid);
-      eid = intOrNull(inst.eid);
-    } catch {
-      /* ignore invalid payload */
-    }
-    results.push({
-      instanceId: r.instance_id,
-      templateId: r.template_id,
-      templateTitle: r.template_title,
-      displayName: r.display_name,
-      organization: r.organization,
-      periodStart: dateToString(r.period_start),
-      periodEnd: dateToString(r.period_end),
-      zid,
-      eid,
-      status: "draft" as const,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    });
-  }
-
-  if (results.length === 0) {
-    const legacy = (await db
-      .prepare(
-        `SELECT instance_id, template_id, template_title, display_name, organization,
-                period_start, period_end, created_at, updated_at
-         FROM portal_instances ORDER BY updated_at DESC`
-      )
-      .all()) as Array<{
-      instance_id: string;
-      template_id: string;
-      template_title: string;
-      display_name: string;
-      organization: string;
-      period_start: string;
-      period_end: string;
-      created_at: string;
-      updated_at: string;
-    }>;
-
-    results = legacy.map((r) => ({
-      instanceId: r.instance_id,
-      templateId: r.template_id,
-      templateTitle: r.template_title,
-      displayName: r.display_name,
-      organization: r.organization,
-      periodStart: dateToString(r.period_start),
-      periodEnd: dateToString(r.period_end),
-      zid: null,
-      eid: null,
-      status: "draft" as const,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
-  }
-
   if (filter?.zid != null || filter?.eid != null) {
     results = results.filter((s) => {
       if (filter.zid != null && intOrNull(s.zid) !== filter.zid) return false;
@@ -439,8 +355,11 @@ export async function listInstanceSummaries(
 }
 
 export async function deleteInstanceFromDb(db: OkoDb, instanceId: string): Promise<void> {
-  await db.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
-  await db.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
+  await db.transaction(async (tx) => {
+    await tx.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(instanceId);
+    await tx.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
+    await tx.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
+  });
 }
 
 export async function setInstanceStatus(
@@ -504,12 +423,7 @@ export async function loadInstance(
 ): Promise<OkoFormInstance | null> {
   const normalized = await loadInstanceFromDb(db, instanceId);
   if (normalized) return normalized;
-  const legacy = await loadInstanceFromPayload(db, instanceId);
-  if (legacy) {
-    await saveInstanceCells(db, legacy);
-    return legacy;
-  }
-  return null;
+  return loadInstanceFromPayload(db, instanceId);
 }
 
 export async function migratePortalPayloadsToCells(db: OkoDb): Promise<number> {
@@ -529,6 +443,7 @@ export async function migratePortalPayloadsToCells(db: OkoDb): Promise<number> {
     try {
       const inst = JSON.parse(p.payload) as OkoFormInstance;
       await saveInstanceCells(db, inst);
+      await db.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(p.instance_id);
       migrated++;
     } catch {
       /* skip invalid payload */

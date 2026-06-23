@@ -112,6 +112,10 @@ async function migrateLocalToBackend(): Promise<void> {
     method: "POST",
     body: JSON.stringify({ instances, settings }),
   });
+  for (const inst of instances) {
+    localStorage.removeItem(INSTANCE_PREFIX + inst.instanceId);
+  }
+  writeIndexLocal([]);
   localStorage.setItem(MIGRATED_KEY, "1");
 }
 
@@ -269,10 +273,14 @@ export async function loadInstance(instanceId: string): Promise<OkoFormInstance 
   }
 }
 
+function purgeInstanceLocal(instanceId: string): void {
+  localStorage.removeItem(INSTANCE_PREFIX + instanceId);
+  writeIndexLocal(readIndexLocal().filter((s) => s.instanceId !== instanceId));
+}
+
 export async function deleteInstance(instanceId: string): Promise<void> {
+  purgeInstanceLocal(instanceId);
   if (!useBackend) {
-    localStorage.removeItem(INSTANCE_PREFIX + instanceId);
-    writeIndexLocal(readIndexLocal().filter((s) => s.instanceId !== instanceId));
     return;
   }
   await apiFetch(`/api/instances/${instanceId}`, { method: "DELETE" });
