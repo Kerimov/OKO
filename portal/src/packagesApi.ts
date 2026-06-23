@@ -1,9 +1,10 @@
 import { apiFetch } from "./apiClient";
 import { loadCatalog, loadSchema } from "./api";
-import { isBackendMode, loadGlobalMeta, saveInstance, listInstances, defaultDisplayName } from "./storage";
+import { isBackendMode, loadGlobalMeta, saveInstance, listInstances, defaultDisplayName, deleteInstance } from "./storage";
 import { buildInitialRows } from "./utils";
 import type {
   CreatePackageResult,
+  DeletePackageResult,
   Organization,
   PackageCompleteness,
   PackageDashboardRow,
@@ -277,6 +278,35 @@ export async function createReportPackage(
   }
 
   return { created, skipped, total: catalog.forms.length, instanceIds };
+}
+
+export async function deleteReportPackage(
+  zid: number,
+  eid: number
+): Promise<DeletePackageResult> {
+  if (isBackendMode()) {
+    return apiFetch<DeletePackageResult>(`/api/packages?zid=${zid}&eid=${eid}`, {
+      method: "DELETE",
+    });
+  }
+
+  const periods = readLocalPeriods();
+  const period = periods.find((p) => p.zid === zid && p.eid === eid);
+  if (!period) throw new Error("Период не найден");
+
+  const summaries = await listInstances();
+  const toDelete = summaries.filter((s) => s.zid === zid && s.eid === eid);
+  await Promise.all(toDelete.map((s) => deleteInstance(s.instanceId)));
+
+  writeLocalPeriods(periods.filter((p) => !(p.zid === zid && p.eid === eid)));
+
+  const ctx = await loadWorkContext();
+  if (ctx.zid === zid && ctx.eid === eid) {
+    const remaining = readLocalPeriods().filter((p) => p.zid === zid);
+    await saveWorkContext({ zid, eid: remaining[0]?.eid ?? null });
+  }
+
+  return { deletedInstances: toDelete.length, periodRemoved: true };
 }
 
 export async function importReportPackage(

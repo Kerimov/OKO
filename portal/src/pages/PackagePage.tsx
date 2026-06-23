@@ -4,6 +4,7 @@ import {
   createOrganization,
   createPeriod,
   createReportPackage,
+  deleteReportPackage,
   fetchPackageCompleteness,
   listOrganizations,
   listPeriods,
@@ -18,6 +19,7 @@ import { formsListNavLabel } from "../formsListLabels";
 export function PackagePage() {
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
+  const orgZid = auth.user?.role === "org" ? auth.user.zid ?? null : null;
   const formsLinkLabel = formsListNavLabel(auth);
   const [searchParams] = useSearchParams();
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -42,6 +44,9 @@ export function PackagePage() {
     () => periods.find((p) => p.eid === eid),
     [periods, eid]
   );
+
+  const canDeletePackage =
+    admin || (orgZid != null && typeof zid === "number" && zid === orgZid);
 
   const refreshCompleteness = useCallback(async (z: number, e: number) => {
     setCompleteness(await fetchPackageCompleteness(z, e));
@@ -155,6 +160,45 @@ export function PackagePage() {
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания комплекта");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeletePackage = async () => {
+    if (zid === "" || eid === "" || !selectedOrg || !selectedPeriod) return;
+    const filled = completeness?.filled ?? 0;
+    const formsPart =
+      filled > 0
+        ? `Будут удалены все формы (${filled}).\n`
+        : "Форм в комплекте нет.\n";
+    if (
+      !confirm(
+        `Удалить комплект «${selectedOrg.name} — ${selectedPeriod.name}»?\n\n${formsPart}Отчётный период будет удалён. Действие необратимо.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      const result = await deleteReportPackage(zid, eid);
+      const perList = await listPeriods(zid);
+      setPeriods(perList);
+      if (perList[0]) {
+        setEid(perList[0].eid);
+        await saveWorkContext({ zid, eid: perList[0].eid });
+        await refreshCompleteness(zid, perList[0].eid);
+      } else {
+        setEid("");
+        setCompleteness(null);
+        await saveWorkContext({ zid, eid: null });
+      }
+      setStatus(
+        `Комплект удалён: форм ${result.deletedInstances}, период снят с учёта`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка удаления комплекта");
     } finally {
       setBusy(false);
     }
@@ -317,6 +361,16 @@ export function PackagePage() {
             >
               {busy ? "Создание…" : "Завести пустые формы (комплект)"}
             </button>
+            {canDeletePackage && (
+              <button
+                type="button"
+                className="btn btn-danger-outline"
+                disabled={busy || zid === "" || eid === ""}
+                onClick={() => void handleDeletePackage()}
+              >
+                {busy ? "Удаление…" : "Удалить комплект"}
+              </button>
+            )}
             <Link to="/my" className="btn btn-secondary">
               {formsLinkLabel}
             </Link>

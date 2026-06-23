@@ -88,6 +88,7 @@ import {
   createOrganization,
   createPeriod,
   createReportPackage,
+  deleteReportPackage,
   getPackageCompleteness,
   getPackagesDashboard,
   getWorkContext,
@@ -469,6 +470,22 @@ app.post("/api/packages/create", asyncRoute(async (req, res) => {
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
+  }
+}));
+
+app.delete("/api/packages", asyncRoute(async (req, res) => {
+  const zid = Number(req.query.zid);
+  const eid = Number(req.query.eid);
+  if (!Number.isFinite(zid) || !Number.isFinite(eid)) {
+    res.status(400).json({ error: "zid and eid required" });
+    return;
+  }
+  try {
+    assertOrgZidParam(req, zid);
+    res.json(await deleteReportPackage(await getDb(), zid, eid));
+  } catch (e) {
+    if (handleOrgError(res, e)) return;
+    res.status(400).json({ error: e instanceof Error ? e.message : "delete failed" });
   }
 }));
 
