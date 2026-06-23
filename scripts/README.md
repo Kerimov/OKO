@@ -12,6 +12,7 @@ Python-утилиты для переноса метаданных из базы
 |--------|------------|-----------|
 | **`generate_schemas_from_mdb.py`** | Шаблоны 76 форм: строки, колонки, метаданные | `portal/public/schemas/*.json`, `catalog.json` |
 | **`export_mdb_data.py`** | Правила увязок, сальдо, Excel, расшифровки, агрегация | `portal/public/data/*.json` |
+| **`build-offline-kit.sh`** | ZIP offline-портала для дочки (JSON-комплект на входе) | `dist/oko-offline-kit.zip` |
 
 Запуск из корня репозитория:
 

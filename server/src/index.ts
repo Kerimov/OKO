@@ -90,6 +90,7 @@ import {
   getPackageCompleteness,
   getPackagesDashboard,
   getWorkContext,
+  importReportPackage,
   listOrganizations,
   listPeriods,
   setWorkContext,
@@ -467,6 +468,48 @@ app.post("/api/packages/create", asyncRoute(async (req, res) => {
   } catch (e) {
     if (handleOrgError(res, e)) return;
     res.status(400).json({ error: e instanceof Error ? e.message : "create failed" });
+  }
+}));
+
+app.post("/api/packages/import", requireAdmin, asyncRoute(async (req, res) => {
+  const body = req.body as {
+    zid?: number;
+    eid?: number;
+    overwrite?: boolean;
+    package?: {
+      organization?: string;
+      periodStart?: string;
+      periodEnd?: string;
+      instances?: OkoFormInstance[];
+    };
+  };
+  const zid = body.zid;
+  const eid = body.eid;
+  if (!zid || !eid) {
+    res.status(400).json({ error: "zid and eid required" });
+    return;
+  }
+  if (!body.package?.instances?.length) {
+    res.status(400).json({ error: "package.instances required" });
+    return;
+  }
+  try {
+    const result = await importReportPackage(
+      await getDb(),
+      zid,
+      eid,
+      {
+        organization: body.package.organization,
+        periodStart: body.package.periodStart,
+        periodEnd: body.package.periodEnd,
+        instances: body.package.instances,
+      },
+      body.overwrite === true
+    );
+    res.json(result);
+  } catch (e) {
+    if (handleOrgError(res, e)) return;
+    res.status(400).json({ error: e instanceof Error ? e.message : "import failed" });
   }
 }));
 

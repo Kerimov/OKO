@@ -4,6 +4,7 @@ import {
 } from "../auth";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
+import { isOfflineKitMode } from "../offlineMode";
 
 type NavItem = {
   to: string;
@@ -43,7 +44,9 @@ function SidebarSection({ section }: { section: NavSection }) {
 
 export function Layout() {
   const auth = useAuth();
-  const adminNav = isBackendMode() && (!auth.authRequired || auth.role === "admin");
+  const offlineKit = isOfflineKitMode();
+  const adminNav =
+    !offlineKit && isBackendMode() && (!auth.authRequired || auth.role === "admin");
   const orgUser = auth.user?.role === "org";
   const user = auth.user;
 
@@ -54,16 +57,22 @@ export function Layout() {
 
   const workSection: NavSection = {
     title: "Работа",
-    items: [
-      { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
-      { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
-      { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
-    ],
+    items: offlineKit
+      ? [
+          { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
+          { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
+          { to: "/export", label: "Отправить в ЦО", isActive: (p) => p === "/export" },
+        ]
+      : [
+          { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
+          { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
+          { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
+        ],
   };
 
   const sections: NavSection[] = [workSection];
 
-  if (!orgUser) {
+  if (!offlineKit && !orgUser) {
     sections.push({
       title: "Операции",
       items: [
@@ -106,17 +115,19 @@ export function Layout() {
     });
   }
 
-  sections.push({
-    items: [
-      { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
-      { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
-    ],
-  });
+  if (!offlineKit) {
+    sections.push({
+      items: [
+        { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
+        { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
+      ],
+    });
+  }
 
   return (
     <div className="app">
       <aside className="sidebar">
-        <Link to="/catalog" className="sidebar-brand">
+        <Link to={offlineKit ? "/my" : "/catalog"} className="sidebar-brand">
           <span className="sidebar-brand-mark">ОКО</span>
           <span className="sidebar-brand-text">
             <span className="sidebar-brand-title">Портал</span>
@@ -131,6 +142,9 @@ export function Layout() {
         </nav>
 
         <div className="sidebar-footer">
+          {offlineKit && (
+            <div className="sidebar-auth-note">Офлайн-режим · без сервера</div>
+          )}
           {isBackendMode() && auth.authRequired && !auth.role && (
             <Link to="/" className="sidebar-login">
               Войти
