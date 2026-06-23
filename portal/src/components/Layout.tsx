@@ -143,7 +143,7 @@ export function Layout() {
 
         <div className="sidebar-footer">
           {offlineKit && (
-            <div className="sidebar-auth-note">Офлайн-режим · без сервера</div>
+            <div className="sidebar-auth-note">Офлайн · без связи с ЦО</div>
           )}
           {isBackendMode() && auth.authRequired && !auth.role && (
             <Link to="/" className="sidebar-login">
