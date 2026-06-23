@@ -38,15 +38,24 @@ export function formIdFromRefRow(ref: string): string {
   return ref.trim();
 }
 
-export function getRashRulesForForm(rules: RashRule[], formId: string): RashRule[] {
-  return rules.filter((r) => {
-    if (r.name === formId || r.name.startsWith(`${formId}_`)) return true;
-    if (!r.refRows) return false;
-    return r.refRows.split(",").some((token) => {
-      const fid = formIdFromRefRow(token.trim());
-      return fid === formId || token.trim().startsWith(formId);
-    });
+/** Whether sp_rash rule applies to a form (by rule name N06_12_* or refRows). */
+export function rashRuleMatchesForm(
+  rule: Pick<RashRule, "name" | "refRows">,
+  formId: string
+): boolean {
+  const name = rule.name ?? "";
+  if (name === formId || name.startsWith(`${formId}_`)) return true;
+  if (!rule.refRows) return false;
+  return rule.refRows.split(",").some((token) => {
+    const trimmed = token.trim();
+    if (!trimmed) return false;
+    const fid = formIdFromRefRow(trimmed);
+    return fid === formId || trimmed === formId || trimmed.startsWith(`${formId}_`);
   });
+}
+
+export function getRashRulesForForm(rules: RashRule[], formId: string): RashRule[] {
+  return rules.filter((r) => rashRuleMatchesForm(r, formId));
 }
 
 export function parseTotalColumn(formula: string | null | undefined): string | null {
