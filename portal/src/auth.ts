@@ -23,6 +23,43 @@ let currentUser: UserProfile | null = null;
 let authRequired = false;
 let loginAvailable = false;
 let authMode: string = "none";
+let backendDb: string | null = null;
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+function emit(): void {
+  for (const l of listeners) l();
+}
+
+export function subscribeAuth(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getAuthSnapshot(): {
+  role: ApiRole | null;
+  user: UserProfile | null;
+  authRequired: boolean;
+  loginAvailable: boolean;
+  authMode: string;
+  backendDb: string | null;
+  tokenPresent: boolean;
+  legacyToken: boolean;
+} {
+  const tokenPresent = !!getApiToken();
+  const legacyToken = tokenPresent && currentRole != null && currentUser == null;
+  return {
+    role: currentRole,
+    user: currentUser,
+    authRequired,
+    loginAvailable,
+    authMode,
+    backendDb,
+    tokenPresent,
+    legacyToken,
+  };
+}
 
 export function getApiRole(): ApiRole | null {
   return currentRole;
@@ -52,19 +89,23 @@ export function isOrgUser(): boolean {
 export async function initAuth(): Promise<void> {
   try {
     const health = await apiFetch<{
+      db?: string;
       auth?: { authRequired?: boolean; loginAvailable?: boolean; authMode?: string };
     }>("/api/health");
     authRequired = !!health.auth?.authRequired;
     loginAvailable = !!health.auth?.loginAvailable;
     authMode = health.auth?.authMode ?? "none";
+    backendDb = health.db ?? null;
   } catch {
     authRequired = false;
     loginAvailable = false;
+    backendDb = null;
   }
 
   if (!getApiToken()) {
     currentRole = authRequired ? null : "admin";
     currentUser = null;
+    emit();
     return;
   }
 
@@ -81,9 +122,11 @@ export async function initAuth(): Promise<void> {
     authMode = me.authMode ?? authMode;
     currentRole = me.role;
     currentUser = me.user ?? null;
+    emit();
   } catch {
     currentRole = null;
     currentUser = null;
+    emit();
   }
 }
 
@@ -101,6 +144,7 @@ export async function login(username: string, password: string): Promise<void> {
   currentUser = res.user;
   authRequired = true;
   loginAvailable = true;
+  emit();
 }
 
 export async function logout(): Promise<void> {
@@ -112,16 +156,19 @@ export async function logout(): Promise<void> {
   clearApiToken();
   currentRole = authRequired ? null : "admin";
   currentUser = null;
+  emit();
 }
 
 export function saveApiToken(token: string): void {
   setApiToken(token);
+  emit();
 }
 
 export function removeApiToken(): void {
   clearApiToken();
   currentRole = authRequired ? null : "admin";
   currentUser = null;
+  emit();
 }
 
 export async function refreshAuthRole(): Promise<ApiRole | null> {

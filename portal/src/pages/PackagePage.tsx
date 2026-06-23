@@ -12,10 +12,11 @@ import {
 } from "../packagesApi";
 import type { Organization, PackageCompleteness, ReportingPeriod } from "../types";
 import { formatPeriod, formStatusLabel } from "../utils";
-import { isAdminRole } from "../auth";
+import { useAuth } from "../useAuth";
 
 export function PackagePage() {
-  const admin = isAdminRole();
+  const auth = useAuth();
+  const admin = !auth.authRequired || auth.role === "admin";
   const [searchParams] = useSearchParams();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [periods, setPeriods] = useState<ReportingPeriod[]>([]);

@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { fetchPackagesDashboard } from "../packagesApi";
 import type { PackageDashboardRow } from "../types";
 import { formatPeriod } from "../utils";
-import { isAdminRole } from "../auth";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 export function PackagesDashboardPage() {
   const backend = isBackendMode();
-  const admin = isAdminRole();
+  const auth = useAuth();
+  const admin = !auth.authRequired || auth.role === "admin";
   const [rows, setRows] = useState<PackageDashboardRow[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");

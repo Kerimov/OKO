@@ -25,9 +25,9 @@ import {
   saveInstance,
   setInstanceStatus,
 } from "../storage";
-import { isAdminRole } from "../auth";
 import type { FormInstanceStatus, FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
+import { useAuth } from "../useAuth";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -63,7 +63,8 @@ export function FormPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
-  const admin = isAdminRole();
+  const auth = useAuth();
+  const admin = !auth.authRequired || auth.role === "admin";
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const isLocked = instanceStatus === "submitted" && !admin;
 

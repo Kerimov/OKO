@@ -3,16 +3,11 @@ import { Link } from "react-router-dom";
 import { loadGlobalMeta, saveGlobalMeta } from "../storage";
 import type { GlobalMeta } from "../storage";
 import {
-  getApiRole,
-  getCurrentUser,
-  isAuthRequired,
-  isLoginAvailable,
   logout,
-  refreshAuthRole,
   removeApiToken,
-  saveApiToken,
 } from "../auth";
 import { getApiToken } from "../apiClient";
+import { useAuth } from "../useAuth";
 
 const emptyMeta: GlobalMeta = {
   organization: "",
@@ -25,17 +20,16 @@ const emptyMeta: GlobalMeta = {
 export function SettingsPage() {
   const [meta, setMeta] = useState<GlobalMeta>(emptyMeta);
   const [apiToken, setApiToken] = useState("");
-  const [role, setRole] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
-  const user = getCurrentUser();
-  const loginMode = isLoginAvailable();
+  const auth = useAuth();
+  const user = auth.user;
+  const loginMode = auth.loginAvailable;
 
   useEffect(() => {
     loadGlobalMeta().then((m) => {
       setMeta(m);
       setApiToken(getApiToken() ?? "");
-      setRole(getApiRole());
       setLoading(false);
     });
   }, []);
@@ -46,18 +40,15 @@ export function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleSaveToken = async () => {
-    if (apiToken.trim()) saveApiToken(apiToken);
-    else removeApiToken();
-    const r = await refreshAuthRole();
-    setRole(r);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
   const handleLogout = async () => {
     await logout();
     window.location.href = "/login";
+  };
+  const handleClearToken = () => {
+    removeApiToken();
+    setApiToken("");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   if (loading) {
@@ -121,7 +112,7 @@ export function SettingsPage() {
           <p className="settings-desc">
             Вы вошли как <strong>{user.displayName || user.username}</strong>
             {user.organizationName ? ` (${user.organizationName})` : ""}. Роль API:{" "}
-            <strong>{role}</strong>.
+            <strong>{auth.role}</strong>.
           </p>
           <button type="button" className="btn btn-secondary" onClick={handleLogout}>
             Выйти
@@ -143,6 +134,18 @@ export function SettingsPage() {
               </>
             )}
           </p>
+          {loginMode && auth.legacyToken && (
+            <div className="error-box" style={{ marginTop: "0.75rem" }}>
+              В браузере сохранён Bearer-токен (режим legacy), поэтому вы видите роль{" "}
+              <strong>{auth.role}</strong> и урезанный функционал. Нажмите «Сбросить токен» и
+              войдите через <Link to="/login">/login</Link>.
+              <div style={{ marginTop: "0.75rem" }}>
+                <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
+                  Сбросить токен
+                </button>
+              </div>
+            </div>
+          )}
           {!loginMode && (
             <div className="settings-form">
               <label>
@@ -155,14 +158,14 @@ export function SettingsPage() {
                   autoComplete="off"
                 />
               </label>
-              {role && (
+              {auth.role && (
                 <p className="settings-desc">
-                  Текущая роль: <strong>{role}</strong>
-                  {isAuthRequired() ? "" : " (auth отключён на сервере)"}
+                  Текущая роль: <strong>{auth.role}</strong>
+                  {auth.authRequired ? "" : " (auth отключён на сервере)"}
                 </p>
               )}
-              <button type="button" className="btn btn-secondary" onClick={handleSaveToken}>
-                Сохранить токен
+              <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
+                Удалить токен
               </button>
             </div>
           )}

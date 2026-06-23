@@ -1,13 +1,9 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
-  getApiRole,
-  getCurrentUser,
-  isAdminRole,
-  isLoginAvailable,
-  isOrgUser,
   logout,
 } from "../auth";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 type NavItem = {
   to: string;
@@ -46,9 +42,10 @@ function SidebarSection({ section }: { section: NavSection }) {
 }
 
 export function Layout() {
-  const adminNav = isBackendMode() && isAdminRole();
-  const orgUser = isOrgUser();
-  const user = getCurrentUser();
+  const auth = useAuth();
+  const adminNav = isBackendMode() && (!auth.authRequired || auth.role === "admin");
+  const orgUser = auth.user?.role === "org";
+  const user = auth.user;
 
   const handleLogout = async () => {
     await logout();
@@ -131,6 +128,16 @@ export function Layout() {
         </nav>
 
         <div className="sidebar-footer">
+          {isBackendMode() && auth.authRequired && !auth.role && (
+            <Link to="/login" className="sidebar-login">
+              Войти
+            </Link>
+          )}
+          {isBackendMode() && auth.legacyToken && (
+            <div className="sidebar-auth-note">
+              Подключено по токену · роль {auth.role}
+            </div>
+          )}
           {user && (
             <div className="sidebar-user" title={user.username}>
               <span className="sidebar-user-name">{user.displayName || user.username}</span>
@@ -139,7 +146,7 @@ export function Layout() {
               )}
             </div>
           )}
-          {isBackendMode() && getApiRole() && isLoginAvailable() && (
+          {isBackendMode() && auth.role && auth.loginAvailable && (
             <button type="button" className="sidebar-logout" onClick={handleLogout}>
               Выйти
             </button>

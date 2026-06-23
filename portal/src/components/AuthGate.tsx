@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { getApiRole, initAuth, isAuthRequired } from "../auth";
+import { initAuth } from "../auth";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [ready, setReady] = useState(false);
+  const auth = useAuth();
 
   useEffect(() => {
     initAuth().finally(() => setReady(true));
@@ -20,12 +22,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   const backend = isBackendMode();
-  const needsLogin = backend && isAuthRequired() && !getApiRole();
+  const needsLogin = backend && auth.authRequired && !auth.role;
   if (needsLogin && location.pathname !== "/login") {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (getApiRole() && location.pathname === "/login") {
+  if (auth.role && location.pathname === "/login") {
     return <Navigate to="/" replace />;
   }
 

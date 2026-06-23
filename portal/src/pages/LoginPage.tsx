@@ -1,18 +1,20 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { getApiRole, isAuthRequired, login } from "../auth";
+import { login } from "../auth";
+import { useAuth } from "../useAuth";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
+  const auth = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!isAuthRequired() && getApiRole()) {
+  if (!auth.authRequired && auth.role) {
     return <Navigate to="/" replace />;
   }
 

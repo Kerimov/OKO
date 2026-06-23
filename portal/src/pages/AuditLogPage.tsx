@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchAuditPage, type AuditLogItem } from "../api";
-import { isAdminRole, isAuthRequired } from "../auth";
 import { isBackendMode } from "../storage";
+import { useAuth } from "../useAuth";
 
 export function AuditLogPage() {
   const backend = isBackendMode();
-  const admin = isAdminRole();
+  const auth = useAuth();
+  const admin = !auth.authRequired || auth.role === "admin";
   const [items, setItems] = useState<AuditLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -48,8 +49,16 @@ export function AuditLogPage() {
       <div className="admin-page">
         <h1>Журнал аудита</h1>
         <div className="error-box">
-          Доступ только для роли <strong>admin</strong>. Укажите admin-токен в{" "}
-          <Link to="/settings">настройках</Link>.
+          Доступ только для роли <strong>admin</strong>.{" "}
+          {auth.loginAvailable ? (
+            <>
+              Войдите через <Link to="/login">/login</Link>.
+            </>
+          ) : (
+            <>
+              Укажите admin-токен в <Link to="/settings">настройках</Link>.
+            </>
+          )}
         </div>
       </div>
     );
@@ -136,7 +145,7 @@ export function AuditLogPage() {
         </>
       )}
 
-      {isAuthRequired() && (
+      {auth.authRequired && (
         <p className="admin-desc" style={{ marginTop: "1rem" }}>
           Записи появляются при сохранении метаданных под токеном admin.
         </p>
