@@ -14,8 +14,21 @@ export function MyFormsPage() {
   const [search, setSearch] = useState("");
   const [filterTemplate, setFilterTemplate] = useState("all");
   const [filterStatus, setFilterStatus] = useState<"all" | FormInstanceStatus>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [deleting, setDeleting] = useState(false);
 
-  const refresh = async () => setInstances(await listInstances());
+  const refresh = async () => {
+    const list = await listInstances();
+    setInstances(list);
+    setSelectedIds((prev) => {
+      const ids = new Set(list.map((i) => i.instanceId));
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (ids.has(id)) next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     refresh();
@@ -40,20 +53,73 @@ export function MyFormsPage() {
     });
   }, [instances, search, filterTemplate, filterStatus]);
 
+  const filteredIds = useMemo(
+    () => filtered.map((inst) => inst.instanceId),
+    [filtered]
+  );
+
+  const selectedCount = selectedIds.size;
+  const allFilteredSelected =
+    filtered.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const someFilteredSelected =
+    filteredIds.some((id) => selectedIds.has(id)) && !allFilteredSelected;
+
   const templateOptions = useMemo(() => {
     const ids = new Set(instances.map((i) => i.templateId));
     return Array.from(ids).sort();
   }, [instances]);
 
-  const handleDelete = (inst: InstanceSummary) => {
+  const toggleOne = (instanceId: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(instanceId);
+      else next.delete(instanceId);
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of filteredIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const deleteInstances = async (ids: string[], label: string) => {
+    if (ids.length === 0) return;
     if (
       !confirm(
-        `Удалить форму «${inst.displayName}»?\nДанные будут удалены безвозвратно.`
+        ids.length === 1
+          ? `Удалить форму «${label}»?\nДанные будут удалены безвозвратно.`
+          : `Удалить ${ids.length} форм?\nДанные будут удалены безвозвратно.`
       )
     ) {
       return;
     }
-    deleteInstance(inst.instanceId).then(refresh);
+    setDeleting(true);
+    try {
+      await Promise.all(ids.map((id) => deleteInstance(id)));
+      await refresh();
+    } catch {
+      alert("Не удалось удалить одну или несколько форм");
+      await refresh();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDelete = (inst: InstanceSummary) => {
+    deleteInstances([inst.instanceId], inst.displayName);
+  };
+
+  const handleDeleteSelected = () => {
+    deleteInstances(Array.from(selectedIds), "");
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +195,26 @@ export function MyFormsPage() {
           hidden
           onChange={handleImport}
         />
+        {selectedCount > 0 && (
+          <>
+            <button
+              type="button"
+              className="btn btn-danger-outline"
+              disabled={deleting}
+              onClick={handleDeleteSelected}
+            >
+              {deleting ? "Удаление…" : `Удалить выбранные (${selectedCount})`}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={deleting}
+              onClick={clearSelection}
+            >
+              Снять выбор
+            </button>
+          </>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -145,9 +231,47 @@ export function MyFormsPage() {
           )}
         </div>
       ) : (
-        <div className="instance-list">
-          {filtered.map((inst) => (
-            <article key={inst.instanceId} className="instance-card">
+        <>
+          <div className="instance-list-toolbar">
+            <label className="instance-select-all">
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someFilteredSelected;
+                }}
+                disabled={deleting}
+                onChange={(e) => toggleAllFiltered(e.target.checked)}
+              />
+              <span>
+                {allFilteredSelected
+                  ? "Снять выбор со всех"
+                  : `Выбрать все (${filtered.length})`}
+              </span>
+            </label>
+            {selectedCount > 0 && (
+              <span className="instance-selection-count">
+                Выбрано: {selectedCount}
+              </span>
+            )}
+          </div>
+          <div className="instance-list">
+          {filtered.map((inst) => {
+            const checked = selectedIds.has(inst.instanceId);
+            return (
+            <article
+              key={inst.instanceId}
+              className={`instance-card${checked ? " instance-card-selected" : ""}`}
+            >
+              <label className="instance-card-check">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={deleting}
+                  onChange={(e) => toggleOne(inst.instanceId, e.target.checked)}
+                  aria-label={`Выбрать «${inst.displayName}»`}
+                />
+              </label>
               <div className="instance-card-body">
                 <Link
                   to={`/my/${inst.instanceId}`}
@@ -186,14 +310,17 @@ export function MyFormsPage() {
                 <button
                   type="button"
                   className="btn btn-danger-outline btn-sm"
+                  disabled={deleting}
                   onClick={() => handleDelete(inst)}
                 >
                   Удалить
                 </button>
               </div>
             </article>
-          ))}
-        </div>
+            );
+          })}
+          </div>
+        </>
       )}
     </div>
   );
