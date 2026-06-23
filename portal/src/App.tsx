@@ -1,9 +1,9 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthGate } from "./components/AuthGate";
 import { Layout } from "./components/Layout";
+import { EntryPage } from "./pages/EntryPage";
 import { FormPage } from "./pages/FormPage";
 import { HomePage } from "./pages/HomePage";
-import { LoginPage } from "./pages/LoginPage";
 import { MyFormsPage } from "./pages/MyFormsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ToolsPage } from "./pages/ToolsPage";
@@ -23,9 +23,10 @@ export default function App() {
     <BrowserRouter>
       <AuthGate>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<EntryPage />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route element={<Layout />}>
-            <Route index element={<HomePage />} />
+            <Route path="catalog" element={<HomePage />} />
             <Route path="my" element={<MyFormsPage />} />
             <Route path="my/:instanceId" element={<FormPage />} />
             <Route path="tools" element={<ToolsPage />} />

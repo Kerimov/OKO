@@ -350,7 +350,7 @@ export function PackagePage() {
               <ul>
                 {missing.map((f) => (
                   <li key={f.formId}>
-                    <Link to="/">{f.formId}</Link> — {f.title}
+                    <Link to="/catalog">{f.formId}</Link> — {f.title}
                   </li>
                 ))}
               </ul>

@@ -344,7 +344,7 @@ export function FormPage() {
           <Link to="/my" className="back-link">
             ← Мои формы ОКО
           </Link>
-          <Link to="/" className="back-link muted">
+          <Link to="/catalog" className="back-link muted">
             Каталог
           </Link>
         </div>

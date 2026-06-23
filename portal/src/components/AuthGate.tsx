@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { needsAuthentication } from "../authRouting";
 import { initAuth } from "../auth";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
@@ -22,13 +23,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   const backend = isBackendMode();
-  const needsLogin = backend && auth.authRequired && !auth.role;
-  if (needsLogin && location.pathname !== "/login") {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (auth.role && location.pathname === "/login") {
-    return <Navigate to="/" replace />;
+  if (needsAuthentication(backend, auth) && location.pathname !== "/") {
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

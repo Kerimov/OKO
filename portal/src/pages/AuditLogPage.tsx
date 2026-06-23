@@ -52,7 +52,7 @@ export function AuditLogPage() {
           Доступ только для роли <strong>admin</strong>.{" "}
           {auth.loginAvailable ? (
             <>
-              Войдите через <Link to="/login">/login</Link>.
+              Войдите на <Link to="/">главной странице</Link>.
             </>
           ) : (
             <>

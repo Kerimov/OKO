@@ -31,7 +31,7 @@ export function AdminAccessGate({ title }: { title: string }) {
         Нужна роль <strong>admin</strong>.{" "}
         {auth.loginAvailable ? (
           <>
-            Войдите через <Link to="/login">/login</Link>.
+            Войдите на <Link to="/">главной странице</Link>.
           </>
         ) : (
           <>

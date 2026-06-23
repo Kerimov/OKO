@@ -460,7 +460,7 @@ export function FormsEditorPage() {
                 <section>
                   <p className="period-hint">
                     Превью таблицы после сохранения будет использоваться при создании новых экземпляров.
-                    <Link to="/"> Создать форму в каталоге</Link>
+                    <Link to="/catalog"> Создать форму в каталоге</Link>
                   </p>
                   <FormTable
                     columns={schema.columns}

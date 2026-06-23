@@ -75,7 +75,7 @@ export function MyFormsPage() {
         <h1>Мои формы ОКО</h1>
         <p>
           Здесь хранятся отдельные заполненные экземпляры форм. Создайте новую
-          форму в <Link to="/">каталоге шаблонов</Link> или откройте{" "}
+          форму в <Link to="/catalog">каталоге шаблонов</Link> или откройте{" "}
           <Link to="/tools">администрирование</Link> для проверки и сальdo.
         </p>
         <div className="stats">
@@ -136,7 +136,7 @@ export function MyFormsPage() {
           {instances.length === 0 ? (
             <>
               <p>У вас пока нет сохранённых форм.</p>
-              <Link to="/" className="btn btn-primary">
+              <Link to="/catalog" className="btn btn-primary">
                 Перейти в каталог и создать форму
               </Link>
             </>
