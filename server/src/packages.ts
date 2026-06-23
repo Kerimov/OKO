@@ -69,6 +69,22 @@ export interface CreatePackageResult {
   instanceIds: string[];
 }
 
+export interface ImportPackageResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface ReportPackageInput {
+  organization?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  zid?: number | null;
+  eid?: number | null;
+  instances: OkoFormInstance[];
+}
+
 export async function migrateOrgTables(db: OkoDb): Promise<void> {
   await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_instances_zid_eid ON form_instances(zid, eid);
@@ -520,4 +536,110 @@ export async function createReportPackage(
   });
 
   return { created, skipped, total: catalog.forms.length, instanceIds };
+}
+
+async function findInstanceByTemplate(
+  db: OkoDb,
+  zid: number,
+  eid: number,
+  templateId: string
+): Promise<string | null> {
+  const row = (await db
+    .prepare(
+      `SELECT instance_id FROM form_instances
+       WHERE zid = ? AND eid = ? AND template_id = ?
+       ORDER BY updated_at DESC LIMIT 1`
+    )
+    .get(zid, eid, templateId)) as { instance_id: string } | undefined;
+  return row?.instance_id ?? null;
+}
+
+export async function importReportPackage(
+  db: OkoDb,
+  targetZid: number,
+  targetEid: number,
+  pkg: ReportPackageInput,
+  overwrite: boolean
+): Promise<ImportPackageResult> {
+  const org = (await db
+    .prepare("SELECT name FROM organizations WHERE zid = ?")
+    .get(targetZid)) as { name: string } | undefined;
+  if (!org) throw new Error("Organization not found");
+
+  const period = (await db
+    .prepare("SELECT name, period_start, period_end FROM periods WHERE eid = ? AND zid = ?")
+    .get(targetEid, targetZid)) as
+    | { name: string; period_start: string | null; period_end: string | null }
+    | undefined;
+  if (!period) throw new Error("Period not found");
+
+  const organization =
+    pkg.organization?.trim() || org.name;
+  const periodStart = pkg.periodStart || dateToString(period.period_start);
+  const periodEnd = pkg.periodEnd || dateToString(period.period_end);
+
+  const result: ImportPackageResult = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  if (!pkg.instances?.length) {
+    throw new Error("Package has no instances");
+  }
+
+  await db.transaction(async (tx) => {
+    for (const raw of pkg.instances) {
+      try {
+        if (!raw.templateId) {
+          result.errors.push("Форма без templateId пропущена");
+          continue;
+        }
+        const existingId = await findInstanceByTemplate(
+          tx,
+          targetZid,
+          targetEid,
+          raw.templateId
+        );
+
+        if (existingId && !overwrite) {
+          result.skipped++;
+          continue;
+        }
+
+        const now = new Date().toISOString();
+        const inst: OkoFormInstance = {
+          ...raw,
+          instanceId: existingId ?? raw.instanceId ?? randomUUID(),
+          zid: targetZid,
+          eid: targetEid,
+          templateTitle: raw.templateTitle ?? raw.templateId,
+          displayName: raw.displayName ?? raw.templateId,
+          status: raw.status === "submitted" ? "submitted" : "draft",
+          meta: {
+            organization,
+            enterpriseCode: raw.meta?.enterpriseCode ?? "1@1",
+            periodStart: raw.meta?.periodStart || periodStart,
+            periodEnd: raw.meta?.periodEnd || periodEnd,
+            unit: raw.meta?.unit ?? "тыс.руб.",
+          },
+          rows: raw.rows ?? [],
+          signatures: raw.signatures ?? {},
+          createdAt: existingId ? raw.createdAt ?? now : now,
+          updatedAt: now,
+        };
+
+        await saveInstanceCells(tx, inst);
+        if (existingId) result.updated++;
+        else result.created++;
+      } catch (e) {
+        result.errors.push(
+          `${raw.templateId ?? "?"}: ${e instanceof Error ? e.message : "import failed"}`
+        );
+      }
+    }
+  });
+
+  return result;
 }

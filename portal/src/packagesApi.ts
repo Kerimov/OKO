@@ -10,6 +10,8 @@ import type {
   ReportingPeriod,
   WorkContext,
 } from "./types";
+import type { ReportPackage } from "./engine/packageExport";
+import type { ImportPackageResult } from "./engine/packageImport";
 
 const LOCAL_ORGS_KEY = "oko-local-orgs";
 const LOCAL_PERIODS_KEY = "oko-local-periods";
@@ -275,4 +277,41 @@ export async function createReportPackage(
   }
 
   return { created, skipped, total: catalog.forms.length, instanceIds };
+}
+
+export async function importReportPackage(
+  zid: number,
+  eid: number,
+  pkg: ReportPackage,
+  overwrite: boolean
+): Promise<ImportPackageResult> {
+  if (isBackendMode()) {
+    return apiFetch<ImportPackageResult>("/api/packages/import", {
+      method: "POST",
+      body: JSON.stringify({
+        zid,
+        eid,
+        overwrite,
+        package: {
+          organization: pkg.organization,
+          periodStart: pkg.periodStart,
+          periodEnd: pkg.periodEnd,
+          instances: pkg.instances,
+        },
+      }),
+    });
+  }
+
+  const { loadAllInstances, saveInstance } = await import("./storage");
+  const { mergePackageIntoInstances } = await import("./engine/packageImport");
+  const existing = await loadAllInstances();
+  const { instances, result } = mergePackageIntoInstances(pkg, existing, {
+    targetZid: zid,
+    targetEid: eid,
+    overwrite,
+  });
+  for (const inst of instances) {
+    await saveInstance(inst);
+  }
+  return result;
 }

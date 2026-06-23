@@ -10,6 +10,8 @@ data/oko.db-*
 
 # PDF-образцы форм (локально, не публикуются в репозиторий)
 portal/public/pdf/*.pdf
+# Seed-комплект для offline-kit (генерируется при сборке)
+portal/public/offline-package.json
 
 # Исходный комплект ОКО (бинарники)
 reference/*.mdb

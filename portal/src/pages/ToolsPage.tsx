@@ -16,8 +16,9 @@ import { exportPackageToExcel } from "../engine/exportExcel";
 import {
   downloadReportPackage,
   filterInstancesByPeriod,
+  readReportPackageFile,
 } from "../engine/packageExport";
-import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
+import { loadWorkContext, listOrganizations, listPeriods, importReportPackage } from "../packagesApi";
 import { recalcForm } from "../engine/recalcEngine";
 import {
   applySaldoToTarget,
@@ -75,6 +76,10 @@ export function ToolsPage() {
   const [aggrCheckResult, setAggrCheckResult] = useState<CheckRunResult | null>(null);
 
   const [periodInstances, setPeriodInstances] = useState<OkoFormInstance[]>([]);
+  const [workZid, setWorkZid] = useState<number | null>(null);
+  const [workEid, setWorkEid] = useState<number | null>(null);
+  const [importOverwrite, setImportOverwrite] = useState(true);
+  const [importing, setImporting] = useState(false);
   const backend = isBackendMode();
 
   useEffect(() => {
@@ -107,11 +112,16 @@ export function ToolsPage() {
 
   useEffect(() => {
     (async () => {
-      const meta = await loadGlobalMeta();
+      const work = await loadWorkContext();
+      setWorkZid(work.zid);
+      setWorkEid(work.eid);
       const all = await loadAllInstances();
-      setPeriodInstances(
-        filterInstancesByPeriod(all, meta.periodStart, meta.periodEnd)
-      );
+      if (work.zid != null && work.eid != null) {
+        setPeriodInstances(all.filter((i) => i.zid === work.zid && i.eid === work.eid));
+      } else {
+        const meta = await loadGlobalMeta();
+        setPeriodInstances(filterInstancesByPeriod(all, meta.periodStart, meta.periodEnd));
+      }
     })();
   }, [summaries]);
 
@@ -252,6 +262,33 @@ export function ToolsPage() {
     }
     downloadReportPackage(periodInstances);
     setStatus(`Экспорт JSON: ${periodInstances.length} форм`);
+  };
+
+  const handleImportPackage = async (file: File) => {
+    if (workZid == null || workEid == null) {
+      setStatus("Выберите организацию и период в разделе Комплект");
+      return;
+    }
+    setImporting(true);
+    try {
+      const pkg = await readReportPackageFile(file);
+      const result = await importReportPackage(
+        workZid,
+        workEid,
+        pkg,
+        importOverwrite
+      );
+      await refresh();
+      const errPart =
+        result.errors.length > 0 ? ` Ошибки: ${result.errors.slice(0, 3).join("; ")}` : "";
+      setStatus(
+        `Импорт: создано ${result.created}, обновлено ${result.updated}, пропущено ${result.skipped}.${errPart}`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка импорта");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handlePackageExcel = async () => {
@@ -397,6 +434,56 @@ export function ToolsPage() {
           )}
         </section>
       )}
+
+      <section className="tools-section">
+        <h2>Обмен с дочерними организациями (офлайн)</h2>
+        <p>
+          Для организаций без доступа к порталу: выгрузите комплект JSON или соберите{" "}
+          <strong>offline-kit</strong> (см. <code>scripts/build-offline-kit.sh</code>).
+          После заполнения дочка присылает JSON — загрузите его здесь.
+        </p>
+        <p className="hint-text">
+          Рабочий контекст: ZID={workZid ?? "—"}, EID={workEid ?? "—"}.
+          Задаётся в разделе <Link to="/package">Комплект</Link>.
+        </p>
+        <div className="toolbar-actions" style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handlePackageJson}
+            disabled={periodInstances.length === 0}
+          >
+            Выгрузить комплект для дочки ({periodInstances.length})
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={importing}
+            onClick={() => document.getElementById("import-package-file")?.click()}
+          >
+            {importing ? "Импорт…" : "Импорт комплекта JSON"}
+          </button>
+          <input
+            id="import-package-file"
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleImportPackage(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <label className="checkbox-inline">
+          <input
+            type="checkbox"
+            checked={importOverwrite}
+            onChange={(e) => setImportOverwrite(e.target.checked)}
+          />
+          Перезаписать существующие формы комплекта (иначе — только новые шаблоны)
+        </label>
+      </section>
 
       <section className="tools-section">
         <h2>Сохранить комплект на диск</h2>
