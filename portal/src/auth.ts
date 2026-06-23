@@ -1,4 +1,5 @@
 import { apiFetch, clearApiToken, getApiToken, setApiToken } from "./apiClient";
+import { isOfflineKitMode } from "./buildFlags";
 
 export type ApiRole = "admin" | "user";
 export type UserAccountRole = "admin" | "org";
@@ -100,6 +101,16 @@ export function isOrgUser(): boolean {
 }
 
 export async function initAuth(): Promise<void> {
+  if (isOfflineKitMode()) {
+    authRequired = false;
+    loginAvailable = false;
+    backendDb = null;
+    currentRole = "admin";
+    currentUser = null;
+    emit();
+    return;
+  }
+
   try {
     const health = await apiFetch<{
       db?: string;

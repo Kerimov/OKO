@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && npm run build:offline-template && vite build",
-    "build:offline-template": "VITE_OFFLINE_KIT=true tsc --noEmit && VITE_OFFLINE_KIT=true vite build && node ../scripts/zip-offline-template.mjs",
+    "build:offline-template": "VITE_OFFLINE_KIT=true VITE_API_URL= tsc --noEmit && VITE_OFFLINE_KIT=true VITE_API_URL= vite build && node ../scripts/zip-offline-template.mjs",
     "build:offline-kit": "npm run build:offline-template",
     "preview": "vite preview"
   },

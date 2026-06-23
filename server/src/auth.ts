@@ -39,7 +39,13 @@ export function hasUserAccounts(): boolean {
   return userAccountsCached;
 }
 
+export function isAuthDisabled(): boolean {
+  const v = process.env.OKO_AUTH_DISABLED?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export function isAuthEnabled(): boolean {
+  if (isAuthDisabled()) return false;
   return hasLegacyAuth() || hasUserAccounts();
 }
 

@@ -1,5 +1,6 @@
 import type { ReportPackage } from "./engine/packageExport";
 import { parseReportPackageFile } from "./engine/packageExport";
+import { isOfflineKitMode } from "./buildFlags";
 import { importReportPackage } from "./packagesApi";
 import {
   loadGlobalMeta,
@@ -13,10 +14,7 @@ const LOCAL_PERIODS_KEY = "oko-local-periods";
 const LOCAL_WORK_CTX_KEY = "oko-work-context";
 const OFFLINE_SEEDED_KEY = "oko-offline-seeded";
 
-/** Сборка offline-kit: VITE_OFFLINE_KIT=true */
-export function isOfflineKitMode(): boolean {
-  return import.meta.env.VITE_OFFLINE_KIT === "true";
-}
+export { isOfflineKitMode } from "./buildFlags";
 
 export async function initOfflineKit(): Promise<void> {
   if (!isOfflineKitMode()) return;

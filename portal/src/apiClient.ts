@@ -1,6 +1,10 @@
+import { isOfflineKitMode } from "./buildFlags";
+
 const TOKEN_KEY = "oko-api-token";
 
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const API_BASE = isOfflineKitMode()
+  ? ""
+  : ((import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "");
 
 export function getApiBase(): string {
   return API_BASE;
@@ -57,6 +61,11 @@ export function apiHeaders(extra?: HeadersInit): HeadersInit {
 }
 
 export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
+  if (isOfflineKitMode() && path.startsWith("/api/")) {
+    throw new Error(
+      "Offline-kit работает без сервера. Откройте формы в «Мои формы» или создайте их в «Каталог»."
+    );
+  }
   const headers = new Headers(apiHeaders(init?.headers));
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -68,8 +77,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const res = await apiFetchRaw(path, init);
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || res.statusText);
+    throw new Error(formatApiError(res.status, err) || res.statusText);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+function formatApiError(status: number, body: string): string {
+  try {
+    const data = JSON.parse(body) as { error?: string; authRequired?: boolean };
+    if (status === 401 && data.authRequired) {
+      return "Требуется вход в систему. Откройте главную страницу (/) и войдите под учётной записью администратора.";
+    }
+    return data.error ?? body;
+  } catch {
+    return body;
+  }
 }

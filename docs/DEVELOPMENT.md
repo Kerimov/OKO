@@ -26,7 +26,7 @@ cd OKO
 # API
 cd server
 npm install
-cp ../.env.example ../.env   # при необходимости
+cp ../.env.example ../.env   # OKO_AUTH_DISABLED=1 — auth выключен для локальной разработки
 npm run dev
 # → http://localhost:3001/api/health
 
@@ -41,7 +41,9 @@ Vite проксирует `/api` на `localhost:3001` (см. `portal/vite.confi
 
 ### Первый вход
 
-При пустой БД и заданных в `.env`:
+По умолчанию в `.env` задано `OKO_AUTH_DISABLED=1` — API работает без токена и пароля.
+
+Если авторизация включена (`OKO_AUTH_DISABLED` убран или `0`, либо задан `OKO_ADMIN_TOKEN`):
 
 ```env
 OKO_BOOTSTRAP_ADMIN_USER=admin

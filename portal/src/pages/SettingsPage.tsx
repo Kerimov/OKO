@@ -5,6 +5,8 @@ import type { GlobalMeta } from "../storage";
 import {
   logout,
   removeApiToken,
+  refreshAuthRole,
+  saveApiToken,
 } from "../auth";
 import { getApiToken } from "../apiClient";
 import { useAuth } from "../useAuth";
@@ -47,6 +49,13 @@ export function SettingsPage() {
   const handleClearToken = () => {
     removeApiToken();
     setApiToken("");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSaveToken = async () => {
+    saveApiToken(apiToken.trim());
+    await refreshAuthRole();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -164,9 +173,14 @@ export function SettingsPage() {
                   {auth.authRequired ? "" : " (auth отключён на сервере)"}
                 </p>
               )}
-              <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
-                Удалить токен
-              </button>
+              <div className="toolbar-actions" style={{ gap: "0.5rem" }}>
+                <button type="button" className="btn btn-primary" onClick={handleSaveToken}>
+                  Сохранить токен
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
+                  Удалить токен
+                </button>
+              </div>
             </div>
           )}
         </>
