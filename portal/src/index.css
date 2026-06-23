@@ -1713,6 +1713,37 @@ a:hover {
   box-shadow: var(--shadow);
 }
 
+.markdown-body h2#содержание + ul,
+.markdown-body h2#содержание + ol {
+  background: #f8fbff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1.25rem 0.75rem 2rem;
+  margin: 0 0 1.5rem;
+}
+
+.markdown-body h4 {
+  font-size: 0.95rem;
+  margin: 0.85rem 0 0.35rem;
+  color: var(--text);
+}
+
+.markdown-body .fn-block {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: #fafafa;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.markdown-body .fn-block p:first-child {
+  margin-top: 0;
+}
+
+.markdown-body .fn-block p:last-child {
+  margin-bottom: 0;
+}
+
 .instructions-article .markdown-body + .markdown-body {
   margin-top: 2rem;
   padding-top: 1.5rem;
