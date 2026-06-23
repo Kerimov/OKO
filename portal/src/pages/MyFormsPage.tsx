@@ -1,48 +1,243 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { FormInstanceStatus, InstanceSummary } from "../types";
+import {
+  formsListTitle,
+  instanceMatchesPackage,
+  isAdminFormsView,
+  isOrgFormsUser,
+} from "../formsListLabels";
+import { isOfflineKitMode } from "../offlineMode";
+import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
+import type { FormInstanceStatus, InstanceSummary, Organization, ReportingPeriod } from "../types";
 import {
   deleteInstance,
   importInstanceFile,
   listInstances,
 } from "../storage";
+import { useAuth } from "../useAuth";
 import { formatPeriod, formStatusLabel } from "../utils";
+
+type PackageGroup = {
+  key: string;
+  zid: number | null;
+  eid: number | null;
+  orgName: string;
+  periodName: string;
+  periodStart: string;
+  periodEnd: string;
+  items: InstanceSummary[];
+};
+
+function buildPackageGroups(
+  items: InstanceSummary[],
+  orgs: Organization[],
+  periodsByZid: Map<number, ReportingPeriod[]>
+): PackageGroup[] {
+  const map = new Map<string, PackageGroup>();
+  for (const inst of items) {
+    const zid = inst.zid ?? null;
+    const eid = inst.eid ?? null;
+    const key = `${zid ?? "x"}:${eid ?? "x"}`;
+    let group = map.get(key);
+    if (!group) {
+      const org = zid != null ? orgs.find((o) => o.zid === zid) : undefined;
+      const periods = zid != null ? periodsByZid.get(zid) ?? [] : [];
+      const period = eid != null ? periods.find((p) => p.eid === eid) : undefined;
+      group = {
+        key,
+        zid,
+        eid,
+        orgName: org?.name ?? (inst.organization || "Без организации"),
+        periodName: period?.name ?? (formatPeriod(inst.periodStart, inst.periodEnd) || "Без периода"),
+        periodStart: period?.periodStart ?? inst.periodStart,
+        periodEnd: period?.periodEnd ?? inst.periodEnd,
+        items: [],
+      };
+      map.set(key, group);
+    }
+    group.items.push(inst);
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const az = a.zid ?? 0;
+    const bz = b.zid ?? 0;
+    if (az !== bz) return az - bz;
+    return (a.eid ?? 0) - (b.eid ?? 0);
+  });
+}
+
+function InstanceCard({
+  inst,
+  checked,
+  deleting,
+  showPackageIds,
+  hideOrgLine,
+  onToggle,
+  onDelete,
+}: {
+  inst: InstanceSummary;
+  checked: boolean;
+  deleting: boolean;
+  showPackageIds: boolean;
+  hideOrgLine?: boolean;
+  onToggle: (id: string, checked: boolean) => void;
+  onDelete: (inst: InstanceSummary) => void;
+}) {
+  return (
+    <article
+      className={`instance-card${checked ? " instance-card-selected" : ""}`}
+    >
+      <label className="instance-card-check">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={deleting}
+          onChange={(e) => onToggle(inst.instanceId, e.target.checked)}
+          aria-label={`Выбрать «${inst.displayName}»`}
+        />
+      </label>
+      <div className="instance-card-body">
+        <Link to={`/my/${inst.instanceId}`} className="instance-card-title">
+          {inst.displayName}
+        </Link>
+        <div className="instance-card-meta">
+          <span className="form-card-id">{inst.templateId}</span>
+          <span>{inst.templateTitle}</span>
+          <span className={`status-badge ${inst.status ?? "draft"}`}>
+            {formStatusLabel(inst.status)}
+          </span>
+          {showPackageIds && (inst.zid != null || inst.eid != null) && (
+            <span className="package-id-badge">
+              ZID={inst.zid ?? "—"}, EID={inst.eid ?? "—"}
+            </span>
+          )}
+        </div>
+        {inst.organization && !hideOrgLine && (
+          <p className="instance-org">{inst.organization}</p>
+        )}
+        <p className="instance-period">
+          {formatPeriod(inst.periodStart, inst.periodEnd)}
+        </p>
+        <p className="instance-dates">
+          Создано: {new Date(inst.createdAt).toLocaleString("ru-RU")}
+          {" · "}
+          Изменено: {new Date(inst.updatedAt).toLocaleString("ru-RU")}
+        </p>
+      </div>
+      <div className="instance-card-actions">
+        <Link to={`/my/${inst.instanceId}`} className="btn btn-primary btn-sm">
+          Открыть
+        </Link>
+        <button
+          type="button"
+          className="btn btn-danger-outline btn-sm"
+          disabled={deleting}
+          onClick={() => onDelete(inst)}
+        >
+          Удалить
+        </button>
+      </div>
+    </article>
+  );
+}
 
 export function MyFormsPage() {
   const navigate = useNavigate();
+  const auth = useAuth();
+  const adminView = isAdminFormsView(auth);
+  const orgUser = isOrgFormsUser(auth);
+  const orgZid = orgUser ? auth.user?.zid ?? null : null;
+  const pageTitle = formsListTitle(auth);
+  const hideOrgOnCards = orgUser || isOfflineKitMode();
+
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
+  const [filterZid, setFilterZid] = useState<number | "">("");
+  const [filterEid, setFilterEid] = useState<number | "">("");
   const [search, setSearch] = useState("");
   const [filterTemplate, setFilterTemplate] = useState("all");
   const [filterStatus, setFilterStatus] = useState<"all" | FormInstanceStatus>("all");
+  const [groupByPackage, setGroupByPackage] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
-    const list = await listInstances();
-    setInstances(list);
-    setSelectedIds((prev) => {
-      const ids = new Set(list.map((i) => i.instanceId));
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (ids.has(id)) next.add(id);
+    setLoading(true);
+    try {
+      const zid =
+        adminView && filterZid !== ""
+          ? filterZid
+          : orgZid ?? (filterZid !== "" ? filterZid : undefined);
+      const eid = filterEid !== "" ? filterEid : undefined;
+
+      let list: InstanceSummary[];
+      if (zid != null && eid != null) {
+        list = await listInstances({ zid, eid });
+      } else if (zid != null) {
+        list = await listInstances({ zid });
+      } else {
+        list = await listInstances();
       }
-      return next;
-    });
+      setInstances(list);
+      setSelectedIds((prev) => {
+        const ids = new Set(list.map((i) => i.instanceId));
+        const next = new Set<string>();
+        for (const id of prev) {
+          if (ids.has(id)) next.add(id);
+        }
+        return next;
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    refresh();
-  }, []);
+    void (async () => {
+      const ctx = await loadWorkContext();
+      if (ctx.eid != null) setFilterEid(ctx.eid);
+
+      if (adminView) {
+        const o = await listOrganizations();
+        setOrgs(o);
+        if (ctx.zid != null) setFilterZid(ctx.zid);
+        return;
+      }
+
+      if (orgUser && orgZid != null) {
+        setFilterZid(orgZid);
+        const o = await listOrganizations();
+        setOrgs(o.filter((x) => x.zid === orgZid));
+        setPeriods(await listPeriods(orgZid));
+        return;
+      }
+
+      const o = await listOrganizations();
+      setOrgs(o);
+      const zid = ctx.zid ?? o[0]?.zid ?? null;
+      if (zid != null) {
+        setFilterZid(zid);
+        setPeriods(await listPeriods(zid));
+      }
+    })();
+  }, [adminView, orgUser, orgZid]);
+
+  useEffect(() => {
+    if (!adminView || filterZid === "") return;
+    void listPeriods(filterZid).then(setPeriods);
+  }, [adminView, filterZid]);
+
+  useEffect(() => {
+    void refresh();
+  }, [filterZid, filterEid, adminView, orgZid]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return instances.filter((inst) => {
-      if (filterTemplate !== "all" && inst.templateId !== filterTemplate) {
-        return false;
-      }
-      if (filterStatus !== "all" && (inst.status ?? "draft") !== filterStatus) {
-        return false;
-      }
+      if (!instanceMatchesPackage(inst, filterZid, filterEid)) return false;
+      if (filterTemplate !== "all" && inst.templateId !== filterTemplate) return false;
+      if (filterStatus !== "all" && (inst.status ?? "draft") !== filterStatus) return false;
       if (!q) return true;
       return (
         inst.displayName.toLowerCase().includes(q) ||
@@ -51,7 +246,24 @@ export function MyFormsPage() {
         inst.organization.toLowerCase().includes(q)
       );
     });
-  }, [instances, search, filterTemplate, filterStatus]);
+  }, [instances, search, filterTemplate, filterStatus, filterZid, filterEid]);
+
+  const periodsByZid = useMemo(() => {
+    const map = new Map<number, ReportingPeriod[]>();
+    if (filterZid !== "") {
+      map.set(filterZid, periods);
+    }
+    const zids = new Set(filtered.map((i) => i.zid).filter((z): z is number => z != null));
+    for (const zid of zids) {
+      if (!map.has(zid)) map.set(zid, periods.filter((p) => p.zid === zid));
+    }
+    return map;
+  }, [filtered, filterZid, periods]);
+
+  const packageGroups = useMemo(() => {
+    if (!groupByPackage) return null;
+    return buildPackageGroups(filtered, orgs, periodsByZid);
+  }, [groupByPackage, filtered, orgs, periodsByZid]);
 
   const filteredIds = useMemo(
     () => filtered.map((inst) => inst.instanceId),
@@ -68,6 +280,20 @@ export function MyFormsPage() {
     const ids = new Set(instances.map((i) => i.templateId));
     return Array.from(ids).sort();
   }, [instances]);
+
+  const selectedOrg = useMemo(() => {
+    if (orgUser && auth.user?.organizationName) {
+      return orgs.find((o) => o.zid === orgZid) ?? {
+        zid: orgZid ?? 0,
+        name: auth.user.organizationName,
+        code: null,
+        parentZid: null,
+      };
+    }
+    return filterZid !== "" ? orgs.find((o) => o.zid === filterZid) : null;
+  }, [orgUser, orgZid, orgs, filterZid, auth.user?.organizationName]);
+
+  const selectedPeriod = filterEid !== "" ? periods.find((p) => p.eid === filterEid) : null;
 
   const toggleOne = (instanceId: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -135,21 +361,181 @@ export function MyFormsPage() {
     e.target.value = "";
   };
 
+  const handleZidChange = (value: string) => {
+    const next = value === "" ? "" : Number(value);
+    setFilterZid(next);
+    setFilterEid("");
+  };
+
+  const renderList = () => {
+    if (packageGroups && packageGroups.length > 0) {
+      return packageGroups.map((group) => (
+        <section key={group.key} className="forms-package-group">
+          <header className="forms-package-group-header">
+            <h2 className="forms-package-group-title">
+              {adminView ? group.orgName : group.periodName}
+            </h2>
+            <p className="forms-package-group-meta">
+              {adminView && (
+                <>
+                  {group.periodName}
+                  {group.zid != null && (
+                    <>
+                      {" "}
+                      · ZID={group.zid}
+                      {group.eid != null ? `, EID=${group.eid}` : ""}
+                    </>
+                  )}
+                  {" · "}
+                </>
+              )}
+              {!adminView && formatPeriod(group.periodStart, group.periodEnd)}
+              {!adminView && group.periodName !== formatPeriod(group.periodStart, group.periodEnd) && (
+                <> · {group.periodName}</>
+              )}
+              {" · "}
+              {group.items.length} форм
+            </p>
+            {group.zid != null && group.eid != null && !isOfflineKitMode() && (
+              <Link
+                to={`/package?zid=${group.zid}&eid=${group.eid}`}
+                className="forms-package-group-link"
+              >
+                Открыть комплект
+              </Link>
+            )}
+          </header>
+          <div className="instance-list">
+            {group.items.map((inst) => (
+              <InstanceCard
+                key={inst.instanceId}
+                inst={inst}
+                checked={selectedIds.has(inst.instanceId)}
+                deleting={deleting}
+                showPackageIds={adminView}
+                hideOrgLine={hideOrgOnCards}
+                onToggle={toggleOne}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </section>
+      ));
+    }
+
+    return (
+      <div className="instance-list">
+        {filtered.map((inst) => (
+          <InstanceCard
+            key={inst.instanceId}
+            inst={inst}
+            checked={selectedIds.has(inst.instanceId)}
+            deleting={deleting}
+            showPackageIds={adminView}
+            hideOrgLine={hideOrgOnCards}
+            onToggle={toggleOne}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="my-forms-page">
       <section className="hero">
-        <h1>Мои формы ОКО</h1>
-        <p>
-          Здесь хранятся отдельные заполненные экземпляры форм. Создайте новую
-          форму в <Link to="/catalog">каталоге шаблонов</Link> или откройте{" "}
-          <Link to="/tools">администрирование</Link> для проверки и сальdo.
-        </p>
+        <h1>{pageTitle}</h1>
+        {adminView ? (
+          <p>
+            Все экземпляры форм по организациям и отчётным периодам. Рабочий контекст
+            комплекта задаётся в <Link to="/package">Комплект</Link>; здесь можно просмотреть
+            и отфильтровать формы по всей системе. Для проверок и выгрузки —{" "}
+            <Link to="/tools">Сводка и импорт</Link>.
+          </p>
+        ) : orgUser ? (
+          <p>
+            Формы вашей организации по отчётным периодам. Выберите период или просмотрите
+            комплекты сгруппированно. Завести полный набор форм — в разделе{" "}
+            <Link to="/package">Комплект</Link>.
+          </p>
+        ) : (
+          <p>
+            Заполненные формы по отчётным периодам. Выберите период в фильтре или сгруппируйте
+            список по комплектам. Новую форму можно создать в{" "}
+            <Link to="/catalog">каталоге шаблонов</Link>
+            {!isOfflineKitMode() && (
+              <>
+                {" "}
+                или завести комплект в <Link to="/package">Комплект</Link>
+              </>
+            )}
+            .
+          </p>
+        )}
         <div className="stats">
-          <span className="stat">{instances.length} сохранённых форм</span>
+          <span className="stat">
+            {loading
+              ? "Загрузка…"
+              : filterEid !== "" || adminView
+                ? `${filtered.length} из ${instances.length} форм`
+                : `${instances.length} сохранённых форм`}
+          </span>
+          {(adminView || orgUser) && selectedOrg && (
+            <span className="stat">
+              {selectedOrg.name}
+              {selectedPeriod ? ` · ${selectedPeriod.name}` : ""}
+            </span>
+          )}
+          {!adminView && !orgUser && selectedPeriod && (
+            <span className="stat">{selectedPeriod.name}</span>
+          )}
         </div>
       </section>
 
       <div className="filters my-forms-filters">
+        {adminView && (
+          <select
+            value={filterZid === "" ? "" : String(filterZid)}
+            onChange={(e) => handleZidChange(e.target.value)}
+            className="category-select"
+            aria-label="Организация"
+          >
+            <option value="">Все организации</option>
+            {orgs.map((o) => (
+              <option key={o.zid} value={o.zid}>
+                {o.name} (ZID={o.zid})
+              </option>
+            ))}
+          </select>
+        )}
+        {!isOfflineKitMode() && periods.length > 0 && (
+          <select
+            value={filterEid === "" ? "" : String(filterEid)}
+            onChange={(e) =>
+              setFilterEid(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            className="category-select"
+            aria-label="Отчётный период"
+          >
+            <option value="">Все периоды</option>
+            {periods.map((p) => (
+              <option key={p.eid} value={p.eid}>
+                {p.name}
+                {p.periodStart || p.periodEnd
+                  ? ` (${formatPeriod(p.periodStart ?? "", p.periodEnd ?? "")})`
+                  : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        <label className="checkbox-inline my-forms-group-toggle">
+          <input
+            type="checkbox"
+            checked={groupByPackage}
+            onChange={(e) => setGroupByPackage(e.target.checked)}
+          />
+          Группировать по периоду
+        </label>
         <input
           type="search"
           placeholder="Поиск по названию, коду, организации…"
@@ -217,17 +603,36 @@ export function MyFormsPage() {
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="loading">Загрузка списка форм…</div>
+      ) : filtered.length === 0 ? (
         <div className="empty-state">
           {instances.length === 0 ? (
             <>
-              <p>У вас пока нет сохранённых форм.</p>
-              <Link to="/catalog" className="btn btn-primary">
-                Перейти в каталог и создать форму
+              <p>
+                {adminView
+                  ? "В системе пока нет сохранённых форм."
+                  : "У вас пока нет сохранённых форм."}
+              </p>
+              <Link
+                to={
+                  adminView || orgUser
+                    ? "/package"
+                    : isOfflineKitMode()
+                      ? "/catalog"
+                      : "/package"
+                }
+                className="btn btn-primary"
+              >
+                {adminView || orgUser
+                  ? "Завести комплект"
+                  : isOfflineKitMode()
+                    ? "Перейти в каталог"
+                    : "Завести комплект"}
               </Link>
             </>
           ) : (
-            <p>Ничего не найдено по запросу</p>
+            <p>Ничего не найдено по выбранным фильтрам</p>
           )}
         </div>
       ) : (
@@ -255,71 +660,7 @@ export function MyFormsPage() {
               </span>
             )}
           </div>
-          <div className="instance-list">
-          {filtered.map((inst) => {
-            const checked = selectedIds.has(inst.instanceId);
-            return (
-            <article
-              key={inst.instanceId}
-              className={`instance-card${checked ? " instance-card-selected" : ""}`}
-            >
-              <label className="instance-card-check">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={deleting}
-                  onChange={(e) => toggleOne(inst.instanceId, e.target.checked)}
-                  aria-label={`Выбрать «${inst.displayName}»`}
-                />
-              </label>
-              <div className="instance-card-body">
-                <Link
-                  to={`/my/${inst.instanceId}`}
-                  className="instance-card-title"
-                >
-                  {inst.displayName}
-                </Link>
-                <div className="instance-card-meta">
-                  <span className="form-card-id">{inst.templateId}</span>
-                  <span>{inst.templateTitle}</span>
-                  <span className={`status-badge ${inst.status ?? "draft"}`}>
-                    {formStatusLabel(inst.status)}
-                  </span>
-                </div>
-                {inst.organization && (
-                  <p className="instance-org">{inst.organization}</p>
-                )}
-                <p className="instance-period">
-                  {formatPeriod(inst.periodStart, inst.periodEnd)}
-                </p>
-                <p className="instance-dates">
-                  Создано:{" "}
-                  {new Date(inst.createdAt).toLocaleString("ru-RU")}
-                  {" · "}
-                  Изменено:{" "}
-                  {new Date(inst.updatedAt).toLocaleString("ru-RU")}
-                </p>
-              </div>
-              <div className="instance-card-actions">
-                <Link
-                  to={`/my/${inst.instanceId}`}
-                  className="btn btn-primary btn-sm"
-                >
-                  Открыть
-                </Link>
-                <button
-                  type="button"
-                  className="btn btn-danger-outline btn-sm"
-                  disabled={deleting}
-                  onClick={() => handleDelete(inst)}
-                >
-                  Удалить
-                </button>
-              </div>
-            </article>
-            );
-          })}
-          </div>
+          {renderList()}
         </>
       )}
     </div>

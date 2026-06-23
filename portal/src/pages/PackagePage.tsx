@@ -13,10 +13,12 @@ import {
 import type { Organization, PackageCompleteness, ReportingPeriod } from "../types";
 import { formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
+import { formsListNavLabel } from "../formsListLabels";
 
 export function PackagePage() {
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
+  const formsLinkLabel = formsListNavLabel(auth);
   const [searchParams] = useSearchParams();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
@@ -316,7 +318,7 @@ export function PackagePage() {
               {busy ? "Создание…" : "Завести пустые формы (комплект)"}
             </button>
             <Link to="/my" className="btn btn-secondary">
-              Мои формы
+              {formsLinkLabel}
             </Link>
           </div>
           {completeness.items.filter((i) => i.filled).length > 0 && (

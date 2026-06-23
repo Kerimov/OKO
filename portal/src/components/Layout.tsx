@@ -5,6 +5,7 @@ import {
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
 import { isOfflineKitMode } from "../offlineMode";
+import { formsListNavLabel } from "../formsListLabels";
 
 type NavItem = {
   to: string;
@@ -49,6 +50,7 @@ export function Layout() {
     !offlineKit && isBackendMode() && (!auth.authRequired || auth.role === "admin");
   const orgUser = auth.user?.role === "org";
   const user = auth.user;
+  const formsNavLabel = formsListNavLabel(auth);
 
   const handleLogout = async () => {
     await logout();
@@ -59,13 +61,13 @@ export function Layout() {
     title: "Работа",
     items: offlineKit
       ? [
-          { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
+          { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
           { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
           { to: "/export", label: "Отправить в ЦО", isActive: (p) => p === "/export" },
         ]
       : [
           { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
-          { to: "/my", label: "Мои формы", isActive: (p) => p.startsWith("/my") },
+          { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
           { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
         ],
   };
