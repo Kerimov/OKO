@@ -27,6 +27,35 @@ type PackageGroup = {
   items: InstanceSummary[];
 };
 
+type OrgGroup = {
+  key: string;
+  zid: number | null;
+  orgName: string;
+  periods: PackageGroup[];
+  totalForms: number;
+};
+
+function buildOrgGroups(packageGroups: PackageGroup[]): OrgGroup[] {
+  const map = new Map<string, OrgGroup>();
+  for (const group of packageGroups) {
+    const key = String(group.zid ?? "x");
+    let org = map.get(key);
+    if (!org) {
+      org = {
+        key,
+        zid: group.zid,
+        orgName: group.orgName,
+        periods: [],
+        totalForms: 0,
+      };
+      map.set(key, org);
+    }
+    org.periods.push(group);
+    org.totalForms += group.items.length;
+  }
+  return Array.from(map.values()).sort((a, b) => (a.zid ?? 0) - (b.zid ?? 0));
+}
+
 function buildPackageGroups(
   items: InstanceSummary[],
   orgs: Organization[],
@@ -157,6 +186,8 @@ export function MyFormsPage() {
   const [filterTemplate, setFilterTemplate] = useState("all");
   const [filterStatus, setFilterStatus] = useState<"all" | FormInstanceStatus>("all");
   const [groupByPackage, setGroupByPackage] = useState(true);
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(() => new Set());
+  const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -194,13 +225,8 @@ export function MyFormsPage() {
 
   useEffect(() => {
     void (async () => {
-      const ctx = await loadWorkContext();
-      if (ctx.eid != null) setFilterEid(ctx.eid);
-
       if (adminView) {
-        const o = await listOrganizations();
-        setOrgs(o);
-        if (ctx.zid != null) setFilterZid(ctx.zid);
+        setOrgs(await listOrganizations());
         return;
       }
 
@@ -214,6 +240,7 @@ export function MyFormsPage() {
 
       const o = await listOrganizations();
       setOrgs(o);
+      const ctx = await loadWorkContext();
       const zid = ctx.zid ?? o[0]?.zid ?? null;
       if (zid != null) {
         setFilterZid(zid);
@@ -263,6 +290,11 @@ export function MyFormsPage() {
     if (!groupByPackage) return null;
     return buildPackageGroups(filtered, orgs, periodsByZid);
   }, [groupByPackage, filtered, orgs, periodsByZid]);
+
+  const orgGroups = useMemo(() => {
+    if (!packageGroups) return null;
+    return adminView ? buildOrgGroups(packageGroups) : null;
+  }, [packageGroups, adminView]);
 
   const filteredIds = useMemo(
     () => filtered.map((inst) => inst.instanceId),
@@ -366,44 +398,74 @@ export function MyFormsPage() {
     setFilterEid("");
   };
 
-  const renderList = () => {
-    if (packageGroups && packageGroups.length > 0) {
-      return packageGroups.map((group) => (
-        <section key={group.key} className="forms-package-group">
-          <header className="forms-package-group-header">
-            <h2 className="forms-package-group-title">
-              {adminView ? group.orgName : group.periodName}
-            </h2>
-            <p className="forms-package-group-meta">
-              {adminView && (
-                <>
-                  {group.periodName}
-                  {group.zid != null && (
-                    <>
-                      {" "}
-                      · ZID={group.zid}
-                      {group.eid != null ? `, EID=${group.eid}` : ""}
-                    </>
-                  )}
-                  {" · "}
-                </>
+  const toggleOrg = (key: string) => {
+    setExpandedOrgs((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const togglePeriod = (key: string) => {
+    setExpandedPeriods((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const renderPeriodGroup = (group: PackageGroup, nested = false) => {
+    const expanded = expandedPeriods.has(group.key);
+    const periodLabel = formatPeriod(group.periodStart, group.periodEnd);
+    const periodTitle =
+      !periodLabel || group.periodName === periodLabel || group.periodName === "Без периода"
+        ? group.periodName || periodLabel
+        : `${group.periodName} (${periodLabel})`;
+
+    return (
+      <section
+        key={group.key}
+        className={`forms-package-group${nested ? " forms-package-group-nested" : ""}`}
+      >
+        <header className="forms-package-group-header forms-tree-header">
+          <button
+            type="button"
+            className="forms-tree-toggle"
+            onClick={() => togglePeriod(group.key)}
+            aria-expanded={expanded}
+          >
+            <span className="forms-tree-chevron" aria-hidden>
+              {expanded ? "▾" : "▸"}
+            </span>
+            <span className="forms-package-group-title">{periodTitle}</span>
+            <span className="forms-package-group-meta">
+              {nested && group.eid != null ? (
+                <>EID={group.eid} · </>
+              ) : (
+                group.zid != null && (
+                  <>
+                    ZID={group.zid}
+                    {group.eid != null ? `, EID=${group.eid}` : ""}
+                    {" · "}
+                  </>
+                )
               )}
-              {!adminView && formatPeriod(group.periodStart, group.periodEnd)}
-              {!adminView && group.periodName !== formatPeriod(group.periodStart, group.periodEnd) && (
-                <> · {group.periodName}</>
-              )}
-              {" · "}
               {group.items.length} форм
-            </p>
-            {group.zid != null && group.eid != null && (
-              <Link
-                to={`/package?zid=${group.zid}&eid=${group.eid}`}
-                className="forms-package-group-link"
-              >
-                Открыть комплект
-              </Link>
-            )}
-          </header>
+            </span>
+          </button>
+          {group.zid != null && group.eid != null && (
+            <Link
+              to={`/package?zid=${group.zid}&eid=${group.eid}`}
+              className="forms-package-group-link"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Открыть комплект
+            </Link>
+          )}
+        </header>
+        {expanded && (
           <div className="instance-list">
             {group.items.map((inst) => (
               <InstanceCard
@@ -418,8 +480,49 @@ export function MyFormsPage() {
               />
             ))}
           </div>
-        </section>
-      ));
+        )}
+      </section>
+    );
+  };
+
+  const renderList = () => {
+    if (orgGroups && orgGroups.length > 0) {
+      return orgGroups.map((org) => {
+        const orgExpanded = expandedOrgs.has(org.key);
+        return (
+          <section key={org.key} className="forms-org-group">
+            <header className="forms-org-group-header forms-tree-header">
+              <button
+                type="button"
+                className="forms-tree-toggle"
+                onClick={() => toggleOrg(org.key)}
+                aria-expanded={orgExpanded}
+              >
+                <span className="forms-tree-chevron" aria-hidden>
+                  {orgExpanded ? "▾" : "▸"}
+                </span>
+                <span className="forms-org-group-title">{org.orgName}</span>
+                <span className="forms-org-group-meta">
+                  {org.zid != null && <>ZID={org.zid} · </>}
+                  {org.periods.length}{" "}
+                  {org.periods.length === 1 ? "период" : org.periods.length < 5 ? "периода" : "периодов"}
+                  {" · "}
+                  {org.totalForms} форм
+                </span>
+              </button>
+            </header>
+            {orgExpanded && (
+              <div className="forms-org-periods">
+                {org.periods.map((group) => renderPeriodGroup(group, true))}
+              </div>
+            )}
+          </section>
+        );
+      });
+    }
+
+    if (packageGroups && packageGroups.length > 0) {
+      return packageGroups.map((group) => renderPeriodGroup(group));
     }
 
     return (
@@ -528,7 +631,7 @@ export function MyFormsPage() {
             checked={groupByPackage}
             onChange={(e) => setGroupByPackage(e.target.checked)}
           />
-          Группировать по периоду
+          {adminView ? "Группировать по организации" : "Группировать по периоду"}
         </label>
         <input
           type="search"
