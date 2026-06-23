@@ -131,8 +131,10 @@ export async function exportFormToExcel(options: {
   displayName: string;
   meta: FormMeta;
   rows: RowData[];
+  /** Desktop/Electron: avoid <a download> which reloads the webview */
+  saveAs?: (fileName: string, data: Uint8Array) => void | Promise<void>;
 }): Promise<void> {
-  const { schema, displayName, meta, rows } = options;
+  const { schema, displayName, meta, rows, saveAs } = options;
   const data = await loadExcelExport();
   const mappings = data.mappings.filter((m) => m.formName === schema.id);
 
@@ -156,7 +158,13 @@ export async function exportFormToExcel(options: {
     wb = writeBlankWorkbook(schema, meta, rows, mappings);
   }
 
-  XLSX.writeFile(wb, sanitizeFilename(`${schema.id}_${displayName}`) + ".xlsx");
+  const fileName = sanitizeFilename(`${schema.id}_${displayName}`) + ".xlsx";
+  if (saveAs) {
+    const data = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as Uint8Array;
+    await saveAs(fileName, data);
+  } else {
+    XLSX.writeFile(wb, fileName);
+  }
 }
 
 export async function exportPackageToExcel(

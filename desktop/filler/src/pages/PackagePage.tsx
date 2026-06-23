@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { loadCatalog } from "@portal/api";
 import type { InstanceSummary } from "@portal/types";
 import { categoryLabel, formStatusLabel } from "@portal/utils";
@@ -7,11 +7,20 @@ import { usePackage } from "../context/PackageContext";
 
 export function PackagePage() {
   const { session, refreshSession } = usePackage();
+  const location = useLocation();
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
   const [categories, setCategories] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [exportMsg, setExportMsg] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const reloadInstances = useCallback(() => {
+    if (!window.oko) return;
+    void window.oko
+      .listInstances()
+      .then(setInstances)
+      .catch((e) => setError(e instanceof Error ? e.message : "Ошибка загрузки"));
+  }, []);
 
   useEffect(() => {
     void loadCatalog()
@@ -20,12 +29,9 @@ export function PackagePage() {
   }, []);
 
   useEffect(() => {
-    void window.oko
-      .listInstances()
-      .then(setInstances)
-      .catch((e) => setError(e instanceof Error ? e.message : "Ошибка загрузки"));
+    reloadInstances();
     void refreshSession();
-  }, [session, refreshSession]);
+  }, [session?.folderPath, location.pathname, reloadInstances, refreshSession]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, InstanceSummary[]>();

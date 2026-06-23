@@ -2,6 +2,16 @@ import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { runPackageFormChecks } from "./db/checkRunner.js";
+import { runDbTask } from "./db/dbQueue.js";
+import {
+  countPackageRecalcRules,
+  countPackageRashRules,
+  getPackageFormRuleCounts,
+  getPackageKontrAgents,
+  runPackageRashChecks,
+  runPackageRecalc,
+} from "./db/formEngineRunner.js";
 import {
   setPortalPublicDir,
   closePackage,
@@ -126,18 +136,20 @@ function registerIpc(): void {
 
   ipcMain.handle("oko:listInstances", () => listPackageInstances());
 
-  ipcMain.handle("oko:loadInstance", (_e, instanceId: string) => {
-    const inst = getPackageInstance(instanceId);
-    if (!inst) throw new Error("Форма не найдена");
-    return inst;
-  });
+  ipcMain.handle("oko:loadInstance", (_e, instanceId: string) =>
+    runDbTask(() => {
+      const inst = getPackageInstance(instanceId);
+      if (!inst) throw new Error("Форма не найдена");
+      return inst;
+    })
+  );
 
-  ipcMain.handle("oko:loadAllInstances", () => loadAllPackageInstances());
+  ipcMain.handle("oko:loadAllInstances", () => runDbTask(() => loadAllPackageInstances()));
 
   ipcMain.handle(
     "oko:setInstanceStatus",
     (_e, instanceId: string, status: "draft" | "submitted") =>
-      setPackageInstanceStatus(instanceId, status)
+      runDbTask(() => setPackageInstanceStatus(instanceId, status))
   );
 
   ipcMain.handle("oko:loadSchema", (_e, formId: string) => loadSchemaFromDisk(formId));
@@ -149,10 +161,55 @@ function registerIpc(): void {
   );
 
   ipcMain.handle(
+    "oko:runFormChecks",
+    (
+      _e,
+      formId: string,
+      live?: { instanceId: string; rows: import("@portal/types").RowData[] }
+    ) => runDbTask(() => runPackageFormChecks(formId, live))
+  );
+
+  ipcMain.handle("oko:runRashChecks", (_e, formId: string, rows: import("@portal/types").RowData[]) =>
+    runDbTask(() => runPackageRashChecks(formId, rows))
+  );
+
+  ipcMain.handle("oko:recalcForm", (_e, formId: string, rows: import("@portal/types").RowData[]) =>
+    runDbTask(() => runPackageRecalc(formId, rows))
+  );
+
+  ipcMain.handle("oko:getFormRuleCounts", (_e, formId: string) =>
+    getPackageFormRuleCounts(formId)
+  );
+
+  ipcMain.handle("oko:getKontrAgents", () => getPackageKontrAgents());
+
+  ipcMain.handle(
     "oko:saveInstance",
     (_e, inst: import("@portal/types").OkoFormInstance, userName?: string) =>
-      savePackageInstance(inst, userName)
+      runDbTask(() => savePackageInstance(inst, userName))
   );
+
+  ipcMain.handle("oko:saveInstanceJson", async (_e, fileName: string, content: string) => {
+    const result = await dialog.showSaveDialog({
+      title: "Экспорт формы JSON",
+      defaultPath: fileName,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    fs.writeFileSync(result.filePath, content, "utf8");
+    return true;
+  });
+
+  ipcMain.handle("oko:saveExcelFile", async (_e, fileName: string, base64: string) => {
+    const result = await dialog.showSaveDialog({
+      title: "Сохранить Excel",
+      defaultPath: fileName,
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    fs.writeFileSync(result.filePath, Buffer.from(base64, "base64"));
+    return true;
+  });
 
   ipcMain.handle("oko:exportJson", async () => {
     const pkg = exportPackageJson();
@@ -227,6 +284,16 @@ function createWindow(): void {
     console.error("preload-error", path, error);
     dialog.showErrorBox("ОКО Заполнение", `Ошибка preload:\n${error.message}`);
   });
+
+  win.webContents.on("will-navigate", (event, url) => {
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    const allowed = devUrl ? [devUrl, "devtools://"] : ["file://"];
+    if (!allowed.some((prefix) => url.startsWith(prefix))) {
+      event.preventDefault();
+    }
+  });
+
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   if (process.env.VITE_DEV_SERVER_URL) {
     void win.loadURL(process.env.VITE_DEV_SERVER_URL);
