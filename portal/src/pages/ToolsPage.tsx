@@ -18,6 +18,7 @@ import {
   filterInstancesByPeriod,
   readReportPackageFile,
 } from "../engine/packageExport";
+import { downloadOfflineKit } from "../engine/offlineKitDownload";
 import { loadWorkContext, listOrganizations, listPeriods, importReportPackage } from "../packagesApi";
 import { recalcForm } from "../engine/recalcEngine";
 import {
@@ -80,6 +81,7 @@ export function ToolsPage() {
   const [workEid, setWorkEid] = useState<number | null>(null);
   const [importOverwrite, setImportOverwrite] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [downloadingKit, setDownloadingKit] = useState(false);
   const backend = isBackendMode();
 
   useEffect(() => {
@@ -264,6 +266,24 @@ export function ToolsPage() {
     setStatus(`Экспорт JSON: ${periodInstances.length} форм`);
   };
 
+  const handleOfflineKit = async () => {
+    if (periodInstances.length === 0) {
+      setStatus("Нет форм за текущий период");
+      return;
+    }
+    setDownloadingKit(true);
+    try {
+      await downloadOfflineKit(periodInstances);
+      setStatus(
+        `Offline-kit скачан (${periodInstances.length} форм). Передайте zip-архив дочерней организации.`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка сборки offline-kit");
+    } finally {
+      setDownloadingKit(false);
+    }
+  };
+
   const handleImportPackage = async (file: File) => {
     if (workZid == null || workEid == null) {
       setStatus("Выберите организацию и период в разделе Комплект");
@@ -438,9 +458,9 @@ export function ToolsPage() {
       <section className="tools-section">
         <h2>Обмен с дочерними организациями (офлайн)</h2>
         <p>
-          Для организаций без доступа к порталу: выгрузите комплект JSON или соберите{" "}
-          <strong>offline-kit</strong> (см. <code>scripts/build-offline-kit.sh</code>).
-          После заполнения дочка присылает JSON — загрузите его здесь.
+          Для организаций без доступа к порталу: скачайте готовый <strong>offline-kit</strong> (zip с
+          порталом и комплектом форм) или только JSON. После заполнения дочка присылает JSON —
+          загрузите его здесь.
         </p>
         <p className="hint-text">
           Рабочий контекст: ZID={workZid ?? "—"}, EID={workEid ?? "—"}.
@@ -450,10 +470,20 @@ export function ToolsPage() {
           <button
             type="button"
             className="btn btn-primary"
+            onClick={handleOfflineKit}
+            disabled={downloadingKit || periodInstances.length === 0}
+          >
+            {downloadingKit
+              ? "Сборка zip…"
+              : `Скачать offline-kit (${periodInstances.length})`}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={handlePackageJson}
             disabled={periodInstances.length === 0}
           >
-            Выгрузить комплект для дочки ({periodInstances.length})
+            Только JSON ({periodInstances.length})
           </button>
           <button
             type="button"
