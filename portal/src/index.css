@@ -848,6 +848,74 @@ a:hover {
   margin-bottom: 1.75rem;
 }
 
+.forms-package-group-nested {
+  margin-bottom: 1rem;
+}
+
+.forms-org-group {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.forms-org-group-header {
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.forms-org-group-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.forms-org-group-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.forms-org-periods {
+  padding: 0.75rem 1rem 1rem;
+}
+
+.forms-tree-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.forms-tree-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.forms-tree-toggle:hover .forms-package-group-title,
+.forms-tree-toggle:hover .forms-org-group-title {
+  text-decoration: underline;
+}
+
+.forms-tree-chevron {
+  flex-shrink: 0;
+  width: 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .forms-package-group-header {
   display: flex;
   flex-wrap: wrap;
