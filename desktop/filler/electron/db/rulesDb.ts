@@ -44,24 +44,22 @@ export function writeAppMeta(db: PackageDatabase, key: string, value: string): v
 export function importRulesBundle(db: PackageDatabase, bundle: PackageRulesInput): void {
   const exportedAt = bundle.exportedAt ?? new Date().toISOString();
 
-  db.transaction(() => {
-    if (bundle.checks) {
-      writeAppMeta(db, RULES_META.checks, JSON.stringify(bundle.checks));
-    }
-    if (bundle.rash) {
-      writeAppMeta(db, RULES_META.rash, JSON.stringify(bundle.rash));
-    }
-    if (bundle.recalc) {
-      writeAppMeta(db, RULES_META.recalc, JSON.stringify(bundle.recalc));
-    }
-    if (bundle.rowFormulas) {
-      writeAppMeta(db, RULES_META.rowFormulas, JSON.stringify(bundle.rowFormulas));
-    }
-    if (bundle.kontr) {
-      writeAppMeta(db, RULES_META.kontr, JSON.stringify(bundle.kontr));
-    }
-    writeAppMeta(db, RULES_META.exportedAt, exportedAt);
-  });
+  if (bundle.checks) {
+    writeAppMeta(db, RULES_META.checks, JSON.stringify(bundle.checks));
+  }
+  if (bundle.rash) {
+    writeAppMeta(db, RULES_META.rash, JSON.stringify(bundle.rash));
+  }
+  if (bundle.recalc) {
+    writeAppMeta(db, RULES_META.recalc, JSON.stringify(bundle.recalc));
+  }
+  if (bundle.rowFormulas) {
+    writeAppMeta(db, RULES_META.rowFormulas, JSON.stringify(bundle.rowFormulas));
+  }
+  if (bundle.kontr) {
+    writeAppMeta(db, RULES_META.kontr, JSON.stringify(bundle.kontr));
+  }
+  writeAppMeta(db, RULES_META.exportedAt, exportedAt);
 }
 
 export function readRulesFromPackageDb(
