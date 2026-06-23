@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
-import { dateOrNull, dateToString } from "./dbValues.js";
+import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
-import { saveInstanceCells } from "./instances.js";
+import { deleteInstanceFromDb, saveInstanceCells } from "./instances.js";
 import type { OkoFormInstance } from "./types.js";
 
 export interface OrganizationDto {
@@ -454,6 +454,78 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
     });
   }
   return rows;
+}
+
+export interface DeletePackageResult {
+  deletedInstances: number;
+  periodRemoved: boolean;
+}
+
+async function listPackageInstanceIds(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const normalized = (await db
+    .prepare("SELECT instance_id FROM form_instances WHERE zid = ? AND eid = ?")
+    .all(zid, eid)) as Array<{ instance_id: string }>;
+  for (const row of normalized) ids.add(row.instance_id);
+
+  const portalOnly = (await db
+    .prepare(
+      `SELECT p.instance_id, p.payload FROM portal_instances p
+       WHERE NOT EXISTS (
+         SELECT 1 FROM form_instances f WHERE f.instance_id = p.instance_id
+       )`
+    )
+    .all()) as Array<{ instance_id: string; payload: string }>;
+
+  for (const row of portalOnly) {
+    try {
+      const inst = JSON.parse(row.payload) as OkoFormInstance;
+      if (intOrNull(inst.zid) === zid && intOrNull(inst.eid) === eid) {
+        ids.add(row.instance_id);
+      }
+    } catch {
+      /* skip invalid payload */
+    }
+  }
+
+  return [...ids];
+}
+
+export async function deleteReportPackage(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<DeletePackageResult> {
+  const period = (await db
+    .prepare("SELECT 1 FROM periods WHERE eid = ? AND zid = ?")
+    .get(eid, zid)) as { 1: number } | undefined;
+  if (!period) throw new Error("Period not found");
+
+  const instanceIds = await listPackageInstanceIds(db, zid, eid);
+
+  await db.transaction(async (tx) => {
+    for (const instanceId of instanceIds) {
+      await deleteInstanceFromDb(tx, instanceId);
+    }
+    await tx.prepare("DELETE FROM periods WHERE eid = ? AND zid = ?").run(eid, zid);
+  });
+
+  const ctx = await getWorkContext(db);
+  if (ctx.zid === zid && ctx.eid === eid) {
+    const remaining = (await db
+      .prepare(
+        `SELECT eid FROM periods WHERE zid = ? ORDER BY period_start DESC, eid DESC LIMIT 1`
+      )
+      .get(zid)) as { eid: number } | undefined;
+    await setWorkContext(db, { zid, eid: remaining?.eid ?? null });
+  }
+
+  return { deletedInstances: instanceIds.length, periodRemoved: true };
 }
 
 export async function createReportPackage(

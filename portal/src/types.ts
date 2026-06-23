@@ -162,6 +162,11 @@ export interface CreatePackageResult {
   instanceIds: string[];
 }
 
+export interface DeletePackageResult {
+  deletedInstances: number;
+  periodRemoved: boolean;
+}
+
 export interface RashRule {
   kod: number;
   name: string;
