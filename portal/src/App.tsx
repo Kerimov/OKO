@@ -17,6 +17,7 @@ import { RashEditorPage } from "./pages/RashEditorPage";
 import { AggregationEditorPage } from "./pages/AggregationEditorPage";
 import { PackagesDashboardPage } from "./pages/PackagesDashboardPage";
 import { UsersAdminPage } from "./pages/UsersAdminPage";
+import { InstructionsPage } from "./pages/InstructionsPage";
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="admin/audit" element={<AuditLogPage />} />
             <Route path="admin/users" element={<UsersAdminPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="instructions" element={<InstructionsPage />} />
           </Route>
         </Routes>
       </AuthGate>

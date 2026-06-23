@@ -107,7 +107,10 @@ export function Layout() {
   }
 
   sections.push({
-    items: [{ to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" }],
+    items: [
+      { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
+      { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
+    ],
   });
 
   return (
