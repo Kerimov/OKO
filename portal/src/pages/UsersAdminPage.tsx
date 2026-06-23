@@ -16,6 +16,7 @@ export function UsersAdminPage() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,25 @@ export function UsersAdminPage() {
   const [role, setRole] = useState<"admin" | "org">("org");
   const [zid, setZid] = useState<number | "">("");
 
-  const load = useCallback(async () => {
+  const [selected, setSelected] = useState<UserDto | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editRole, setEditRole] = useState<"admin" | "org">("org");
+  const [editZid, setEditZid] = useState<number | "">("");
+  const [editActive, setEditActive] = useState(true);
+
+  const applyUserToEdit = (user: UserDto) => {
+    setSelected(user);
+    setEditDisplayName(user.displayName ?? "");
+    setEditPassword("");
+    setEditRole(user.role);
+    setEditZid(user.zid ?? "");
+    setEditActive(user.active);
+    setStatus("");
+    setError("");
+  };
+
+  const load = useCallback(async (keepSelectedId?: number) => {
     if (!backend || !admin) return;
     setLoading(true);
     setError("");
@@ -34,7 +53,12 @@ export function UsersAdminPage() {
       ]);
       setUsers(userList);
       setOrgs(orgList);
-      if (orgList[0] && zid === "") setZid(orgList[0].zid);
+      setZid((prev) => (prev === "" && orgList[0] ? orgList[0].zid : prev));
+      if (keepSelectedId != null) {
+        const updated = userList.find((u) => u.id === keepSelectedId);
+        if (updated) applyUserToEdit(updated);
+        else setSelected(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
@@ -45,6 +69,10 @@ export function UsersAdminPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const selectUser = (user: UserDto) => {
+    applyUserToEdit(user);
+  };
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -71,16 +99,37 @@ export function UsersAdminPage() {
     }
   };
 
-  const toggleActive = async (user: UserDto) => {
+  const handleSaveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selected) return;
+    if (editRole === "org" && (editZid === "" || orgs.length === 0)) {
+      setError("Выберите организацию для пользователя");
+      return;
+    }
+    setSaving(true);
+    setStatus("");
     setError("");
     try {
-      await apiFetch<UserDto>(`/api/users/${user.id}`, {
+      const body: Record<string, unknown> = {
+        displayName: editDisplayName.trim() || null,
+        role: editRole,
+        zid: editRole === "org" ? editZid : null,
+        active: editActive,
+      };
+      if (editPassword.trim()) body.password = editPassword.trim();
+
+      const updated = await apiFetch<UserDto>(`/api/users/${selected.id}`, {
         method: "PUT",
-        body: JSON.stringify({ active: !user.active }),
+        body: JSON.stringify(body),
       });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка обновления");
+      setStatus(`Пользователь «${updated.username}» сохранён`);
+      setEditPassword("");
+      setSelected(updated);
+      await load(updated.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -105,7 +154,7 @@ export function UsersAdminPage() {
   }
 
   return (
-    <div className="admin-page checks-editor">
+    <div className="admin-page checks-editor users-editor">
       <header className="admin-header">
         <div>
           <h1>Пользователи организаций</h1>
@@ -181,45 +230,137 @@ export function UsersAdminPage() {
         </form>
       </section>
 
-      <section className="admin-section">
-        <h2>Список ({users.length})</h2>
-        {loading ? (
-          <p>Загрузка…</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Логин</th>
-                <th>Имя</th>
-                <th>Роль</th>
-                <th>Организация</th>
-                <th>Статус</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.username}</td>
-                  <td>{u.displayName ?? "—"}</td>
-                  <td>{u.role}</td>
-                  <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
-                  <td>{u.active ? "активен" : "отключён"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => toggleActive(u)}
-                    >
-                      {u.active ? "Отключить" : "Включить"}
-                    </button>
-                  </td>
+      <div className="checks-layout">
+        <section className="checks-list-panel">
+          <h2>Список ({users.length})</h2>
+          {loading ? (
+            <p>Загрузка…</p>
+          ) : users.length === 0 ? (
+            <p className="tools-hint">Пользователей пока нет.</p>
+          ) : (
+            <table className="checks-table data-table">
+              <thead>
+                <tr>
+                  <th>Логин</th>
+                  <th>Имя</th>
+                  <th>Роль</th>
+                  <th>Организация</th>
+                  <th>Статус</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr
+                    key={u.id}
+                    className={selected?.id === u.id ? "selected" : ""}
+                    onClick={() => selectUser(u)}
+                  >
+                    <td>{u.username}</td>
+                    <td>{u.displayName ?? "—"}</td>
+                    <td>{u.role}</td>
+                    <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
+                    <td>{u.active ? "активен" : "отключён"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="checks-detail-panel">
+          {selected ? (
+            <>
+              <h2>Редактирование: {selected.username}</h2>
+              <form className="checks-form-grid" onSubmit={handleSaveEdit}>
+                <label>
+                  Логин
+                  <input value={selected.username} disabled />
+                </label>
+                <label>
+                  Новый пароль
+                  <input
+                    type="password"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Оставьте пустым, чтобы не менять"
+                    minLength={6}
+                  />
+                </label>
+                <label>
+                  Отображаемое имя
+                  <input
+                    value={editDisplayName}
+                    onChange={(e) => setEditDisplayName(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Роль
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as "admin" | "org")}
+                  >
+                    <option value="org">Организация</option>
+                    <option value="admin">Администратор</option>
+                  </select>
+                </label>
+                {editRole === "org" && (
+                  <label>
+                    Организация
+                    {orgs.length === 0 ? (
+                      <p className="tools-hint">
+                        Нет организаций в справочнике.{" "}
+                        <Link to="/package">Добавить в комплекте</Link>.
+                      </p>
+                    ) : (
+                      <select
+                        value={editZid}
+                        onChange={(e) => setEditZid(Number(e.target.value))}
+                        required
+                      >
+                        {orgs.map((o) => (
+                          <option key={o.zid} value={o.zid}>
+                            {o.name} (zid={o.zid})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </label>
+                )}
+                <label className="check-flag">
+                  <input
+                    type="checkbox"
+                    checked={editActive}
+                    onChange={(e) => setEditActive(e.target.checked)}
+                  />
+                  Учётная запись активна
+                </label>
+                <div className="checks-actions">
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={saving || (editRole === "org" && orgs.length === 0)}
+                  >
+                    {saving ? "Сохранение…" : "Сохранить"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={saving}
+                    onClick={() => setSelected(null)}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2>Редактирование</h2>
+              <p className="tools-hint">Выберите пользователя в списке слева.</p>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

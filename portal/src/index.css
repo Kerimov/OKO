@@ -1071,7 +1071,8 @@ a:hover {
 }
 
 .saldo-editor .checks-layout,
-.excel-editor .checks-layout {
+.excel-editor .checks-layout,
+.users-editor .checks-layout {
   grid-template-columns: 1fr minmax(300px, 460px);
 }
 
