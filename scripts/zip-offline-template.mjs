@@ -39,26 +39,19 @@ const README = `OKO Offline — заполнение форм без связи 
 - Интернет и сервер ЦО не нужны.
 `;
 
-const START_BAT = `@echo off
-chcp 65001 >nul
-cd /d "%~dp0"
-title OKO Offline
-start "OKO Offline Server" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0serve.ps1"
-ping -n 3 127.0.0.1 >nul
-start "" "http://localhost:8787/"
-echo.
-echo OKO Offline открыт в браузере.
-echo Не закрывайте окно «OKO Offline Server» — пока оно открыто, портал работает.
-echo.
-pause
-`;
+const SCRIPTS = join(ROOT, "scripts");
+
+const START_BAT = readFileSync(join(SCRIPTS, "start-offline.bat"));
 
 const START_SH = `#!/usr/bin/env bash
 cd "$(dirname "$0")"
 exec bash ./serve.sh
 `;
 
-const SCRIPTS = join(ROOT, "scripts");
+function toCrLf(buf) {
+  const s = Buffer.isBuffer(buf) ? buf.toString("utf8") : buf;
+  return s.replace(/\r?\n/g, "\r\n");
+}
 
 
 function addDir(zip, dirPath, basePath = dirPath) {
@@ -81,7 +74,7 @@ if (!existsSync(DIST)) {
 const zip = new JSZip();
 addDir(zip, DIST);
 zip.file("README.txt", README);
-zip.file("start.bat", START_BAT);
+zip.file("start.bat", toCrLf(START_BAT));
 zip.file("start.sh", START_SH);
 zip.file("serve.ps1", readFileSync(join(SCRIPTS, "offline-serve.ps1")));
 zip.file("serve.sh", readFileSync(join(SCRIPTS, "offline-serve.sh")));

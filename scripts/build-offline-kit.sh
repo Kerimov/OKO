@@ -32,6 +32,9 @@ cp "$ROOT/scripts/offline-serve.ps1" "$STAGING/serve.ps1"
 cp "$ROOT/scripts/offline-serve.sh" "$STAGING/serve.sh"
 chmod +x "$STAGING/serve.sh"
 
+cp "$ROOT/scripts/start-offline.bat" "$STAGING/start.bat"
+unix2dos "$STAGING/start.bat" 2>/dev/null || sed -i 's/$/\r/' "$STAGING/start.bat" 2>/dev/null || perl -pi -e 's/\n/\r\n/' "$STAGING/start.bat" 2>/dev/null || true
+
 cat > "$STAGING/README.txt" << 'EOF'
 OKO Offline — заполнение форм без связи с центральным офисом
 ================================================================
@@ -60,21 +63,6 @@ cd "$(dirname "$0")"
 exec bash ./serve.sh
 EOF
 chmod +x "$STAGING/start.sh"
-
-cat > "$STAGING/start.bat" << 'EOF'
-@echo off
-chcp 65001 >nul
-cd /d "%~dp0"
-title OKO Offline
-start "OKO Offline Server" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0serve.ps1"
-ping -n 3 127.0.0.1 >nul
-start "" "http://localhost:8787/"
-echo.
-echo OKO Offline открыт в браузере.
-echo Не закрывайте окно «OKO Offline Server» — пока оно открыто, портал работает.
-echo.
-pause
-EOF
 
 OUT_ZIP="$ROOT/dist/oko-offline-kit.zip"
 mkdir -p "$ROOT/dist"
