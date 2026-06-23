@@ -42,7 +42,7 @@ $listener.Prefixes.Add($Prefix)
 $listener.Start()
 
 Write-Host "OKO Offline: $Prefix"
-Write-Host "Сервер ЦО не используется. Закройте это окно для остановки."
+Write-Host "Close this window to stop the local server."
 
 try {
   while ($listener.IsListening) {
