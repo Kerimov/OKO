@@ -1,92 +1,97 @@
-# ОКО — Портал форм корпоративной отчётности
+# Портал OKO — фронтенд
 
-Веб-портал для создания и заполнения **76 форм** корпоративной (специализированной) отчётности. Схемы форм генерируются из исходной базы ОКО `12345/z261.mdb`.
+React-приложение для заполнения **76 форм** корпоративной отчётности. Деплоится на **Vercel** (Root Directory: `portal`).
 
-## Возможности
-
-- Каталог всех форм с поиском и фильтрацией по разделам (N01–N19, ND)
-- Заполнение табличных форм с колонками как в оригинальных PDF (графы B, C, D…)
-- Предзаполненные строки показателей из шаблонов
-- Сохранение черновиков в браузере (localStorage)
-- Экспорт и импорт данных в JSON
-- **Сохранение заполненной формы в PDF** (кириллица, таблица, реквизиты, подписи)
-- Просмотр образца PDF для каждой формы
-- Общие настройки организации и отчётного периода
+---
 
 ## Запуск
 
 ```bash
-cd portal
 npm install
-npm run dev
+npm run dev       # http://localhost:5173
+npm run build     # production → dist/
+npm run preview   # просмотр сборки
 ```
 
-Откройте http://localhost:5173
+Прокси API: `/api` → `http://localhost:3001` (см. `vite.config.ts`).
 
-## Сборка
-
-```bash
-npm run build
-npm run preview
-```
-
-## Публикация на Vercel
-
-Приложение лежит в папке `portal` — это важно указать в настройках проекта.
-
-### Через GitHub (рекомендуется)
-
-1. Закоммитьте и отправьте репозиторий на GitHub (`Kerimov/OKO`):
-   ```bash
-   cd /Users/vadim/OKO
-   git add .
-   git commit -m "OKO portal"
-   git push -u origin main
-   ```
-2. В [vercel.com](https://vercel.com) → ваш проект → **Settings** → **General**:
-   - **Root Directory:** `portal` (нажать Edit, указать `portal`)
-   - **Framework Preset:** Vite (подставится автоматически)
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `dist`
-3. **Deployments** → **Redeploy** (или подключите репозиторий в **Import Git Repository**).
-
-После деплоя сайт откроется по адресу вида `https://ваш-проект.vercel.app`.
-
-### Через CLI
-
-```bash
-npm i -g vercel
-cd portal
-vercel
-```
-
-При первом запуске выберите аккаунт и проект; для продакшена: `vercel --prod`.
-
-### Маршруты React
-
-В `vercel.json` настроен fallback на `index.html`, чтобы работали `/my`, `/settings` и т.д.
-
-## Обновление данных из MDB
-
-```bash
-python scripts/generate_schemas_from_mdb.py   # схемы форм
-python scripts/export_mdb_data.py             # правила, сальdo, Excel
-```
-
-## Администрирование
-
-Раздел **Администрирование** (`/tools`):
-- Полнота комплекта (76 форм)
-- Проверка увязок (режимы: период / активные / все 3600)
-- Пересчёт итоговых строк
-- Перенос сальdo, агрегация
-- Экспорт комплекта JSON / Excel
-
-**Конструктор форм** (`/admin/forms`), **редактор увязок** (`/admin/checks`), **сальдо** (`/admin/saldo`) и **Excel-маппинг** (`/admin/excel`) — требуют API-сервер.
+---
 
 ## Структура
 
-- `portal/src/` — React-приложение
-- `portal/public/schemas/` — схемы форм (колонки, строки)
-- `portal/public/pdf/` — образцы PDF (локально, **не в git**; см. `public/pdf/README.md`)
-- `scripts/generate_schemas_from_mdb.py` — генератор схем из MDB
+```
+portal/
+├── src/
+│   ├── pages/          # Экраны (маршруты)
+│   ├── components/     # UI-компоненты
+│   ├── engine/         # Бизнес-логика (проверки, пересчёт, сальдо)
+│   ├── content/        # Markdown-инструкции
+│   ├── App.tsx         # Маршрутизация
+│   ├── Layout.tsx      # Боковое меню
+│   ├── storage.ts      # API ↔ localStorage
+│   └── auth.ts         # Авторизация
+├── public/
+│   ├── schemas/        # 76 JSON-шаблонов форм
+│   ├── data/           # Правила (fallback без API)
+│   └── pdf/            # Образцы PDF (локально, не в git)
+├── vercel.json         # SPA fallback
+└── package.json
+```
+
+Подробнее о `src/`: [src/README.md](src/README.md).
+
+---
+
+## Маршруты
+
+| Путь | Страница |
+|------|----------|
+| `/` | Вход |
+| `/catalog` | Каталог шаблонов |
+| `/my` | Мои формы |
+| `/my/:id` | Редактор формы |
+| `/package` | Комплект (ZID/EID) |
+| `/tools` | Сводка и импорт (admin) |
+| `/admin/*` | Редакторы, пользователи, аудит |
+| `/settings` | Настройки |
+| `/instructions` | Инструкция |
+
+---
+
+## Публикация на Vercel
+
+1. **Settings → General → Root Directory:** `portal`
+2. **Environment Variables:** `VITE_API_URL` = URL production API
+3. Deploy из GitHub или `vercel --prod`
+
+`vercel.json` настроен на SPA fallback (`index.html` для `/my`, `/settings` и т.д.).
+
+---
+
+## Обновление данных форм
+
+```bash
+# из корня репозитория
+python scripts/generate_schemas_from_mdb.py
+python scripts/export_mdb_data.py
+```
+
+---
+
+## Инструкция в UI
+
+Исходники раздела **Инструкция**:
+
+- `src/content/instructions-user.md`
+- `src/content/instructions-admin.md`
+- `src/content/instructions-appendix.md`
+
+Синхронизация с `docs/PORTAL-GUIDE.md` — см. [docs/README.md](../docs/README.md).
+
+---
+
+## См. также
+
+- [docs/PORTAL-GUIDE.md](../docs/PORTAL-GUIDE.md) — руководство пользователя
+- [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+- [server/README.md](../server/README.md)
