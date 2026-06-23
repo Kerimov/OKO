@@ -1,6 +1,6 @@
-import type { getAuthSnapshot } from "./auth";
+import type { AuthSnapshot } from "./auth";
 
-type AuthState = ReturnType<typeof getAuthSnapshot>;
+type AuthState = AuthSnapshot;
 
 export function defaultAppPath(auth: AuthState): string {
   if (auth.user?.role === "org") return "/my";
@@ -10,7 +10,11 @@ export function defaultAppPath(auth: AuthState): string {
 
 export function needsAuthentication(backend: boolean, auth: AuthState): boolean {
   if (!backend) return false;
-  if (auth.loginAvailable) return !auth.user;
+  if (auth.loginAvailable) {
+    if (auth.user) return false;
+    if (auth.legacyToken) return false;
+    return true;
+  }
   if (auth.authRequired) return !auth.role;
   return false;
 }

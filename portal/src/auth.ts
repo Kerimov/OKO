@@ -28,16 +28,7 @@ let backendDb: string | null = null;
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
-function emit(): void {
-  for (const l of listeners) l();
-}
-
-export function subscribeAuth(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export function getAuthSnapshot(): {
+export interface AuthSnapshot {
   role: ApiRole | null;
   user: UserProfile | null;
   authRequired: boolean;
@@ -46,7 +37,11 @@ export function getAuthSnapshot(): {
   backendDb: string | null;
   tokenPresent: boolean;
   legacyToken: boolean;
-} {
+}
+
+let authSnapshot: AuthSnapshot = buildAuthSnapshot();
+
+function buildAuthSnapshot(): AuthSnapshot {
   const tokenPresent = !!getApiToken();
   const legacyToken = tokenPresent && currentRole != null && currentUser == null;
   return {
@@ -59,6 +54,24 @@ export function getAuthSnapshot(): {
     tokenPresent,
     legacyToken,
   };
+}
+
+function refreshAuthSnapshot(): void {
+  authSnapshot = buildAuthSnapshot();
+}
+
+function emit(): void {
+  refreshAuthSnapshot();
+  for (const l of listeners) l();
+}
+
+export function subscribeAuth(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getAuthSnapshot(): AuthSnapshot {
+  return authSnapshot;
 }
 
 export function getApiRole(): ApiRole | null {
