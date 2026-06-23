@@ -18,12 +18,8 @@ import { AggregationEditorPage } from "./pages/AggregationEditorPage";
 import { PackagesDashboardPage } from "./pages/PackagesDashboardPage";
 import { UsersAdminPage } from "./pages/UsersAdminPage";
 import { InstructionsPage } from "./pages/InstructionsPage";
-import { OfflineExportPage } from "./pages/OfflineExportPage";
-import { isOfflineKitMode } from "./offlineMode";
 
 export default function App() {
-  const offlineKit = isOfflineKitMode();
-
   return (
     <BrowserRouter>
       <AuthGate>
@@ -34,24 +30,19 @@ export default function App() {
             <Route path="catalog" element={<HomePage />} />
             <Route path="my" element={<MyFormsPage />} />
             <Route path="my/:instanceId" element={<FormPage />} />
-            {!offlineKit && <Route path="tools" element={<ToolsPage />} />}
-            {!offlineKit && <Route path="package" element={<PackagePage />} />}
-            <Route path="export" element={<OfflineExportPage />} />
-            {!offlineKit && (
-              <>
-                <Route path="admin/checks" element={<ChecksEditorPage />} />
-                <Route path="admin/forms" element={<FormsEditorPage />} />
-                <Route path="admin/saldo" element={<SaldoEditorPage />} />
-                <Route path="admin/excel" element={<ExcelEditorPage />} />
-                <Route path="admin/rash" element={<RashEditorPage />} />
-                <Route path="admin/aggregation" element={<AggregationEditorPage />} />
-                <Route path="admin/packages" element={<PackagesDashboardPage />} />
-                <Route path="admin/audit" element={<AuditLogPage />} />
-                <Route path="admin/users" element={<UsersAdminPage />} />
-              </>
-            )}
-            {!offlineKit && <Route path="settings" element={<SettingsPage />} />}
-            {!offlineKit && <Route path="instructions" element={<InstructionsPage />} />}
+            <Route path="tools" element={<ToolsPage />} />
+            <Route path="package" element={<PackagePage />} />
+            <Route path="admin/checks" element={<ChecksEditorPage />} />
+            <Route path="admin/forms" element={<FormsEditorPage />} />
+            <Route path="admin/saldo" element={<SaldoEditorPage />} />
+            <Route path="admin/excel" element={<ExcelEditorPage />} />
+            <Route path="admin/rash" element={<RashEditorPage />} />
+            <Route path="admin/aggregation" element={<AggregationEditorPage />} />
+            <Route path="admin/packages" element={<PackagesDashboardPage />} />
+            <Route path="admin/audit" element={<AuditLogPage />} />
+            <Route path="admin/users" element={<UsersAdminPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="instructions" element={<InstructionsPage />} />
           </Route>
         </Routes>
       </AuthGate>

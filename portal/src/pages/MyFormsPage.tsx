@@ -6,7 +6,6 @@ import {
   isAdminFormsView,
   isOrgFormsUser,
 } from "../formsListLabels";
-import { isOfflineKitMode } from "../offlineMode";
 import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
 import type { FormInstanceStatus, InstanceSummary, Organization, ReportingPeriod } from "../types";
 import {
@@ -147,7 +146,7 @@ export function MyFormsPage() {
   const orgUser = isOrgFormsUser(auth);
   const orgZid = orgUser ? auth.user?.zid ?? null : null;
   const pageTitle = formsListTitle(auth);
-  const hideOrgOnCards = orgUser || isOfflineKitMode();
+  const hideOrgOnCards = orgUser;
 
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -396,7 +395,7 @@ export function MyFormsPage() {
               {" · "}
               {group.items.length} форм
             </p>
-            {group.zid != null && group.eid != null && !isOfflineKitMode() && (
+            {group.zid != null && group.eid != null && (
               <Link
                 to={`/package?zid=${group.zid}&eid=${group.eid}`}
                 className="forms-package-group-link"
@@ -463,13 +462,8 @@ export function MyFormsPage() {
             Заполненные формы по отчётным периодам. Выберите период в фильтре или сгруппируйте
             список по комплектам. Новую форму можно создать в{" "}
             <Link to="/catalog">каталоге шаблонов</Link>
-            {!isOfflineKitMode() && (
-              <>
-                {" "}
-                или завести комплект в <Link to="/package">Комплект</Link>
-              </>
-            )}
-            .
+            {" "}
+            или завести комплект в <Link to="/package">Комплект</Link>.
           </p>
         )}
         <div className="stats">
@@ -508,7 +502,7 @@ export function MyFormsPage() {
             ))}
           </select>
         )}
-        {!isOfflineKitMode() && periods.length > 0 && (
+        {periods.length > 0 && (
           <select
             value={filterEid === "" ? "" : String(filterEid)}
             onChange={(e) =>
@@ -615,20 +609,10 @@ export function MyFormsPage() {
                   : "У вас пока нет сохранённых форм."}
               </p>
               <Link
-                to={
-                  adminView || orgUser
-                    ? "/package"
-                    : isOfflineKitMode()
-                      ? "/catalog"
-                      : "/package"
-                }
+                to={adminView || orgUser ? "/package" : "/package"}
                 className="btn btn-primary"
               >
-                {adminView || orgUser
-                  ? "Завести комплект"
-                  : isOfflineKitMode()
-                    ? "Перейти в каталог"
-                    : "Завести комплект"}
+                Завести комплект
               </Link>
             </>
           ) : (

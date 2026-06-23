@@ -35,7 +35,7 @@ export function normalizeImportedInstance(
   };
 }
 
-/** Offline / localStorage: merge package into existing instances by templateId. */
+/** localStorage: merge package into existing instances by templateId. */
 export function mergePackageIntoInstances(
   pkg: ReportPackage,
   existing: OkoFormInstance[],

@@ -1,10 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import {
-  logout,
-} from "../auth";
+import { logout } from "../auth";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
-import { isOfflineKitMode } from "../offlineMode";
 import { formsListNavLabel } from "../formsListLabels";
 
 type NavItem = {
@@ -45,9 +42,8 @@ function SidebarSection({ section }: { section: NavSection }) {
 
 export function Layout() {
   const auth = useAuth();
-  const offlineKit = isOfflineKitMode();
   const adminNav =
-    !offlineKit && isBackendMode() && (!auth.authRequired || auth.role === "admin");
+    isBackendMode() && (!auth.authRequired || auth.role === "admin");
   const orgUser = auth.user?.role === "org";
   const user = auth.user;
   const formsNavLabel = formsListNavLabel(auth);
@@ -59,22 +55,16 @@ export function Layout() {
 
   const workSection: NavSection = {
     title: "Работа",
-    items: offlineKit
-      ? [
-          { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
-          { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
-          { to: "/export", label: "Отправить в ЦО", isActive: (p) => p === "/export" },
-        ]
-      : [
-          { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
-          { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
-          { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
-        ],
+    items: [
+      { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
+      { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
+      { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
+    ],
   };
 
   const sections: NavSection[] = [workSection];
 
-  if (!offlineKit && !orgUser) {
+  if (!orgUser) {
     sections.push({
       title: "Операции",
       items: [
@@ -117,19 +107,17 @@ export function Layout() {
     });
   }
 
-  if (!offlineKit) {
-    sections.push({
-      items: [
-        { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
-        { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
-      ],
-    });
-  }
+  sections.push({
+    items: [
+      { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
+      { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
+    ],
+  });
 
   return (
     <div className="app">
       <aside className="sidebar">
-        <Link to={offlineKit ? "/my" : "/catalog"} className="sidebar-brand">
+        <Link to="/catalog" className="sidebar-brand">
           <span className="sidebar-brand-mark">ОКО</span>
           <span className="sidebar-brand-text">
             <span className="sidebar-brand-title">Портал</span>
@@ -144,9 +132,6 @@ export function Layout() {
         </nav>
 
         <div className="sidebar-footer">
-          {offlineKit && (
-            <div className="sidebar-auth-note">Офлайн · без связи с ЦО</div>
-          )}
           {isBackendMode() && auth.authRequired && !auth.role && (
             <Link to="/" className="sidebar-login">
               Войти
