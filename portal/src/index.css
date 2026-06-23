@@ -840,6 +840,49 @@ a:hover {
   margin-bottom: 1.25rem;
 }
 
+.my-forms-group-toggle {
+  white-space: nowrap;
+}
+
+.forms-package-group {
+  margin-bottom: 1.75rem;
+}
+
+.forms-package-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.forms-package-group-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--primary);
+}
+
+.forms-package-group-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.forms-package-group-link {
+  font-size: 0.9rem;
+}
+
+.package-id-badge {
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+}
+
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;

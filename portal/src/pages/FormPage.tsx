@@ -28,6 +28,7 @@ import {
 import type { FormInstanceStatus, FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
+import { formsListBackLabel } from "../formsListLabels";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -65,6 +66,7 @@ export function FormPage() {
   const kontrMode = schema ? isKontrForm(schema.id) : false;
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
+  const formsBackLabel = formsListBackLabel(auth);
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const isLocked = instanceStatus === "submitted" && !admin;
 
@@ -325,7 +327,7 @@ export function FormPage() {
       <div className="form-page">
         <div className="error-box">{error}</div>
         <Link to="/my" className="btn btn-primary" style={{ marginTop: "1rem" }}>
-          ← Мои формы ОКО
+          {formsBackLabel}
         </Link>
       </div>
     );
@@ -342,7 +344,7 @@ export function FormPage() {
       <div className="form-toolbar">
         <div className="toolbar-breadcrumb">
           <Link to="/my" className="back-link">
-            ← Мои формы ОКО
+            {formsBackLabel}
           </Link>
           <Link to="/catalog" className="back-link muted">
             Каталог
