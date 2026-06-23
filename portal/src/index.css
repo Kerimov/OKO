@@ -1667,6 +1667,60 @@ a:hover {
   font-weight: 600;
 }
 
+.rash-results {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.rash-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rash-stat.fail {
+  color: var(--danger);
+}
+
+.rash-stat.warn {
+  color: #8a6d00;
+}
+
+.rash-issues-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.rash-issues-list li {
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.rash-error {
+  background: #fdecea;
+  border-color: #f5c2c0;
+  color: #8a1f17;
+}
+
+.rash-warn {
+  background: #fff8e6;
+  border-color: #f0d78c;
+  color: #6b5600;
+}
+
 .check-table-wrap {
   overflow-x: auto;
   max-height: 360px;

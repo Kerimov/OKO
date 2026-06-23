@@ -494,18 +494,23 @@ export function FormPage() {
       )}
 
       {rashIssues && rashIssues.length > 0 && (
-        <details className="missing-forms" open style={{ marginBottom: "1rem" }}>
-          <summary>
-            Расшифровки ({rashIssues.filter((i) => i.severity === "error").length} ошибок)
-          </summary>
-          <ul>
+        <section className="rash-results" style={{ marginBottom: "1rem" }}>
+          <div className="rash-summary">
+            <span className="rash-stat fail">
+              Ошибок: {rashIssues.filter((i) => i.severity === "error").length}
+            </span>
+            <span className="rash-stat warn">
+              Предупреждений: {rashIssues.filter((i) => i.severity === "warning").length}
+            </span>
+          </div>
+          <ul className="rash-issues-list">
             {rashIssues.map((issue, idx) => (
               <li key={idx} className={issue.severity === "error" ? "rash-error" : "rash-warn"}>
                 Строка {issue.rowIndex + 1} ({issue.rowLabel}), гр. {issue.column}: {issue.message}
               </li>
             ))}
           </ul>
-        </details>
+        </section>
       )}
 
       <section className="form-meta-panel">
