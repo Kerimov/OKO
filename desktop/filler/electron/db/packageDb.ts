@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { FormCatalog, FormSchema, OkoFormInstance } from "@portal/types";
+import type { FormCatalog, FormSchema, OkoFormInstance, PackageCompleteness } from "@portal/types";
 import { buildInitialRows } from "@portal/utils";
 import {
   DB_FILE,
@@ -11,7 +11,7 @@ import {
   writePackageMetaFile,
   type PackageMeta,
 } from "./schema.js";
-import { countInstances, listSummaries, loadInstance, saveInstance } from "./instances.js";
+import { countInstances, listSummaries, loadInstance, saveInstance, normalizeInstanceStatus } from "./instances.js";
 import { PackageDatabase } from "./sqliteDb.js";
 import {
   getRulesSyncInfo,
@@ -275,27 +275,34 @@ export async function importJsonPackage(
 
 export function listPackageInstances() {
   if (!session) throw new Error("Комплект не открыт");
+  session.db.reloadFromDiskIfExternalChange();
   return listSummaries(session.db, session.meta.zid, session.meta.eid);
 }
 
 export function getPackageInstance(instanceId: string) {
   if (!session) throw new Error("Комплект не открыт");
+  session.db.reloadFromDiskIfExternalChange();
   return loadInstance(session.db, instanceId);
 }
 
-export function savePackageInstance(inst: OkoFormInstance, userName?: string) {
+export function savePackageInstance(
+  inst: OkoFormInstance,
+  userName?: string,
+  clientId?: string
+) {
   if (!session) throw new Error("Комплект не открыт");
+  session.db.reloadFromDiskIfExternalChange();
   inst.updatedAt = new Date().toISOString();
-  session.db.transaction(() => saveInstance(session.db, inst, userName));
+  session.db.transaction(() => saveInstance(session.db, inst, userName, clientId));
   return inst;
 }
 
 export function loadAllPackageInstances(): OkoFormInstance[] {
-  if (!session) throw new Error("Комплект не открыт");
-  const summaries = listSummaries(session.db, session.meta.zid, session.meta.eid);
+  const s = requireSessionDb();
+  const summaries = listSummaries(s.db, s.meta.zid, s.meta.eid);
   const instances: OkoFormInstance[] = [];
-  for (const s of summaries) {
-    const inst = loadInstance(session.db, s.instanceId);
+  for (const row of summaries) {
+    const inst = loadInstance(s.db, row.instanceId);
     if (inst) instances.push(inst);
   }
   return instances;
@@ -305,9 +312,9 @@ export function loadAllPackageInstances(): OkoFormInstance[] {
 export function loadPackageInstancesForTemplates(
   templateIds: Iterable<string>
 ): OkoFormInstance[] {
-  if (!session) throw new Error("Комплект не открыт");
+  const s = requireSessionDb();
   const want = new Set(templateIds);
-  const summaries = listSummaries(session.db, session.meta.zid, session.meta.eid);
+  const summaries = listSummaries(s.db, s.meta.zid, s.meta.eid);
   const latest = new Map<string, (typeof summaries)[number]>();
   for (const s of summaries) {
     if (!want.has(s.templateId)) continue;
@@ -317,8 +324,8 @@ export function loadPackageInstancesForTemplates(
     }
   }
   const instances: OkoFormInstance[] = [];
-  for (const s of latest.values()) {
-    const inst = loadInstance(session.db, s.instanceId);
+  for (const row of latest.values()) {
+    const inst = loadInstance(s.db, row.instanceId);
     if (inst) instances.push(inst);
   }
   return instances;
@@ -328,18 +335,18 @@ export function setPackageInstanceStatus(
   instanceId: string,
   status: "draft" | "submitted"
 ): OkoFormInstance {
-  if (!session) throw new Error("Комплект не открыт");
-  const inst = loadInstance(session.db, instanceId);
+  const s = requireSessionDb();
+  const inst = loadInstance(s.db, instanceId);
   if (!inst) throw new Error("Форма не найдена");
   inst.status = status;
   inst.updatedAt = new Date().toISOString();
-  session.db.transaction(() => saveInstance(session.db, inst));
+  s.db.transaction(() => saveInstance(s.db, inst));
   return inst;
 }
 
 export function exportPackageJson(): ReportPackageInput {
-  if (!session) throw new Error("Комплект не открыт");
-  const { meta, db } = session;
+  const s = requireSessionDb();
+  const { meta, db } = s;
   const summaries = listSummaries(db, meta.zid, meta.eid);
   const instances: OkoFormInstance[] = [];
   for (const s of summaries) {
@@ -368,4 +375,66 @@ export function getOsUserName(): string {
 
 export function getMachineName(): string {
   return process.env.COMPUTERNAME || process.env.HOSTNAME || "pc";
+}
+
+export interface CollaborationSettings {
+  heartbeatIntervalSec: number;
+  presenceStaleSec: number;
+  syncPollIntervalSec: number;
+}
+
+export function getCollaborationSettings(): CollaborationSettings {
+  const settings = session?.meta.settings;
+  return {
+    heartbeatIntervalSec: settings?.heartbeatIntervalSec ?? 5,
+    presenceStaleSec: settings?.presenceStaleSec ?? 30,
+    syncPollIntervalSec: settings?.syncPollIntervalSec ?? 3,
+  };
+}
+
+export function requireSessionDb(): PackageSession {
+  if (!session) throw new Error("Комплект не открыт");
+  session.db.reloadFromDiskIfExternalChange();
+  return session;
+}
+
+export function getPackageCompleteness(): PackageCompleteness {
+  const s = requireSessionDb();
+  const catalog = loadCatalogFromDisk();
+  const summaries = listSummaries(s.db, s.meta.zid, s.meta.eid);
+  const latestByTemplate = new Map<string, (typeof summaries)[number]>();
+
+  for (const row of summaries) {
+    const prev = latestByTemplate.get(row.templateId);
+    if (!prev || row.updatedAt > prev.updatedAt) {
+      latestByTemplate.set(row.templateId, row);
+    }
+  }
+
+  const items = catalog.forms.map((f) => {
+    const inst = latestByTemplate.get(f.id);
+    return {
+      formId: f.id,
+      title: f.title,
+      category: f.category,
+      filled: !!inst,
+      instanceId: inst?.instanceId,
+      displayName: inst?.displayName,
+      status: inst ? normalizeInstanceStatus(inst.status) : undefined,
+    };
+  });
+
+  const filled = items.filter((i) => i.filled).length;
+  const draft = items.filter((i) => i.filled && i.status !== "submitted").length;
+  const submitted = items.filter((i) => i.status === "submitted").length;
+
+  return {
+    zid: s.meta.zid,
+    eid: s.meta.eid,
+    total: items.length,
+    filled,
+    draft,
+    submitted,
+    items,
+  };
 }

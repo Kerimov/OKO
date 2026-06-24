@@ -26,6 +26,45 @@ export interface SessionInfo {
 
 const api = {
   getUserName: (): Promise<string> => ipcRenderer.invoke("oko:getUserName"),
+  getClientId: (): Promise<string> => ipcRenderer.invoke("oko:getClientId"),
+  authNeedsSetup: (): Promise<boolean> => ipcRenderer.invoke("oko:authNeedsSetup"),
+  authGetSession: (): Promise<import("../src/types").AuthUser | null> =>
+    ipcRenderer.invoke("oko:authGetSession"),
+  authLogin: (login: string, password: string): Promise<import("../src/types").AuthUser> =>
+    ipcRenderer.invoke("oko:authLogin", login, password),
+  authCreateInitialAdmin: (
+    login: string,
+    displayName: string,
+    password: string
+  ): Promise<import("../src/types").AuthUser> =>
+    ipcRenderer.invoke("oko:authCreateInitialAdmin", login, displayName, password),
+  authLogout: (): Promise<boolean> => ipcRenderer.invoke("oko:authLogout"),
+  authListUsers: (): Promise<import("../src/types").PublicUser[]> =>
+    ipcRenderer.invoke("oko:authListUsers"),
+  authListActiveLogins: (): Promise<string[]> => ipcRenderer.invoke("oko:authListActiveLogins"),
+  authCreateUser: (payload: {
+    login: string;
+    displayName: string;
+    password: string;
+    role: import("../src/types").UserRole;
+  }): Promise<import("../src/types").PublicUser> =>
+    ipcRenderer.invoke("oko:authCreateUser", payload),
+  authUpdateUser: (payload: {
+    id: string;
+    displayName?: string;
+    role?: import("../src/types").UserRole;
+    active?: boolean;
+  }): Promise<import("../src/types").PublicUser> =>
+    ipcRenderer.invoke("oko:authUpdateUser", payload),
+  authResetPassword: (userId: string, password: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:authResetPassword", userId, password),
+  authDeleteUser: (userId: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:authDeleteUser", userId),
+  getCollaborationSettings: (): Promise<{
+    heartbeatIntervalSec: number;
+    presenceStaleSec: number;
+    syncPollIntervalSec: number;
+  }> => ipcRenderer.invoke("oko:getCollaborationSettings"),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("oko:pickFolder"),
   pickJsonFile: (): Promise<string | null> => ipcRenderer.invoke("oko:pickJsonFile"),
   openPackage: (folderPath: string): Promise<OpenPackageResult> =>
@@ -78,11 +117,124 @@ const api = {
     ipcRenderer.invoke("oko:saveInstanceJson", fileName, content),
   saveExcelFile: (fileName: string, base64: string): Promise<boolean> =>
     ipcRenderer.invoke("oko:saveExcelFile", fileName, base64),
-  exportJson: (): Promise<{ filePath: string; fileName: string }> =>
-    ipcRenderer.invoke("oko:exportJson"),
+  exportJson: (opts?: {
+    pin?: string;
+    actor?: string;
+  }): Promise<{ filePath: string; fileName: string; warnings: string[] }> =>
+    ipcRenderer.invoke("oko:exportJson", opts),
   saveExportAs: (): Promise<string | null> => ipcRenderer.invoke("oko:saveExportAs"),
+  log: (level: string, message: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:log", level, message),
+  claimCell: (payload: {
+    instanceId: string;
+    rowNo: number;
+    columnKey: string;
+    userName: string;
+  }): Promise<{ ok: boolean; occupiedBy?: string }> =>
+    ipcRenderer.invoke("oko:claimCell", payload),
+  releasePresence: (): Promise<boolean> => ipcRenderer.invoke("oko:releasePresence"),
+  heartbeatCell: (payload: {
+    instanceId: string;
+    rowNo: number;
+    columnKey: string;
+  }): Promise<boolean> => ipcRenderer.invoke("oko:heartbeatCell", payload),
+  listInstancePresence: (instanceId: string): Promise<
+    Array<{
+      instanceId: string;
+      rowNo: number;
+      columnKey: string;
+      userName: string;
+      machineName: string | null;
+      clientId: string;
+      heartbeatAt: string;
+    }>
+  > => ipcRenderer.invoke("oko:listInstancePresence", instanceId),
+  listPackageEditors: (): Promise<Record<string, string[]>> =>
+    ipcRenderer.invoke("oko:listPackageEditors"),
+  listCellChanges: (
+    instanceId: string,
+    sinceIso: string
+  ): Promise<
+    Array<{
+      rowNo: number;
+      columnKey: string;
+      value: string | number;
+      updatedAt: string;
+      updatedBy: string | null;
+    }>
+  > => ipcRenderer.invoke("oko:listCellChanges", instanceId, sinceIso),
+  saveCell: (payload: {
+    instanceId: string;
+    rowNo: number;
+    rowName: string | null;
+    columnKey: string;
+    value: string | number | undefined;
+    userName: string;
+  }): Promise<{ updatedAt: string }> => ipcRenderer.invoke("oko:saveCell", payload),
+  forceUnlock: (payload: {
+    instanceId: string;
+    rowNo?: number;
+    columnKey?: string;
+    actor: string;
+    pin?: string;
+  }): Promise<number> => ipcRenderer.invoke("oko:forceUnlock", payload),
+  hasCoordinatorPin: (): Promise<boolean> => ipcRenderer.invoke("oko:hasCoordinatorPin"),
+  verifyCoordinatorPin: (pin: string): Promise<boolean> =>
+    ipcRenderer.invoke("oko:verifyCoordinatorPin", pin),
+  setCoordinatorPin: (payload: { pin: string; oldPin?: string }): Promise<boolean> =>
+    ipcRenderer.invoke("oko:setCoordinatorPin", payload),
+  getCompleteness: () => ipcRenderer.invoke("oko:getCompleteness"),
+  getAssignments: () => ipcRenderer.invoke("oko:getAssignments"),
+  saveAssignments: (
+    items: Array<{ templateId: string; assignee: string; status: string }>
+  ) => ipcRenderer.invoke("oko:saveAssignments", items),
+  listKnownAssignees: (): Promise<string[]> => ipcRenderer.invoke("oko:listKnownAssignees"),
+  backupDatabase: (payload?: { pin?: string; actor?: string }): Promise<{ filePath: string }> =>
+    ipcRenderer.invoke("oko:backupDatabase", payload),
 };
 
 contextBridge.exposeInMainWorld("oko", api);
+
+function safeStringify(v: unknown): string {
+  try {
+    if (v instanceof Error) return `${v.name}: ${v.message}\n${v.stack ?? ""}`;
+    if (typeof v === "string") return v;
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function sendLog(level: string, parts: unknown[]) {
+  const msg = parts.map(safeStringify).join(" ");
+  void ipcRenderer.invoke("oko:log", level, msg);
+}
+
+// Capture uncaught errors in renderer and forward to main log file.
+window.addEventListener("error", (e) => {
+  sendLog("error", [
+    "window.error",
+    e.message,
+    e.filename,
+    `:${e.lineno}:${e.colno}`,
+    e.error,
+  ]);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  sendLog("error", ["unhandledrejection", (e as PromiseRejectionEvent).reason]);
+});
+
+const origError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  sendLog("error", args);
+  origError(...args);
+};
+
+const origWarn = console.warn.bind(console);
+console.warn = (...args: unknown[]) => {
+  sendLog("warn", args);
+  origWarn(...args);
+};
 
 export type OkoDesktopApi = typeof api;

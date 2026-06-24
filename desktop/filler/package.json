@@ -10,9 +10,10 @@
     "dev": "vite",
     "build": "vite build",
     "predist": "node scripts/kill-and-clean-release.mjs",
-    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable -c.win.signExecutable=false",
+    "predist:setup": "node scripts/kill-and-clean-release.mjs",
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --win portable -c.win.signExecutable=false",
     "dist:signed": "node scripts/dist-signed.mjs",
-    "dist:setup": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis -c.win.signExecutable=false",
+    "dist:setup": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --win nsis -c.win.signExecutable=false",
     "dist:setup:signed": "node scripts/dist-signed.mjs --nsis",
     "dist:dir": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --dir",
     "preview": "vite preview",
@@ -61,14 +62,13 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ],
-      "icon": "../../reference/icon-OKO.ico",
-      "signAndEditExecutable": true,
+      "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false
     },
     "portable": {
@@ -81,7 +81,10 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "OKO Zapolnenie"
+      "shortcutName": "ОКО Заполнение",
+      "artifactName": "OKO-Zapolnenie-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false,
+      "language": "1049"
     }
   }
 }

@@ -4,7 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const releaseDir = path.resolve(__dirname, "../installer");
+const outputName = process.env.OKO_BUILD_OUTPUT || "installer";
+const releaseDir = path.resolve(__dirname, "..", outputName);
 
 function tryKill(imageName) {
   try {
@@ -14,19 +15,32 @@ function tryKill(imageName) {
   }
 }
 
+function cleanDir(dir) {
+  if (!fs.existsSync(dir)) return true;
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 400 });
+    console.log(`Removed ${path.basename(dir)}/`);
+    return true;
+  } catch {
+    const backup = `${dir}.old-${Date.now()}`;
+    try {
+      fs.renameSync(dir, backup);
+      console.log(`Renamed locked ${path.basename(dir)}/ → ${path.basename(backup)}/`);
+      return true;
+    } catch (e) {
+      console.warn(
+        `Не удалось очистить ${path.basename(dir)}/ — закройте «ОКО Заполнение» и проводник в этой папке`
+      );
+      if (e instanceof Error) console.warn(e.message);
+      return false;
+    }
+  }
+}
+
 if (process.platform === "win32") {
   tryKill("electron.exe");
   tryKill("ОКО Заполнение.exe");
+  tryKill("OKO Zapolnenie.exe");
 }
 
-if (fs.existsSync(releaseDir)) {
-  try {
-    fs.rmSync(releaseDir, { recursive: true, force: true });
-    console.log("Removed installer/");
-  } catch (e) {
-    console.warn(
-      "Не удалось удалить installer/ — закройте «ОКО Заполнение» и повторите npm run dist"
-    );
-    if (e instanceof Error) console.warn(e.message);
-  }
-}
+cleanDir(releaseDir);

@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { usePackage } from "../context/PackageContext";
+import { useAuth } from "../context/AuthContext";
 
 export function WelcomePage() {
   const navigate = useNavigate();
   const { setSession, userName } = usePackage();
+  const { isAdmin, logout } = useAuth();
   const [folderPath, setFolderPath] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -121,7 +123,21 @@ export function WelcomePage() {
         <h1>ОКО Заполнение</h1>
         <p className="muted">Десктоп для совместного заполнения комплекта в сетевой папке</p>
         <p className="welcome-user">
-          Пользователь: <strong>{userName}</strong>
+          Вы вошли как <strong>{userName}</strong>
+          {isAdmin && (
+            <>
+              {" · "}
+              <Link to="/admin">Управление пользователями</Link>
+            </>
+          )}
+          {" · "}
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => void logout().then(() => navigate("/login"))}
+          >
+            Выйти
+          </button>
         </p>
 
         <label className="field">
