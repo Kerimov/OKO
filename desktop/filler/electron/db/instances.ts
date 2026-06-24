@@ -79,7 +79,8 @@ export function normalizeInstanceStatus(status: string | null | undefined): "dra
 export function saveInstance(
   db: PackageDatabase,
   inst: OkoFormInstance,
-  updatedBy?: string
+  updatedBy?: string,
+  clientId?: string
 ): void {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
@@ -127,8 +128,8 @@ export function saveInstance(
 
   const insert = db.prepare(
     `INSERT INTO form_cell_values (
-      instance_id, row_no, row_name, column_key, value_num, value_text, updated_at, updated_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      instance_id, row_no, row_name, column_key, value_num, value_text, updated_at, updated_by, updated_client_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   for (let index = 0; index < inst.rows.length; index++) {
@@ -146,7 +147,8 @@ export function saveInstance(
         value_num,
         value_text,
         now,
-        updatedBy ?? null
+        updatedBy ?? null,
+        clientId ?? null
       );
     }
     if (!row.num && rowNo >= 900_000_000) {
@@ -158,7 +160,8 @@ export function saveInstance(
         index,
         null,
         now,
-        updatedBy ?? null
+        updatedBy ?? null,
+        clientId ?? null
       );
     }
   }

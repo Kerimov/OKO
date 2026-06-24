@@ -9,18 +9,33 @@ const portalPublic = path.resolve(__dirname, "../../portal/public");
 const portalSrc = path.resolve(__dirname, "../../portal/src");
 const portalStorage = path.resolve(portalSrc, "storage.ts");
 const portalApi = path.resolve(portalSrc, "api.ts");
+const desktopStorage = path.resolve(__dirname, "src/desktopStorage.ts");
 
-const sharedAlias = {
-  "@portal": portalSrc,
-  [path.resolve(portalSrc, "apiClient.ts")]: path.resolve(__dirname, "src/desktopApiClient.ts"),
-  [portalStorage]: path.resolve(__dirname, "src/desktopStorage.ts"),
-};
+/** @portal/storage and portal relative `../storage` must resolve before the @portal directory alias. */
+const sharedAlias = [
+  { find: "@portal/storage", replacement: desktopStorage },
+  { find: portalStorage, replacement: desktopStorage },
+  { find: /portal[\\/]src[\\/]storage\.ts$/, replacement: desktopStorage },
+  { find: "@portal", replacement: portalSrc },
+  {
+    find: path.resolve(portalSrc, "apiClient.ts"),
+    replacement: path.resolve(__dirname, "src/desktopApiClient.ts"),
+  },
+];
 
-const mainAlias = {
-  ...sharedAlias,
-  [portalApi]: path.resolve(__dirname, "electron/mainPortalApiLite.ts"),
-  [portalStorage]: path.resolve(__dirname, "electron/mainStorageStub.ts"),
-};
+const mainStorageStub = path.resolve(__dirname, "electron/mainStorageStub.ts");
+
+const mainAlias = [
+  { find: "@portal/storage", replacement: mainStorageStub },
+  { find: portalStorage, replacement: mainStorageStub },
+  { find: /portal[\\/]src[\\/]storage\.ts$/, replacement: mainStorageStub },
+  { find: "@portal", replacement: portalSrc },
+  {
+    find: path.resolve(portalSrc, "apiClient.ts"),
+    replacement: path.resolve(__dirname, "src/desktopApiClient.ts"),
+  },
+  { find: portalApi, replacement: path.resolve(__dirname, "electron/mainPortalApiLite.ts") },
+];
 
 export default defineConfig({
   base: "./",

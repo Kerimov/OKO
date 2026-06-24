@@ -25,4 +25,21 @@ export interface SessionInfo {
     hasChecks: boolean;
     hasRash?: boolean;
   };
+  hasCoordinatorPin?: boolean;
+  restrictExecutorsToAssignments?: boolean;
+}
+
+export type UserRole = "admin" | "coordinator" | "executor";
+
+export interface AuthUser {
+  id: string;
+  login: string;
+  displayName: string;
+  role: UserRole;
+}
+
+export interface PublicUser extends AuthUser {
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

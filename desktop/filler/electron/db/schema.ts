@@ -100,6 +100,9 @@ export function migrateDb(db: PackageDatabase): void {
   if (!names.has("updated_by")) {
     db.exec("ALTER TABLE form_cell_values ADD COLUMN updated_by TEXT");
   }
+  if (!names.has("updated_client_id")) {
+    db.exec("ALTER TABLE form_cell_values ADD COLUMN updated_client_id TEXT");
+  }
 
   db.prepare(
     `INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)

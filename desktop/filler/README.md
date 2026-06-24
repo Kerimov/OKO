@@ -22,9 +22,9 @@ installer/OKO-Zapolnenie-0.1.0.exe
 
 | Команда | Результат |
 |---------|-----------|
-| `npm run dist` | `installer/OKO-Zapolnenie-0.1.0.exe` — portable |
+| `npm run dist` | `installer/OKO-Zapolnenie-0.1.0.exe` — portable (без установки) |
+| `npm run dist:setup` | **`installer/OKO-Zapolnenie-Setup-0.1.0.exe`** — установщик NSIS |
 | `npm run dist:dir` | `installer/win-unpacked/` — папка с exe |
-| `npm run dist:setup` | NSIS-установщик (если NSIS на машине настроен) |
 
 Если `npm run dist` падает с `EBUSY` — закройте «ОКО Заполнение» и повторите.
 

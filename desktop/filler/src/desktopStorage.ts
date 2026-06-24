@@ -49,8 +49,9 @@ export async function loadKontrAgents(): Promise<KontrAgent[]> {
 }
 
 export function exportInstance(instance: OkoFormInstance): void {
-  const fileName = `oko_${instance.templateId}_${instance.displayName
+  const label = (instance.displayName ?? instance.templateId ?? "form")
     .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")
-    .slice(0, 60)}.json`;
+    .slice(0, 60);
+  const fileName = `oko_${instance.templateId}_${label}.json`;
   void window.oko.saveInstanceJson(fileName, JSON.stringify(instance, null, 2));
 }

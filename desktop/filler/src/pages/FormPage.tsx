@@ -12,8 +12,8 @@ import {
   saveGlobalMeta,
   saveInstance,
   setInstanceStatus,
-} from "@portal/storage";
-import { setDesktopActor } from "../desktopStorage";
+  setDesktopActor,
+} from "../desktopStorage";
 import type {
   FormInstanceStatus,
   FormMeta,
@@ -24,6 +24,10 @@ import type {
 } from "@portal/types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "@portal/utils";
 import { usePackage } from "../context/PackageContext";
+import { useSyncStatus } from "../context/SyncContext";
+import { useCollaborativeForm } from "../hooks/useCollaborativeForm";
+import { useCoordinator } from "../context/CoordinatorContext";
+import { CoordinatorPinModal } from "../components/CoordinatorPinModal";
 import {
   getCachedForm,
   patchCachedInstance,
@@ -33,6 +37,8 @@ import {
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
   const { userName } = usePackage();
+  const { isCoordinator, hasPin } = useCoordinator();
+  const [unlockPinOpen, setUnlockPinOpen] = useState(false);
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [instance, setInstance] = useState<OkoFormInstance | null>(null);
   const [rows, setRows] = useState<RowData[]>([]);
@@ -61,11 +67,37 @@ export function FormPage() {
   const [recalcRuleCount, setRecalcRuleCount] = useState<number | null>(null);
   const recalcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadGenRef = useRef(0);
   const [formLoading, setFormLoading] = useState(true);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const isLocked = instanceStatus === "submitted";
+
+  const { setSync } = useSyncStatus();
+  const collab = useCollaborativeForm({
+    instanceId,
+    userName,
+    rows,
+    setRows,
+    disabled: isLocked,
+  });
+
+  useEffect(() => {
+    setSync(collab.syncStatus, collab.lockMessage || collab.conflictMessage);
+  }, [collab.syncStatus, collab.lockMessage, collab.conflictMessage, setSync]);
+
+  const handleForceUnlockForm = async (pin: string) => {
+    if (!instance) return false;
+    const n = await window.oko.forceUnlock({
+      instanceId: instance.instanceId,
+      actor: userName,
+      pin: pin || undefined,
+    });
+    setStatus(n > 0 ? `Снято блокировок: ${n}` : "Активных блокировок нет");
+    setTimeout(() => setStatus(""), 4000);
+    return true;
+  };
 
   useEffect(() => {
     setDesktopActor(userName);
@@ -73,16 +105,20 @@ export function FormPage() {
 
   useEffect(() => {
     if (!instanceId) return;
-    let cancelled = false;
+    const gen = ++loadGenRef.current;
+    const loadStartedAt = Date.now();
+    const loadResolvedRef = { current: false };
+    const hadCacheRef = { current: false };
     setError("");
     setCheckResult(null);
     setRashIssues(null);
 
     const cached = getCachedForm(instanceId);
-    if (cached) {
+    if (cached?.instance && cached.schema) {
+      hadCacheRef.current = true;
       setInstance(cached.instance);
       setSchema(cached.schema);
-      setDisplayName(cached.instance.displayName);
+      setDisplayName(cached.instance.displayName ?? "");
       setMeta(cached.instance.meta);
       setRows(cached.instance.rows);
       setSignatures(cached.instance.signatures ?? {});
@@ -94,18 +130,19 @@ export function FormPage() {
     void (async () => {
       try {
         const inst = await window.oko.loadInstance(instanceId);
-        if (cancelled) return;
+        if (loadGenRef.current !== gen) return;
+        if (!inst) throw new Error("Форма не найдена");
         const sch = await window.oko.loadSchema(inst.templateId);
-        if (cancelled) return;
+        if (loadGenRef.current !== gen) return;
         setInstance(inst);
-        setDisplayName(inst.displayName);
+        setDisplayName(inst.displayName ?? "");
         setMeta(inst.meta);
         setRows(inst.rows);
         setSignatures(inst.signatures ?? {});
         setSchema(sch);
         setCachedForm(instanceId, inst, sch);
       } catch (e) {
-        if (cancelled) return;
+        if (loadGenRef.current !== gen) return;
         const msg = e instanceof Error ? e.message : "Ошибка загрузки формы";
         if (msg.includes("не открыт")) {
           setError("Комплект не открыт. Вернитесь на главную и откройте папку комплекта.");
@@ -117,12 +154,36 @@ export function FormPage() {
           setError(msg);
         }
       } finally {
-        if (!cancelled) setFormLoading(false);
+        if (loadGenRef.current === gen) {
+          loadResolvedRef.current = true;
+          setFormLoading(false);
+          const ms = Date.now() - loadStartedAt;
+          void window.oko
+            .log("info", `Form load done in ${ms}ms (id=${instanceId})`)
+            .catch(() => {});
+        }
       }
     })();
 
+    const t = setTimeout(() => {
+      if (loadGenRef.current !== gen || loadResolvedRef.current) return;
+      setFormLoading(false);
+      if (hadCacheRef.current) {
+        void window.oko
+          .log(
+            "warn",
+            `Form refresh slow (>15s), showing cached data (id=${instanceId})`
+          )
+          .catch(() => {});
+        return;
+      }
+      setError(
+        "Загрузка формы зависла. Обычно причина — блокировка сетевой папки/антивирус или ошибка IPC. Проверьте файл .oko/logs/renderer.log в папке комплекта и пришлите последние строки."
+      );
+    }, 15000);
+
     return () => {
-      cancelled = true;
+      clearTimeout(t);
     };
   }, [instanceId]);
 
@@ -365,14 +426,13 @@ export function FormPage() {
     );
   }
 
-  if (formLoading && (!schema || !instance)) {
-    return <div className="content muted loading">Загрузка формы…</div>;
-  }
-
   if (!schema || !instance) {
+    if (formLoading || !error) {
+      return <div className="content muted loading">Загрузка формы…</div>;
+    }
     return (
       <div className="content form-page">
-        <p className="error">{error || "Не удалось открыть форму"}</p>
+        <p className="error">{error}</p>
         <Link to="/package">← К комплекту</Link>
       </div>
     );
@@ -381,11 +441,6 @@ export function FormPage() {
   return (
     <div className="content form-page">
       <div className="form-toolbar">
-        <div className="toolbar-breadcrumb">
-          <Link to="/package" className="back-link">
-            ← К комплекту
-          </Link>
-        </div>
         <div className="form-title-block form-title-block-wide">
           <label className="display-name-label">
             Название формы
@@ -466,6 +521,16 @@ export function FormPage() {
           <button type="button" className="btn btn-secondary" onClick={handleExport}>
             Экспорт JSON
           </button>
+          {isCoordinator && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setUnlockPinOpen(true)}
+              title="Снять зависшие блокировки ячеек на этой форме"
+            >
+              Снять блокировки
+            </button>
+          )}
           {!isLocked && (
             <button type="button" className="btn btn-secondary" onClick={() => void handleReset()}>
               Сбросить данные
@@ -499,6 +564,8 @@ export function FormPage() {
 
       {status && <div className="status-bar">{status}</div>}
       {error && <p className="error">{error}</p>}
+      {collab.lockMessage && <p className="error">{collab.lockMessage}</p>}
+      {collab.conflictMessage && <p className="warn-block">{collab.conflictMessage}</p>}
       {isLocked && (
         <div className="status-bar status-locked">
           Форма отмечена готовой и доступна только для просмотра. Координатор может вернуть её в
@@ -600,6 +667,20 @@ export function FormPage() {
         kontrAgents={kontrAgents}
         cellErrors={cellErrors}
         readOnly={isLocked}
+        occupiedCells={collab.occupiedCells}
+        presenceUsers={collab.presenceUsers}
+        highlightedCells={collab.highlightedCells}
+        onCellFocus={(info) => void collab.handleCellFocus(info)}
+        onCellBlur={(info) => void collab.handleCellBlur(info)}
+        onCellEdit={(info) => collab.handleCellEdit(info)}
+      />
+
+      <CoordinatorPinModal
+        open={unlockPinOpen}
+        title="Снять блокировки на форме"
+        requirePin={hasPin}
+        onClose={() => setUnlockPinOpen(false)}
+        onSubmit={handleForceUnlockForm}
       />
 
       {schema.signatures.length > 0 && (
