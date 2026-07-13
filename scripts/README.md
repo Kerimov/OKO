@@ -39,6 +39,7 @@ python scripts/export_mdb_data.py
 | `mde_gap.py` | Разрыв между MDE и порталом |
 | `empty_portal_forms.py` | Генерация пустых экземпляров |
 | `tauri-collab-smoke.py` | M5: 10 клиентов на одном `oko.db` (presence + write) |
+| `acceptance-desktop.sh` | Smoke + чеклист ручной приёмки §15 |
 | `generate_schemas.py` | Устаревший генератор (используйте `generate_schemas_from_mdb.py`) |
 
 ---
