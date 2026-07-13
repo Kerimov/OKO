@@ -10,11 +10,6 @@ server-nest/node_modules
 server-nest/dist
 packages/**/node_modules
 packages/**/dist
-desktop/filler/node_modules
-desktop/filler/dist
-desktop/filler/dist-electron
-desktop/filler/release
-desktop/filler/installer
 desktop/tauri/node_modules
 desktop/tauri/dist
 desktop/tauri/src-tauri/target
@@ -22,7 +17,7 @@ desktop/tauri/src-tauri/target
 # Accidental tsc emit next to TypeScript sources
 server/src/**/*.js
 
-# SQLite database
+# SQLite (legacy local API file; kits use per-folder oko.db)
 data/oko.db
 data/oko.db-*
 
@@ -36,9 +31,6 @@ reference/*.mde
 12345/
 *.mde
 .env
-desktop/filler/.env.signing
-desktop/filler/build/*.pfx
-desktop/filler/build/*.cer
 *.pfx
 *.pem
 *.key

@@ -1,12 +1,11 @@
-# OKO Заполнение — Tauri 2 (целевой десктоп)
+# OKO Заполнение — Tauri 2
 
-Целевой стек по ТЗ: **Tauri 2 + React + rusqlite (WAL)**.  
-Пилот на Electron остаётся в [`../filler`](../filler) до полного паритета установщиков.
+Стек по ТЗ: **Tauri 2 + React + rusqlite (WAL)**.
 
 ## UI
 
-Фронт совпадает с Electron filler: `Layout`, Welcome / Package / Form / Assignments / Admin, те же стили.  
-Доступ к SQLite — через `window.oko` (`src/okoBridge.ts` → Tauri `invoke`).
+Фронт: `Layout`, Welcome / Package / Form / Assignments / Admin.  
+Доступ к SQLite-комплекту — через `window.oko` (`src/okoBridge.ts` → Tauri `invoke`).
 
 ## Срез M1–M5
 

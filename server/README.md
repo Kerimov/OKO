@@ -14,12 +14,7 @@
 cd ../server-nest && npm install && npm run dev   # :3001, Swagger /api/docs
 ```
 
-Переменные окружения — [`.env.example`](../.env.example).
-
-### Legacy Express
-
-`src/index.ts` больше **не** регистрирует REST-маршруты (только CORS/auth/audit shell).  
-Escape hatch: `OKO_API_RUNTIME=express ./dev.sh`.
+Переменные окружения — [`.env.example`](../.env.example). Требуется **`DATABASE_URL`** (PostgreSQL).
 
 ---
 
@@ -27,10 +22,11 @@ Escape hatch: `OKO_API_RUNTIME=express ./dev.sh`.
 
 | Режим | Переменная | Файл схемы |
 |-------|------------|------------|
-| **PostgreSQL (SoT)** | `DATABASE_URL=postgresql://...` | `data/schema.postgresql.sql` |
-| SQLite (opt-in API / desktop kits) | без `DATABASE_URL` + `OKO_ALLOW_SQLITE=1` / `OKO_DB_PATH` | `data/schema.sql` |
+| **PostgreSQL** | `DATABASE_URL=postgresql://...` | `data/schema.postgresql.sql` |
 
-Абстракция: `src/oko-db.ts` — `OkoDb` для обоих движков. В production без `DATABASE_URL` API не стартует (нужен Postgres).
+Офлайн-комплекты десктопа (`desktop/tauri`, файл `oko.db`) — отдельный SQLite WAL; не используется API.
+
+Абстракция: `src/oko-db.ts` (`OkoDb`, только Postgres).
 
 При старте Nest вызывается `bootstrapDatabase()`:
 
@@ -44,11 +40,10 @@ Escape hatch: `OKO_API_RUNTIME=express ./dev.sh`.
 
 | Файл | Назначение |
 |------|------------|
-| `index.ts` | **Deprecated** Express entrypoint (shell only) |
-| `legacy-routes.ts` | Middleware shell для Nest |
+| `legacy-routes.ts` | Middleware shell для Nest (CORS, auth, audit) |
 | `instance-submit.ts` | Сдача формы + серверные period-проверки |
 | `db.ts` | Bootstrap БД |
-| `oko-db.ts` | SQLite / PostgreSQL |
+| `oko-db.ts` | PostgreSQL |
 | `auth.ts` | Логин, сессии, Bearer |
 | `instances.ts` | CRUD экземпляров |
 | `forms.ts` / `checks.ts` / `saldo.ts` / … | Домены метаданных |
@@ -63,22 +58,16 @@ Escape hatch: `OKO_API_RUNTIME=express ./dev.sh`.
 
 Контракты REST реализует Nest (`server-nest/src/**`). Документация: `/api/docs`.
 
-| Метод | Путь (пример) | Примечание |
-|-------|---------------|------------|
-| GET | `/api/health` | Публичный |
-| PATCH | `/api/instances/:id/status` | `submitted` → периодные проверки на сервере |
-| … | `/api/forms`, `/api/checks`, … | См. Swagger |
-
 ---
 
 ## Docker
 
-По умолчанию: `deploy/Dockerfile.api-nest` (`docker compose up`).
+`deploy/Dockerfile.api-nest` (`docker compose up`).
 
 ---
 
 ## См. также
 
 - [server-nest/README.md](../server-nest/README.md)
-- [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+- [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)
 - [docs/DEPLOY.md](../docs/DEPLOY.md)

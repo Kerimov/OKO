@@ -1,10 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
 import fs from "fs";
 import path from "path";
 import pg from "pg";
-import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
+import { ROOT } from "./paths.js";
 
-export type DbDialect = "sqlite" | "postgres";
+export type DbDialect = "postgres";
 
 export interface RunResult {
   changes: number;
@@ -24,7 +23,6 @@ export interface OkoDb {
   columnExists(table: string, column: string): Promise<boolean>;
 }
 
-const SCHEMA_SQLITE = path.join(ROOT, "data", "schema.sql");
 const SCHEMA_POSTGRES = path.join(ROOT, "data", "schema.postgresql.sql");
 
 let dbInstance: OkoDb | null = null;
@@ -36,54 +34,6 @@ export function isPostgresMode(): boolean {
 export function convertPlaceholders(sql: string): string {
   let i = 0;
   return sql.replace(/\?/g, () => `$${++i}`);
-}
-
-class SqliteStatement implements OkoStatement {
-  constructor(private readonly stmt: ReturnType<DatabaseSync["prepare"]>) {}
-
-  async get<T>(...params: unknown[]): Promise<T | undefined> {
-    return this.stmt.get(...(params as never[])) as T | undefined;
-  }
-
-  async all<T>(...params: unknown[]): Promise<T[]> {
-    return this.stmt.all(...(params as never[])) as T[];
-  }
-
-  async run(...params: unknown[]): Promise<RunResult> {
-    const info = this.stmt.run(...(params as never[]));
-    return { changes: Number(info.changes ?? 0) };
-  }
-}
-
-class SqliteDb implements OkoDb {
-  readonly dialect = "sqlite" as const;
-
-  constructor(private readonly db: DatabaseSync) {}
-
-  async exec(sql: string): Promise<void> {
-    this.db.exec(sql);
-  }
-
-  prepare(sql: string): OkoStatement {
-    return new SqliteStatement(this.db.prepare(sql));
-  }
-
-  async transaction<T>(fn: (db: OkoDb) => Promise<T>): Promise<T> {
-    this.db.exec("BEGIN");
-    try {
-      const result = await fn(this);
-      this.db.exec("COMMIT");
-      return result;
-    } catch (e) {
-      this.db.exec("ROLLBACK");
-      throw e;
-    }
-  }
-
-  async columnExists(table: string, column: string): Promise<boolean> {
-    const rows = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-    return rows.some((r) => r.name === column);
-  }
 }
 
 class PgStatement implements OkoStatement {
@@ -211,19 +161,7 @@ class PgClientStatement implements OkoStatement {
 async function applySchemaFile(db: OkoDb, schemaPath: string): Promise<void> {
   if (!fs.existsSync(schemaPath)) return;
   const sql = fs.readFileSync(schemaPath, "utf-8");
-  if (db.dialect === "postgres") {
-    await db.exec(sql);
-    return;
-  }
   await db.exec(sql);
-}
-
-async function createSqliteDb(): Promise<OkoDb> {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const sqlite = new DatabaseSync(DB_PATH);
-  sqlite.exec("PRAGMA journal_mode = WAL");
-  sqlite.exec("PRAGMA foreign_keys = ON");
-  return new SqliteDb(sqlite);
 }
 
 async function createPostgresDb(): Promise<OkoDb> {
@@ -238,28 +176,14 @@ async function createPostgresDb(): Promise<OkoDb> {
 
 export async function initDatabase(): Promise<OkoDb> {
   if (dbInstance) return dbInstance;
-  if (isPostgresMode()) {
-    dbInstance = await createPostgresDb();
-  } else {
-    const isProd = process.env.NODE_ENV === "production";
-    const allowSqlite =
-      process.env.OKO_ALLOW_SQLITE === "1" ||
-      process.env.OKO_ALLOW_SQLITE === "true" ||
-      !isProd;
-    if (!allowSqlite) {
-      throw new Error(
-        "DATABASE_URL is required (PostgreSQL is the API source of truth). " +
-          "For SQLite opt-in set OKO_ALLOW_SQLITE=1 and omit DATABASE_URL."
-      );
-    }
-    console.warn(
-      "[deprecated] SQLite API mode — prefer DATABASE_URL (PostgreSQL). " +
-        "SQLite remains for offline desktop kits. Set OKO_ALLOW_SQLITE=1 to acknowledge."
+  if (!isPostgresMode()) {
+    throw new Error(
+      "DATABASE_URL is required. PostgreSQL is the only supported API database. " +
+        "Offline desktop kits still use local SQLite (oko.db) via Tauri — that is separate from the API."
     );
-    dbInstance = await createSqliteDb();
   }
-  const schemaPath = dbInstance.dialect === "postgres" ? SCHEMA_POSTGRES : SCHEMA_SQLITE;
-  await applySchemaFile(dbInstance, schemaPath);
+  dbInstance = await createPostgresDb();
+  await applySchemaFile(dbInstance, SCHEMA_POSTGRES);
   return dbInstance;
 }
 
@@ -268,4 +192,4 @@ export async function getDb(): Promise<OkoDb> {
   return dbInstance;
 }
 
-export { DB_PATH, ROOT };
+export { ROOT };

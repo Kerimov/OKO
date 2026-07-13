@@ -5,45 +5,6 @@ import type { OkoFormInstance } from "./types.js";
 const META_KEYS = new Set(["num", "code", "name", "account"]);
 
 export async function migrateInstanceTables(db: OkoDb): Promise<void> {
-  if (db.dialect === "sqlite") {
-    await db.exec(`
-    CREATE TABLE IF NOT EXISTS form_instances (
-      instance_id TEXT PRIMARY KEY,
-      template_id TEXT NOT NULL,
-      zid INTEGER,
-      eid INTEGER,
-      display_name TEXT NOT NULL,
-      organization TEXT,
-      period_start TEXT,
-      period_end TEXT,
-      unit TEXT DEFAULT 'тыс.руб.',
-      status TEXT DEFAULT 'draft',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      template_title TEXT,
-      enterprise_code TEXT,
-      signatures_json TEXT DEFAULT '{}'
-    );
-
-    CREATE TABLE IF NOT EXISTS form_cell_values (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      instance_id TEXT NOT NULL,
-      row_no INTEGER NOT NULL,
-      row_name TEXT,
-      column_key TEXT NOT NULL,
-      value_num REAL,
-      value_text TEXT,
-      UNIQUE (instance_id, row_no, column_key),
-      FOREIGN KEY (instance_id) REFERENCES form_instances(instance_id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_cells_instance ON form_cell_values(instance_id);
-    CREATE INDEX IF NOT EXISTS idx_cells_lookup ON form_cell_values(instance_id, row_no, column_key);
-    CREATE INDEX IF NOT EXISTS idx_instances_template ON form_instances(template_id);
-    CREATE INDEX IF NOT EXISTS idx_instances_period ON form_instances(period_start, period_end);
-  `);
-  }
-
   if (!(await db.columnExists("form_instances", "template_title"))) {
     await db.exec("ALTER TABLE form_instances ADD COLUMN template_title TEXT");
   }

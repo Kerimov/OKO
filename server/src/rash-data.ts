@@ -36,32 +36,7 @@ export interface RashEntryDto {
 }
 
 export async function migrateRashDataTables(db: OkoDb): Promise<void> {
-  if (db.dialect === "sqlite") {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS form_rash_entries (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        instance_id     TEXT NOT NULL,
-        form_id         TEXT NOT NULL,
-        parent_row_no   INTEGER NOT NULL,
-        column_key      TEXT,
-        rash_kod        INTEGER NOT NULL,
-        line_no         INTEGER NOT NULL DEFAULT 0,
-        kontr_id        INTEGER,
-        kontr_name      TEXT,
-        inn             TEXT,
-        kpp             TEXT,
-        attr_a2         TEXT,
-        attr_a3         TEXT,
-        attr_a4         TEXT,
-        values_json     TEXT NOT NULL DEFAULT '{}',
-        FOREIGN KEY (instance_id) REFERENCES form_instances(instance_id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_rash_entries_instance ON form_rash_entries(instance_id);
-      CREATE INDEX IF NOT EXISTS idx_rash_entries_lookup
-        ON form_rash_entries(instance_id, form_id, parent_row_no, rash_kod);
-    `);
-  } else {
-    await db.exec(`
+  await db.exec(`
       CREATE TABLE IF NOT EXISTS form_rash_entries (
         id              SERIAL PRIMARY KEY,
         instance_id     TEXT NOT NULL REFERENCES form_instances(instance_id) ON DELETE CASCADE,
@@ -83,7 +58,6 @@ export async function migrateRashDataTables(db: OkoDb): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_rash_entries_lookup
         ON form_rash_entries(instance_id, form_id, parent_row_no, rash_kod);
     `);
-  }
 }
 
 function rowToDto(row: RashEntryRow): RashEntryDto {

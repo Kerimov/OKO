@@ -77,33 +77,6 @@ const DEFAULT_CATEGORIES: Record<string, string> = {
 };
 
 export async function migrateFormTables(db: OkoDb): Promise<void> {
-  if (db.dialect === "sqlite") {
-    await db.exec(`
-    CREATE TABLE IF NOT EXISTS form_template_columns (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      form_id TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      column_key TEXT NOT NULL,
-      label TEXT NOT NULL,
-      col_type TEXT NOT NULL DEFAULT 'number',
-      width INTEGER DEFAULT 100,
-      frozen INTEGER DEFAULT 0,
-      readonly INTEGER DEFAULT 0,
-      UNIQUE (form_id, column_key)
-    );
-    CREATE INDEX IF NOT EXISTS idx_form_cols_form ON form_template_columns(form_id, sort_order);
-
-    CREATE TABLE IF NOT EXISTS form_template_rows (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      form_id TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      row_num TEXT,
-      row_code TEXT,
-      row_name TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_form_rows_form ON form_template_rows(form_id, sort_order);
-  `);
-  }
 
   if (!(await db.columnExists("form_templates", "pdf_file"))) {
     await db.exec("ALTER TABLE form_templates ADD COLUMN pdf_file TEXT");

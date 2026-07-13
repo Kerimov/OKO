@@ -23,10 +23,11 @@
 │  auth · instances · forms · checks · packages · users     │
 └───────────────────────────┬─────────────────────────────────┘
                             │
-              ┌─────────────┴─────────────┐
-              ▼                           ▼
-     PostgreSQL (SoT)              SQLite (opt-in / desktop)
-     data/schema.postgresql.sql     data/schema.sql
+                            ▼
+                   PostgreSQL (API SoT)
+                   data/schema.postgresql.sql
+
+Offline kits (Tauri): SQLite WAL file `oko.db` in the package folder (not API).
 ```
 
 **Принцип:** портал может работать автономно (localStorage + JSON в `public/`), но в production всегда подключён к API.
@@ -105,17 +106,15 @@
 ### Стек
 
 - **NestJS 11** + **TypeScript** — HTTP entrypoint (`server-nest/`)
-- Домен и БД — `server/src/*` (без новых Express-роутов)
+- Домен и БД — `server/src/*`
 - **`@oko/engine`** — period-проверки при сдаче формы
-- **pg** — PostgreSQL (production)
-- **node:sqlite** — SQLite (development, experimental API Node 22)
+- **pg** — PostgreSQL
 
 Swagger: `/api/docs`.
 
 ### Абстракция БД
 
-`server/src/oko-db.ts` — единый интерфейс `OkoDb` для SQLite и PostgreSQL.  
-Выбор по переменной `DATABASE_URL`.
+`server/src/oko-db.ts` — интерфейс `OkoDb` (PostgreSQL). Требуется `DATABASE_URL`.
 
 ### Модули
 
@@ -134,7 +133,7 @@ Swagger: `/api/docs`.
 
 `server/src/db.ts` → `bootstrapDatabase()`:
 
-1. Применяет `schema.sql` или `schema.postgresql.sql`.
+1. Применяет `schema.postgresql.sql`.
 2. Импортирует шаблоны и правила из JSON (если таблицы пусты).
 3. Создаёт bootstrap-admin при `OKO_BOOTSTRAP_ADMIN_*`.
 
@@ -174,7 +173,7 @@ check_rules, saldo_rules, excel_mappings, agg_list, users, audit_log
 
 | Среда | Портал | API | БД |
 |-------|--------|-----|-----|
-| Dev | `vite` :5173 | `tsx` :3001 | SQLite `data/oko.db` |
+| Dev | `vite` :5173 | `tsx` :3001 | PostgreSQL |
 | Prod | Vercel CDN | Render Docker | PostgreSQL managed |
 
 Переменная `VITE_API_URL` в сборке портала указывает на production API.

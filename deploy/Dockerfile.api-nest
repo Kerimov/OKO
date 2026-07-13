@@ -13,12 +13,10 @@ RUN cd server && npm ci --omit=dev \
 COPY server/ ./server/
 COPY server-nest/ ./server-nest/
 COPY portal/public/ ./portal/public/
-COPY data/schema.sql ./data/schema.sql
 COPY data/schema.postgresql.sql ./data/schema.postgresql.sql
 
 ENV PORT=3001
 ENV NODE_ENV=production
-ENV NODE_OPTIONS=--experimental-sqlite
 
 WORKDIR /app/server-nest
 EXPOSE 3001

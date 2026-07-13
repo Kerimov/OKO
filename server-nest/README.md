@@ -20,9 +20,7 @@ npm run dev      # :3001
 
 Доменная зависимость: пакет `server/` + `@oko/engine` (`packages/engine`).
 
-Переменные окружения — [`.env.example`](../.env.example).
-
-Legacy Express entrypoint (`server/src/index.ts`) — только middleware-оболочка; `OKO_API_RUNTIME=express ./dev.sh`.
+Переменные окружения — [`.env.example`](../.env.example). Требуется `DATABASE_URL` (PostgreSQL).
 
 ---
 

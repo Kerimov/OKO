@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "ОКО Заполнение — целевой десктоп (Tauri 2). Electron desktop/filler остаётся пилотом.",
+  "description": "ОКО Заполнение — десктоп (Tauri 2).",
   "scripts": {
     "dev": "vite",
     "dev:tauri": "tauri dev",

@@ -42,46 +42,7 @@ import { refreshUserAccountsCache } from "./auth.js";
 
 const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
 
-const INSTANCE_DDL_SQLITE = `
-CREATE TABLE IF NOT EXISTS app_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS portal_instances (
-  instance_id TEXT PRIMARY KEY,
-  template_id TEXT NOT NULL,
-  template_title TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  organization TEXT DEFAULT '',
-  period_start TEXT DEFAULT '',
-  period_end TEXT DEFAULT '',
-  payload TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_portal_instances_template ON portal_instances(template_id);
-CREATE INDEX IF NOT EXISTS idx_portal_instances_period ON portal_instances(period_start, period_end);
-
-CREATE TABLE IF NOT EXISTS kontragents (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  org_form TEXT,
-  inn TEXT,
-  kpp TEXT,
-  org_type INTEGER,
-  mandatory_rash INTEGER DEFAULT 0,
-  country TEXT,
-  city TEXT,
-  ogrn TEXT
-);
-`;
-
 async function initSchema(database: OkoDb): Promise<void> {
-  if (database.dialect === "sqlite") {
-    await database.exec(INSTANCE_DDL_SQLITE);
-  }
   await migrateCheckRulesTable(database);
   await migrateFormTables(database);
   await migrateSaldoTables(database);
