@@ -79,18 +79,9 @@ cd server-nest && npm run dev
 
 ---
 
-## SQLite (opt-in / legacy)
+## Desktop kits
 
-Для API больше не default. Opt-in:
-
-```bash
-unset DATABASE_URL
-OKO_ALLOW_SQLITE=1 OKO_DB_PATH=./data/oko.db cd server-nest && npm run dev
-# или
-docker compose --profile sqlite up -d --build
-```
-
-Desktop kits (`desktop/filler`, `desktop/tauri`) хранят комплект в **отдельном** `oko.db` папки — это не API SoT.
+`desktop/tauri` хранит комплект в **отдельном** `oko.db` сетевой папки — это не API SoT.
 
 ---
 

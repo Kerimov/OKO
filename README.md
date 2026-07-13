@@ -43,12 +43,11 @@ docker compose up -d postgres
 ```
 OKO/
 ├── portal/          # React-приложение (Vite + TypeScript)
-├── server-nest/     # NestJS REST API (целевой entrypoint)
-├── server/          # Доменный слой (БД, правила) + legacy Express shell
-├── desktop/tauri/   # Целевой десктоп (Tauri 2)
-├── desktop/filler/  # Electron-пилот
+├── server-nest/     # NestJS REST API
+├── server/          # Доменный слой (БД, правила) для Nest
+├── desktop/tauri/   # Десктоп «ОКО Заполнение» (Tauri 2 + SQLite kit)
 ├── packages/engine/ # @oko/engine — общие проверки увязок
-├── data/            # SQL-схемы БД (SQLite / PostgreSQL)
+├── data/            # SQL-схемы (PostgreSQL API; schema.sql — справка для kit)
 ├── scripts/         # Python: выгрузка и генерация из MDB Access
 ├── docs/            # Документация проекта
 ├── reference/       # Исходный комплект ПК «ОКО» (MDB локально, не в git)
@@ -62,8 +61,7 @@ OKO/
 | `server-nest/` | NestJS HTTP API, Swagger | [server-nest/README.md](server-nest/README.md) |
 | `server/` | Домен: auth, instances, checks, … | [server/README.md](server/README.md) |
 | `packages/engine/` | `@oko/engine` | — |
-| `desktop/tauri/` | Целевой десктоп (Tauri 2) | [desktop/tauri/README.md](desktop/tauri/README.md) |
-| `desktop/filler/` | Electron-пилот (переходный) | [desktop/filler/README.md](desktop/filler/README.md) |
+| `desktop/tauri/` | Десктоп (Tauri 2) | [desktop/tauri/README.md](desktop/tauri/README.md) |
 | `data/` | Схемы таблиц | [data/README.md](data/README.md) |
 | `scripts/` | Инструменты миграции данных из `z261.mdb` | [scripts/README.md](scripts/README.md) |
 | `reference/` | Эталонный комплект Access для сверки | [reference/README.md](reference/README.md) |

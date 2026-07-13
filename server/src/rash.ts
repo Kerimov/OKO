@@ -70,37 +70,6 @@ const DEFAULT_THRESHOLDS: RashThresholdsDto = {
 };
 
 export async function migrateRashTables(db: OkoDb): Promise<void> {
-  if (db.dialect === "sqlite") {
-    await db.exec(`
-    CREATE TABLE IF NOT EXISTS rash_rules (
-      kod INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      note TEXT,
-      ref_rows TEXT,
-      total_formula TEXT,
-      ref_a1_name TEXT,
-      ref_a1_title TEXT,
-      ref_a2_name TEXT,
-      ref_a2_title TEXT,
-      ref_a3_name TEXT,
-      ref_a3_title TEXT,
-      ref_a4_name TEXT,
-      ref_a4_title TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS rash_addsum (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      kod INTEGER NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      sum_title TEXT NOT NULL,
-      fld_type TEXT NOT NULL DEFAULT 'Сумма',
-      FOREIGN KEY (kod) REFERENCES rash_rules(kod) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
-    CREATE INDEX IF NOT EXISTS idx_rash_rules_ref ON rash_rules(ref_rows);
-  `);
-  }
 }
 
 function rowToDto(row: RashRuleRow): RashRuleDto {

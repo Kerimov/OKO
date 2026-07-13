@@ -8,12 +8,11 @@
 
 | Инструмент | Версия |
 |------------|--------|
-| Node.js | 22+ (SQLite через `--experimental-sqlite`) |
+| Node.js | 22+ |
 | npm | 10+ |
 | Python | 3.10+ (только для скриптов MDB) |
 | Git | — |
-
-Опционально: Docker, PostgreSQL 16 (для проверки prod-схемы).
+| Docker / PostgreSQL 16 | обязателен для API |
 
 ---
 
@@ -45,9 +44,6 @@ cd portal && npm install && npm run dev
 
 Vite проксирует `/api` на `localhost:3001` (см. `portal/vite.config.ts`).
 
-Legacy Express shell (без REST): `OKO_API_RUNTIME=express ./dev.sh`.  
-Opt-in SQLite API: уберите `DATABASE_URL`, задайте `OKO_ALLOW_SQLITE=1`.
-
 ### Первый вход
 
 По умолчанию в `.env` задано `OKO_AUTH_DISABLED=1` — API работает без токена и пароля.
@@ -71,7 +67,7 @@ portal/src/engine/    — UI-обёртки; ядро увязок в packages/e
 server-nest/src/      — Nest-контроллеры / модули
 server/src/           — домен (БД, проверки, instances) — без новых Express-роутов
 packages/engine/      — общий движок увязок
-data/                 — схема БД (sqlite + postgresql)
+data/                 — схема БД (postgresql; schema.sql — справка)
 ```
 
 ### Соглашения
@@ -89,10 +85,8 @@ data/                 — схема БД (sqlite + postgresql)
 
 | Режим | Условие | Хранение |
 |-------|---------|----------|
-| **Backend** | API доступен, `isBackendMode()` = true | PostgreSQL / SQLite через API |
+| **Backend** | API доступен, `isBackendMode()` = true | PostgreSQL через Nest |
 | **Локальный** | API недоступен | localStorage + JSON из `public/` |
-
-Проверка: в UI отображается `POSTGRESQL` или `SQLITE` в углу.
 
 ---
 
@@ -104,7 +98,7 @@ export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
 cd server-nest && npm run dev
 ```
 
-API SoT — PostgreSQL. SQLite для API deprecated (opt-in `OKO_ALLOW_SQLITE=1`). Offline desktop kits по-прежнему используют файл `oko.db` в папке комплекта.
+API требует PostgreSQL. Offline desktop kits используют файл `oko.db` в папке комплекта (Tauri).
 
 Подробнее без Docker: [LOCAL-POSTGRES.md](LOCAL-POSTGRES.md).
 

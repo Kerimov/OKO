@@ -14,21 +14,6 @@ export interface AuditEntry {
 }
 
 export async function migrateAuditTable(db: OkoDb): Promise<void> {
-  if (db.dialect === "sqlite") {
-    await db.exec(`
-    CREATE TABLE IF NOT EXISTS report_log (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      action      TEXT NOT NULL,
-      instance_id TEXT,
-      entity_type TEXT,
-      entity_id   TEXT,
-      actor       TEXT,
-      details     TEXT,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_report_log_created ON report_log(created_at);
-  `);
-  }
 
   if (!(await db.columnExists("report_log", "entity_type"))) {
     await db.exec("ALTER TABLE report_log ADD COLUMN entity_type TEXT");

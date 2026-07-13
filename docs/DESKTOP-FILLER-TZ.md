@@ -416,7 +416,7 @@ sequenceDiagram
 | UI | React 19 + TypeScript (общие пакеты с пилотом: `engine/`, типы) |
 | Оболочка | Tauri 2 (Windows + Linux) |
 | SQLite | `rusqlite`, WAL, миграции |
-| Сборка | npm: `desktop/tauri` (цель), `desktop/filler` (Electron-пилот), `packages/engine` |
+| Сборка | npm: `desktop/tauri`, `packages/engine` |
 
 Детальный стек v2 всего OKO — отдельное решение; для десктопа достаточно вынести движки пилота в shared-пакет.
 

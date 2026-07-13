@@ -38,11 +38,10 @@
 | [../server/README.md](../server/README.md) | Доменный слой API |
 | [../data/README.md](../data/README.md) | Схемы базы данных |
 | [../scripts/README.md](../scripts/README.md) | Скрипты выгрузки из MDB / acceptance-desktop |
-| [../desktop/tauri/README.md](../desktop/tauri/README.md) | Целевой десктоп Tauri 2 |
+| [../desktop/tauri/README.md](../desktop/tauri/README.md) | Десктоп Tauri 2 |
 | [DESKTOP-TAURI-PILOT.md](DESKTOP-TAURI-PILOT.md) | Пилот M5: установщики, SMB, нагрузка |
 | [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md) | Чеклист дыр Tauri vs ТЗ / §15 |
 | [DESKTOP-SIGNING.md](DESKTOP-SIGNING.md) | Подпись macOS/Windows (опционально) |
-| [../desktop/filler/README.md](../desktop/filler/README.md) | Electron-пилот |
 | [../reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) | Анализ исходного ПК «ОКО» |
 
 ---
