@@ -1,4 +1,12 @@
-/** Stub for portal `api.ts` — Tauri loads rules from public / later from package DB. */
+/** Stub for portal `api.ts` — Tauri loads from publicDir (portal/public). */
+import type { FormCatalog } from "@portal/types";
+
+export async function loadCatalog(): Promise<FormCatalog> {
+  const res = await fetch("/schemas/catalog.json");
+  if (!res.ok) throw new Error("Каталог форм не найден");
+  return res.json();
+}
+
 export async function loadChecks(): Promise<{ checks: unknown[] }> {
   const res = await fetch("/data/checks.json");
   if (!res.ok) return { checks: [] };
@@ -33,4 +41,11 @@ export async function loadSaldoRules(): Promise<unknown> {
   const res = await fetch("/data/saldo-rules.json");
   if (!res.ok) return { rules: [] };
   return res.json();
+}
+
+export async function loadKontrAgents(): Promise<unknown> {
+  const res = await fetch("/data/kontr.json");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.agents ?? data;
 }

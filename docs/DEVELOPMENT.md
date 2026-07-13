@@ -137,6 +137,24 @@ VITE_API_URL=https://your-api.onrender.com npm run build
 docker compose up -d --build
 ```
 
+### Десктоп Tauri (пилот)
+
+```bash
+cd desktop/tauri
+npm ci
+npm run build:tauri          # установщик текущей ОС
+# macOS: npm run build:tauri:dmg
+# Windows: npm run build:tauri:nsis
+```
+
+Нагрузка 10 клиентов на одном `oko.db`:
+
+```bash
+python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
+```
+
+Подробнее: [DESKTOP-TAURI-PILOT.md](DESKTOP-TAURI-PILOT.md).
+
 ---
 
 ## Отладка
@@ -164,6 +182,7 @@ docker compose up -d --build
 
 ## Полезные ссылки
 
+- [DESKTOP-TAURI-PILOT.md](DESKTOP-TAURI-PILOT.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [DEPLOY.md](DEPLOY.md)
 - [portal/README.md](../portal/README.md)

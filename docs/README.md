@@ -39,6 +39,7 @@
 | [../data/README.md](../data/README.md) | Схемы базы данных |
 | [../scripts/README.md](../scripts/README.md) | Скрипты выгрузки из MDB |
 | [../desktop/tauri/README.md](../desktop/tauri/README.md) | Целевой десктоп Tauri 2 |
+| [DESKTOP-TAURI-PILOT.md](DESKTOP-TAURI-PILOT.md) | Пилот M5: установщики, SMB, нагрузка |
 | [../desktop/filler/README.md](../desktop/filler/README.md) | Electron-пилот |
 | [../reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) | Анализ исходного ПК «ОКО» |
 

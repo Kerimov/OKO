@@ -9,7 +9,11 @@
     "dev:tauri": "tauri dev",
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
-    "build:tauri": "tauri build"
+    "build:tauri": "tauri build",
+    "build:tauri:dmg": "tauri build --bundles dmg,app",
+    "build:tauri:nsis": "tauri build --bundles nsis",
+    "build:tauri:msi": "tauri build --bundles msi",
+    "icons": "tauri icon src-tauri/icons/icon.png --output src-tauri/icons"
   },
   "dependencies": {
     "@oko/engine": "file:../../packages/engine",
@@ -18,7 +22,8 @@
     "@tauri-apps/plugin-fs": "^2.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.6.0"
+    "react-router-dom": "^7.6.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
