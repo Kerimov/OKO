@@ -200,7 +200,7 @@ export function ToolsPage() {
       setStatus(
         `Свод завершён: ${result.aggregated} форм, пропущено ${result.skipped}` +
           (result.missing.length ? `, нет данных: ${result.missing.length}` : "") +
-          ` · увязки агрегации: ${checks.passed}/${checks.total} OK`
+          ` · увязки агрегации: ${checks.passed}/${checks.total} пройдено`
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка агрегации комплекта");
@@ -258,10 +258,10 @@ export function ToolsPage() {
     try {
       await downloadReportPackage(periodInstances);
       setStatus(
-        `Экспорт JSON: ${periodInstances.length} форм (с правилами проверок и расшифровок)`
+        `Экспорт комплекта: ${periodInstances.length} форм (с правилами проверок и расшифровок)`
       );
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка экспорта JSON");
+      setStatus(e instanceof Error ? e.message : "Ошибка экспорта комплекта");
     }
   };
 
@@ -307,9 +307,9 @@ export function ToolsPage() {
         )
       );
       await exportPackageToExcel(periodInstances, schemas);
-      setStatus(`Excel сохранён (${periodInstances.length} форм)`);
+      setStatus(`Файл Excel сохранён (${periodInstances.length} форм)`);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка Excel");
+      setStatus(e instanceof Error ? e.message : "Ошибка выгрузки Excel");
     } finally {
       setBusy(false);
     }
@@ -334,14 +334,14 @@ export function ToolsPage() {
         const result = await transferSaldoDetailed(source, target, saldoDetailedType);
         if (result.applied === 0) {
           setStatus(
-            `Правила a_tblsaldo (${saldoDetailedType.toUpperCase()}): нет применимых ячеек для ${target.templateId}`
+            `Правила сальдо (${saldoDetailedType.toUpperCase()}): нет применимых ячеек для ${target.templateId}`
           );
           return;
         }
         await saveInstance(applySaldoToTarget(target, result.rows));
         await refresh();
         setStatus(
-          `Сальdo (a_tblsaldo, ${saldoDetailedType.toUpperCase()}): применено ${result.applied} ячеек`
+          `Сальдо (детальные правила, ${saldoDetailedType.toUpperCase()}): применено ${result.applied} ячеек`
         );
         return;
       }
@@ -349,7 +349,7 @@ export function ToolsPage() {
       await saveInstance(applySaldoToTarget(target, result.rows));
       await refresh();
       setStatus(
-        `Сальdo (FormCorrespondence): ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}`
+        `Сальдо (соответствие форм): ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}`
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка переноса сальdo");
@@ -393,13 +393,12 @@ export function ToolsPage() {
     <div className="tools-page">
       <h1>Администрирование</h1>
       <p className="tools-intro">
-        Проверка, пересчёт, сальdo, агрегация и выгрузка комплекта — по правилам{" "}
-        <code>z261.mdb</code>. Комплект ZID/EID:{" "}
+        Проверка, пересчёт, сальдо, агрегация и выгрузка комплекта. Комплект организации и периода:{" "}
         <Link to="/package">завести пустые формы</Link>. Редактирование:{" "}
         <Link to="/admin/forms">Конструктор форм</Link>,{" "}
         <Link to="/admin/checks">Редактор увязок</Link>,{" "}
         <Link to="/admin/saldo">Сальдо</Link>,{" "}
-        <Link to="/admin/excel">Excel-маппинг</Link>,{" "}
+        <Link to="/admin/excel">Маппинг Excel</Link>,{" "}
         <Link to="/admin/rash">Расшифровки</Link>,{" "}
         <Link to="/admin/aggregation">Агрегация</Link>.
       </p>
@@ -437,12 +436,12 @@ export function ToolsPage() {
       )}
 
       <section className="tools-section">
-        <h2>Обмен комплектами (JSON)</h2>
+        <h2>Обмен комплектами</h2>
         <p>
-          Выгрузите комплект форм в JSON или загрузите комплект, присланный дочерней организацией.
+          Выгрузите комплект форм в файл или загрузите комплект, присланный дочерней организацией.
         </p>
         <p className="hint-text">
-          Рабочий контекст: ZID={workZid ?? "—"}, EID={workEid ?? "—"}.
+          Рабочий контекст: организация {workZid ?? "—"}, период {workEid ?? "—"}.
           Задаётся в разделе <Link to="/package">Комплект</Link>.
         </p>
         <div className="toolbar-actions" style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -452,7 +451,7 @@ export function ToolsPage() {
             onClick={handlePackageJson}
             disabled={periodInstances.length === 0}
           >
-            Скачать JSON ({periodInstances.length})
+            Скачать комплект ({periodInstances.length})
           </button>
           <button
             type="button"
@@ -460,7 +459,7 @@ export function ToolsPage() {
             disabled={importing}
             onClick={() => document.getElementById("import-package-file")?.click()}
           >
-            {importing ? "Импорт…" : "Импорт комплекта JSON"}
+            {importing ? "Импорт…" : "Импорт комплекта"}
           </button>
           <input
             id="import-package-file"
@@ -484,7 +483,7 @@ export function ToolsPage() {
         </label>
         {periodInstances.length === 0 && workZid != null && workEid != null && (
           <p className="hint-text" style={{ marginTop: "0.75rem" }}>
-            Формы для ZID={workZid}, EID={workEid} не найдены. В разделе{" "}
+            Формы для организации {workZid}, периода {workEid} не найдены. В разделе{" "}
             <Link to="/package">Комплект</Link> выберите эту организацию и период, затем
             нажмите «Завести пустые формы».
           </p>
@@ -501,7 +500,7 @@ export function ToolsPage() {
             onClick={handlePackageJson}
             disabled={periodInstances.length === 0}
           >
-            JSON ({periodInstances.length})
+            Комплект ({periodInstances.length})
           </button>
           <button
             type="button"
@@ -532,10 +531,10 @@ export function ToolsPage() {
               onChange={(e) => setCheckMode(e.target.value as CheckMode)}
             >
               <option value="period">
-                Период (pg_aktiv, {ruleCounts?.period ?? "…"})
+                За период ({ruleCounts?.period ?? "…"})
               </option>
               <option value="active">
-                Активные (aktiv, {ruleCounts?.active ?? "…"})
+                Активные ({ruleCounts?.active ?? "…"})
               </option>
               <option value="all">
                 Все правила ({ruleCounts?.all ?? "…"}, без агрегации
@@ -546,8 +545,8 @@ export function ToolsPage() {
         </div>
         {ruleCounts && (
           <p className="tools-hint">
-            Исключено правил только для агрегации: {ruleCounts.aggrExcluded}. В
-            файле MDB всего 3600 записей.
+            Исключено правил только для агрегации: {ruleCounts.aggrExcluded}. Всего правил в
+            справочнике: 3600.
           </p>
         )}
         <button
@@ -562,10 +561,11 @@ export function ToolsPage() {
       </section>
 
       <section className="tools-section">
-        <h2>Перенос сальdo</h2>
+        <h2>Перенос сальдо</h2>
         <p className="tools-hint">
-          Как в ОКО: этап 1 — по колонкам FormCorrespondence (Yellow/Red); этап 2 — по
-          правилам <code>a_tblsaldo</code> (T/S/G). Исходная и целевая формы — один шаблон.
+          Как в исходном ОКО: этап 1 — по соответствию граф форм (пред. период / аналог. год);
+          этап 2 — по детальным правилам (текущий / сальдо / год). Исходная и целевая формы — один
+          шаблон.
         </p>
         <div className="tools-grid">
           <label>
@@ -574,8 +574,8 @@ export function ToolsPage() {
               value={saldoMode}
               onChange={(e) => setSaldoMode(e.target.value as SaldoTransferMode)}
             >
-              <option value="columns">FormCorrespondence (Yellow / Red)</option>
-              <option value="detailed">Правила a_tblsaldo (T / S / G)</option>
+              <option value="columns">Соответствие форм (пред. период / аналог. год)</option>
+              <option value="detailed">Детальные правила (Т / С / Г)</option>
             </select>
           </label>
           <label>
@@ -607,20 +607,20 @@ export function ToolsPage() {
                 value={saldoPhase}
                 onChange={(e) => setSaldoPhase(e.target.value as SaldoPhase)}
               >
-                <option value="previous_period">Предыдущий период (Yellow)</option>
-                <option value="analog_period">Аналог. период прошлого года (Red)</option>
+                <option value="previous_period">Предыдущий период</option>
+                <option value="analog_period">Аналог. период прошлого года</option>
               </select>
             </label>
           ) : (
             <label>
-              Тип (a_tblsaldo)
+              Тип правила
               <select
                 value={saldoDetailedType}
                 onChange={(e) => setSaldoDetailedType(e.target.value as "t" | "s" | "g")}
               >
-                <option value="t">T — текущий период</option>
-                <option value="s">S — сальдо / входящие</option>
-                <option value="g">G — год / аналог</option>
+                <option value="t">Текущий период</option>
+                <option value="s">Сальдо / входящие</option>
+                <option value="g">Год / аналог</option>
               </select>
             </label>
           )}
@@ -633,16 +633,16 @@ export function ToolsPage() {
           </p>
         )}
         <button type="button" className="btn btn-secondary" onClick={handleSaldo}>
-          Перенести сальdo
+          Перенести сальдо
         </button>
       </section>
 
       <section className="tools-section">
-        <h2>Агрегация комплекта (a_tblAgg_List)</h2>
+        <h2>Агрегация комплекта</h2>
         <p className="tools-hint">
           Суммирование форм дочерних организаций в сводную по правилам{" "}
           <Link to="/admin/aggregation">конфигурации агрегации</Link>. Требуются заполненные
-          комплекты участников за тот же период (EID).
+          комплекты участников за тот же период.
         </p>
         {backend ? (
           <>
@@ -656,13 +656,13 @@ export function ToolsPage() {
                   <option value="">— выберите —</option>
                   {aggParentZids.map((z) => (
                     <option key={z} value={z}>
-                      ZID={z}
+                      Организация {z}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                Период (EID)
+                Период
                 <select
                   value={pkgEid}
                   disabled={pkgParentZid === ""}
@@ -671,7 +671,7 @@ export function ToolsPage() {
                   <option value="">— выберите —</option>
                   {pkgPeriods.map((p) => (
                     <option key={p.eid} value={p.eid}>
-                      {p.name} (EID={p.eid})
+                      {p.name} (код {p.eid})
                     </option>
                   ))}
                 </select>
@@ -679,7 +679,7 @@ export function ToolsPage() {
             </div>
             {pkgParentZid !== "" && pkgChildren.length > 0 && (
               <p className="tools-hint">
-                Участники свода ({pkgChildren.length}): zid {pkgChildren.join(", ")}
+                Участники свода ({pkgChildren.length}): {pkgChildren.join(", ")}
               </p>
             )}
             <button
@@ -695,7 +695,7 @@ export function ToolsPage() {
             )}
           </>
         ) : (
-          <p className="tools-hint">Требуется API-сервер (SQLite).</p>
+          <p className="tools-hint">Требуется API-сервер.</p>
         )}
       </section>
 

@@ -112,16 +112,16 @@ export function ExcelEditorPage() {
 
   const access = useAdminAccess();
   if (!access.ok) {
-    return <AdminAccessGate title="Excel-маппинг" />;
+    return <AdminAccessGate title="Маппинг Excel" />;
   }
 
   return (
     <div className="admin-page checks-editor excel-editor">
       <header className="admin-header">
         <div>
-          <h1>Excel-маппинг</h1>
+          <h1>Маппинг Excel</h1>
           <p className="admin-desc">
-            Аналог <code>tblExcelExport</code> в z261.mdb — соответствие ячеек форм и листов Excel.
+            Соответствие ячеек отчётных форм и листов Excel-шаблона.
           </p>
         </div>
         {stats && (
@@ -149,7 +149,7 @@ export function ExcelEditorPage() {
               className="search-input"
             />
             <input
-              placeholder="formName"
+              placeholder="Код формы, напр. N01_1"
               value={formFilter}
               onChange={(e) => {
                 setFormFilter(e.target.value);
@@ -158,7 +158,7 @@ export function ExcelEditorPage() {
               className="category-select"
             />
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
-              Импорт из JSON
+              Импорт из файла
             </button>
             <button
               type="button"
@@ -182,8 +182,8 @@ export function ExcelEditorPage() {
                     <th>#</th>
                     <th>Форма</th>
                     <th>Лист</th>
-                    <th>Excel</th>
-                    <th>Форма</th>
+                    <th>Ячейка Excel</th>
+                    <th>Ячейка формы</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -237,7 +237,7 @@ export function ExcelEditorPage() {
           <div className="checks-form-grid">
             <p className="form-section-label">Форма</p>
             <label>
-              Код формы (formName)
+              Код формы
               <input
                 value={draft.formName}
                 onChange={(e) => setDraft({ ...draft, formName: e.target.value })}
@@ -245,7 +245,7 @@ export function ExcelEditorPage() {
               />
             </label>
             <label>
-              Лист Excel (sheetName)
+              Лист Excel
               <input
                 value={draft.sheetName ?? ""}
                 onChange={(e) => setDraft({ ...draft, sheetName: e.target.value || null })}
@@ -253,7 +253,7 @@ export function ExcelEditorPage() {
             </label>
             <p className="form-section-label">Ячейка Excel</p>
             <label>
-              Строка (excelRow)
+              Строка Excel
               <input
                 type="number"
                 value={draft.excelRow ?? ""}
@@ -266,7 +266,7 @@ export function ExcelEditorPage() {
               />
             </label>
             <label>
-              Колонка (excelColumn)
+              Колонка Excel
               <input
                 value={draft.excelColumn ?? ""}
                 onChange={(e) => {
@@ -280,14 +280,14 @@ export function ExcelEditorPage() {
             </label>
             <p className="form-section-label">Поле формы</p>
             <label>
-              Колонка (formColumn)
+              Графа формы
               <input
                 value={draft.formColumn ?? ""}
                 onChange={(e) => setDraft({ ...draft, formColumn: e.target.value || null })}
               />
             </label>
             <label>
-              Строка (formRow)
+              Строка формы
               <input
                 type="number"
                 value={draft.formRow ?? ""}
@@ -300,7 +300,7 @@ export function ExcelEditorPage() {
               />
             </label>
             <label>
-              Доп. текст (addText)
+              Дополнительный текст
               <input
                 value={draft.addText ?? ""}
                 onChange={(e) => setDraft({ ...draft, addText: e.target.value || null })}
@@ -313,7 +313,7 @@ export function ExcelEditorPage() {
                 checked={!!draft.period}
                 onChange={(e) => setDraft({ ...draft, period: e.target.checked })}
               />
-              Привязка к периоду (period)
+              Привязка к периоду
             </label>
             </div>
           </div>

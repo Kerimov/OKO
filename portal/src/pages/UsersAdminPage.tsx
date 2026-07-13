@@ -5,6 +5,7 @@ import type { UserDto } from "../auth";
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
+import { roleLabel } from "../uiLabels";
 import { useAuth } from "../useAuth";
 
 export function UsersAdminPage() {
@@ -160,7 +161,7 @@ export function UsersAdminPage() {
           <h1>Пользователи организаций</h1>
           <p className="admin-desc">
             Учётные записи для личных кабинетов (логин/пароль). Пользователь организации видит
-            только формы своей организации (zid).
+            только формы своей организации.
           </p>
         </div>
       </header>
@@ -213,7 +214,7 @@ export function UsersAdminPage() {
                 >
                   {orgs.map((o) => (
                     <option key={o.zid} value={o.zid}>
-                      {o.name} (zid={o.zid})
+                      {o.name} (код {o.zid})
                     </option>
                   ))}
                 </select>
@@ -257,7 +258,7 @@ export function UsersAdminPage() {
                   >
                     <td>{u.username}</td>
                     <td>{u.displayName ?? "—"}</td>
-                    <td>{u.role}</td>
+                    <td>{roleLabel(u.role)}</td>
                     <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
                     <td>{u.active ? "активен" : "отключён"}</td>
                   </tr>
@@ -319,7 +320,7 @@ export function UsersAdminPage() {
                       >
                         {orgs.map((o) => (
                           <option key={o.zid} value={o.zid}>
-                            {o.name} (zid={o.zid})
+                            {o.name} (код {o.zid})
                           </option>
                         ))}
                       </select>

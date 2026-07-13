@@ -175,7 +175,7 @@ export function SaldoEditorPage() {
       const saved = await saveFormCorrespondence(corrDraft);
       setCorrSelected(saved);
       setCorrDraft({ ...saved });
-      setStatus(`FormCorrespondence ${saved.formId} сохранено`);
+      setStatus(`Соответствие форм ${saved.formId} сохранено`);
       await loadCorrespondence();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -204,7 +204,7 @@ export function SaldoEditorPage() {
         <div>
           <h1>Сальдо</h1>
           <p className="admin-desc">
-            <code>a_tblsaldo</code> и <code>FormCorrespondence</code> из z261.mdb.
+            Правила переноса входящих остатков: детальные правила и соответствие граф форм.
           </p>
         </div>
         {stats && tab === "rules" && (
@@ -223,14 +223,14 @@ export function SaldoEditorPage() {
           className={tab === "rules" ? "active" : ""}
           onClick={() => setTab("rules")}
         >
-          Правила a_tblsaldo
+          Детальные правила
         </button>
         <button
           type="button"
           className={tab === "correspondence" ? "active" : ""}
           onClick={() => setTab("correspondence")}
         >
-          FormCorrespondence
+          Соответствие форм
         </button>
       </div>
 
@@ -269,12 +269,12 @@ export function SaldoEditorPage() {
                 className="category-select"
               >
                 <option value="">Все типы</option>
-                <option value="t">Текущий (T)</option>
-                <option value="s">Сальдо (S)</option>
-                <option value="g">Год (G)</option>
+                <option value="t">Текущий</option>
+                <option value="s">Сальдо</option>
+                <option value="g">Год</option>
               </select>
               <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimportRules}>
-                Импорт из JSON
+                Импорт из файла
               </button>
               <button
                 type="button"
@@ -390,7 +390,7 @@ export function SaldoEditorPage() {
                 />
               </label>
               <label>
-                Строка (row_no)
+                Номер строки
                 <input
                   type="number"
                   value={draft.targetRow ?? ""}
@@ -422,7 +422,7 @@ export function SaldoEditorPage() {
                 />
               </label>
               <label>
-                Строка (row_no)
+                Номер строки
                 <input
                   type="number"
                   value={draft.sourceRow ?? ""}
@@ -444,7 +444,7 @@ export function SaldoEditorPage() {
                   checked={draft.saldoT}
                   onChange={(e) => setDraft({ ...draft, saldoT: e.target.checked })}
                 />
-                Текущий (T)
+                Текущий
               </label>
               <label className="check-flag">
                 <input
@@ -452,7 +452,7 @@ export function SaldoEditorPage() {
                   checked={draft.saldoS}
                   onChange={(e) => setDraft({ ...draft, saldoS: e.target.checked })}
                 />
-                Сальдо (S)
+                Сальдо
               </label>
               <label className="check-flag">
                 <input
@@ -460,7 +460,7 @@ export function SaldoEditorPage() {
                   checked={draft.saldoG}
                   onChange={(e) => setDraft({ ...draft, saldoG: e.target.checked })}
                 />
-                Год (G)
+                Год
               </label>
               <label className="check-flag">
                 <input
@@ -489,7 +489,7 @@ export function SaldoEditorPage() {
           <section className="checks-list-panel">
             <div className="checks-filters">
               <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimportCorr}>
-                Импорт из JSON
+                Импорт из файла
               </button>
             </div>
             {loading ? (
@@ -499,8 +499,8 @@ export function SaldoEditorPage() {
                 <thead>
                   <tr>
                     <th>Форма</th>
-                    <th>Yellow</th>
-                    <th>Red</th>
+                    <th>Пред. период</th>
+                    <th>Аналог. год</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -521,13 +521,13 @@ export function SaldoEditorPage() {
           </section>
 
           <section className="checks-detail-panel">
-            <h2>FormCorrespondence — {corrDraft.formId || "—"}</h2>
+            <h2>Соответствие форм — {corrDraft.formId || "—"}</h2>
             <p className="admin-desc">
-              Правила колонок для переноса сальdo (жёлтый — предыдущий период, красный — аналог).
+              Какие графы переносятся: предыдущий период и аналогичный период прошлого года.
             </p>
             <div className="checks-form-grid">
             <label>
-              saldoYellow — предыдущий период
+              Графы предыдущего периода
               <textarea
                 rows={4}
                 value={corrDraft.saldoYellow ?? ""}
@@ -538,7 +538,7 @@ export function SaldoEditorPage() {
               />
             </label>
             <label>
-              saldoRed — аналогичный период
+              Графы аналогичного периода прошлого года
               <textarea
                 rows={4}
                 value={corrDraft.saldoRed ?? ""}
@@ -547,7 +547,7 @@ export function SaldoEditorPage() {
               />
             </label>
             <label>
-              saldoBlue
+              Служебные графы
               <textarea
                 rows={3}
                 value={corrDraft.saldoBlue ?? ""}

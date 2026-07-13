@@ -69,7 +69,39 @@ const DEFAULT_THRESHOLDS: RashThresholdsDto = {
   labels: ["1 тыс. руб.", "5 млн руб.", "50 млн руб."],
 };
 
+const ROW_RASH_JSON = path.join(ROOT, "portal", "public", "data", "row-rash-index.json");
+
+export interface RashPlacementDto {
+  formId: string;
+  rowNo: string;
+  /** Empty string = defaultKod for the row (Access row-level binding). */
+  columnKey: string;
+  kod: number;
+}
+
+export interface RowRashIndexPayload {
+  version: string;
+  source?: string;
+  forms: Record<
+    string,
+    Record<string, { defaultKod?: number; columns?: Record<string, number> }>
+  >;
+  stats?: { forms: number; rows: number; placements: number };
+}
+
 export async function migrateRashTables(db: OkoDb): Promise<void> {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS rash_placements (
+      id          SERIAL PRIMARY KEY,
+      form_id     TEXT NOT NULL,
+      row_no      TEXT NOT NULL,
+      column_key  TEXT NOT NULL DEFAULT '',
+      kod         INTEGER NOT NULL REFERENCES rash_rules(kod) ON DELETE CASCADE,
+      UNIQUE (form_id, row_no, column_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rash_placements_kod ON rash_placements(kod);
+    CREATE INDEX IF NOT EXISTS idx_rash_placements_form ON rash_placements(form_id);
+  `);
 }
 
 function rowToDto(row: RashRuleRow): RashRuleDto {
@@ -397,8 +429,192 @@ export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashR
 }
 
 export async function deleteRashRule(db: OkoDb, kod: number): Promise<boolean> {
+  await db.prepare("DELETE FROM rash_placements WHERE kod = ?").run(kod);
+  await db.prepare("DELETE FROM rash_addsum WHERE kod = ?").run(kod);
   const result = await db.prepare("DELETE FROM rash_rules WHERE kod = ?").run(kod);
   return result.changes > 0;
+}
+
+export async function replaceRashAddsum(
+  db: OkoDb,
+  kod: number,
+  items: RashAddsumDto[]
+): Promise<RashAddsumDto[]> {
+  const rule = await getRashRule(db, kod);
+  if (!rule) throw new Error(`rash rule ${kod} not found`);
+
+  return db.transaction(async (tx) => {
+    await tx.prepare("DELETE FROM rash_addsum WHERE kod = ?").run(kod);
+    const insert = tx.prepare(
+      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type) VALUES (?, ?, ?, ?)"
+    );
+    const sorted = [...items].sort((a, b) => a.sort - b.sort);
+    for (const [i, item] of sorted.entries()) {
+      await insert.run(kod, item.sort ?? i, item.sumTitle, item.fldType || "Сумма");
+    }
+    return listRashAddsum(tx, kod);
+  });
+}
+
+function normalizeColumnKey(raw: string | null | undefined): string {
+  const v = (raw ?? "").trim().toUpperCase();
+  if (!v || v === "*" || v === "DEFAULT") return "";
+  return v;
+}
+
+function flattenRowRashIndex(data: RowRashIndexPayload): RashPlacementDto[] {
+  const out: RashPlacementDto[] = [];
+  for (const [formId, rows] of Object.entries(data.forms ?? {})) {
+    for (const [rowNo, meta] of Object.entries(rows ?? {})) {
+      const cols = meta.columns ?? {};
+      const colEntries = Object.entries(cols);
+      if (colEntries.length > 0) {
+        for (const [col, kod] of colEntries) {
+          out.push({
+            formId,
+            rowNo: String(rowNo),
+            columnKey: normalizeColumnKey(col),
+            kod: Number(kod),
+          });
+        }
+      } else if (meta.defaultKod != null) {
+        out.push({
+          formId,
+          rowNo: String(rowNo),
+          columnKey: "",
+          kod: Number(meta.defaultKod),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+async function insertPlacements(db: OkoDb, items: RashPlacementDto[]): Promise<number> {
+  const insert = db.prepare(
+    `INSERT INTO rash_placements (form_id, row_no, column_key, kod)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (form_id, row_no, column_key) DO UPDATE SET kod = excluded.kod`
+  );
+  let n = 0;
+  for (const item of items) {
+    if (!item.formId?.trim() || item.kod == null || Number.isNaN(Number(item.kod))) continue;
+    await insert.run(
+      item.formId.trim(),
+      String(item.rowNo).trim(),
+      normalizeColumnKey(item.columnKey),
+      Number(item.kod)
+    );
+    n++;
+  }
+  return n;
+}
+
+export async function seedPlacementsFromJson(db: OkoDb): Promise<number> {
+  const count = (
+    (await db.prepare("SELECT COUNT(*) AS c FROM rash_placements").get()) as { c: number }
+  ).c;
+  if (count > 0) return 0;
+  const rules = (
+    (await db.prepare("SELECT COUNT(*) AS c FROM rash_rules").get()) as { c: number }
+  ).c;
+  if (rules === 0) return 0;
+  if (!fs.existsSync(ROW_RASH_JSON)) return 0;
+  const data = JSON.parse(fs.readFileSync(ROW_RASH_JSON, "utf-8")) as RowRashIndexPayload;
+  return insertPlacements(db, flattenRowRashIndex(data));
+}
+
+export async function reimportPlacementsFromJson(db: OkoDb): Promise<number> {
+  if (!fs.existsSync(ROW_RASH_JSON)) return 0;
+  const data = JSON.parse(fs.readFileSync(ROW_RASH_JSON, "utf-8")) as RowRashIndexPayload;
+  return db.transaction(async (tx) => {
+    await tx.exec("DELETE FROM rash_placements");
+    return insertPlacements(tx, flattenRowRashIndex(data));
+  });
+}
+
+export async function listPlacementsByKod(db: OkoDb, kod: number): Promise<RashPlacementDto[]> {
+  const rows = (await db
+    .prepare(
+      `SELECT form_id, row_no, column_key, kod FROM rash_placements
+       WHERE kod = ? ORDER BY form_id, row_no, column_key`
+    )
+    .all(kod)) as Array<{
+    form_id: string;
+    row_no: string;
+    column_key: string;
+    kod: number;
+  }>;
+  return rows.map((r) => ({
+    formId: r.form_id,
+    rowNo: String(r.row_no),
+    columnKey: r.column_key ?? "",
+    kod: r.kod,
+  }));
+}
+
+export async function replacePlacementsForKod(
+  db: OkoDb,
+  kod: number,
+  items: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>
+): Promise<RashPlacementDto[]> {
+  const rule = await getRashRule(db, kod);
+  if (!rule) throw new Error(`rash rule ${kod} not found`);
+
+  return db.transaction(async (tx) => {
+    await tx.prepare("DELETE FROM rash_placements WHERE kod = ?").run(kod);
+    await insertPlacements(
+      tx,
+      items.map((item) => ({
+        formId: item.formId,
+        rowNo: String(item.rowNo),
+        columnKey: item.columnKey ?? "",
+        kod,
+      }))
+    );
+    return listPlacementsByKod(tx, kod);
+  });
+}
+
+export async function exportRowRashIndex(db: OkoDb): Promise<RowRashIndexPayload> {
+  const rows = (await db
+    .prepare(
+      `SELECT form_id, row_no, column_key, kod FROM rash_placements
+       ORDER BY form_id, row_no, column_key`
+    )
+    .all()) as Array<{
+    form_id: string;
+    row_no: string;
+    column_key: string;
+    kod: number;
+  }>;
+
+  const forms: RowRashIndexPayload["forms"] = {};
+  for (const r of rows) {
+    const formId = r.form_id;
+    const rowNo = String(r.row_no);
+    if (!forms[formId]) forms[formId] = {};
+    if (!forms[formId][rowNo]) forms[formId][rowNo] = {};
+    const meta = forms[formId][rowNo];
+    const col = (r.column_key ?? "").trim().toUpperCase();
+    if (!col) {
+      meta.defaultKod = r.kod;
+    } else {
+      if (!meta.columns) meta.columns = {};
+      meta.columns[col] = r.kod;
+    }
+  }
+
+  return {
+    version: "1.0",
+    source: "db:rash_placements",
+    forms,
+    stats: {
+      forms: Object.keys(forms).length,
+      rows: Object.values(forms).reduce((n, rowsMap) => n + Object.keys(rowsMap).length, 0),
+      placements: rows.length,
+    },
+  };
 }
 
 export { rowToDto, dtoToRow };

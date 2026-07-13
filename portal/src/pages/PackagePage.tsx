@@ -116,7 +116,7 @@ export function PackagePage() {
       setOrgs(next);
       setNewOrgName("");
       await handleZidChange(org.zid);
-      setStatus(`Организация «${org.name}» создана (ZID=${org.zid})`);
+      setStatus(`Организация «${org.name}» создана (код ${org.zid})`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания организации");
     } finally {
@@ -140,7 +140,7 @@ export function PackagePage() {
       setNewPeriodStart("");
       setNewPeriodEnd("");
       await handleEidChange(period.eid);
-      setStatus(`Период «${period.name}» создан (EID=${period.eid})`);
+      setStatus(`Период «${period.name}» создан (код ${period.eid})`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания периода");
     } finally {
@@ -212,10 +212,10 @@ export function PackagePage() {
 
   return (
     <div className="package-page">
-      <h1>Комплект отчётности (ZID / EID)</h1>
+      <h1>Комплект отчётности</h1>
       <p className="tools-intro">
         Как в Access: выберите организацию и период, затем заведите пустые формы на весь
-        каталог (76 шаблонов). Новые формы из каталога привязываются к текущему ZID+EID.
+        каталог (76 шаблонов). Новые формы из каталога привязываются к текущей организации и периоду.
       </p>
 
       {status && <div className="status-bar">{status}</div>}
@@ -224,7 +224,7 @@ export function PackagePage() {
         <h2>Рабочий контекст</h2>
         <div className="tools-grid">
           <label>
-            Организация (ZID)
+            Организация
             <select
               value={zid}
               disabled={!admin && orgs.length <= 1}
@@ -233,13 +233,13 @@ export function PackagePage() {
               <option value="">— выберите —</option>
               {orgs.map((o) => (
                 <option key={o.zid} value={o.zid}>
-                  {o.name} (ZID={o.zid})
+                  {o.name} (код {o.zid})
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Период (EID)
+            Период
             <select
               value={eid}
               disabled={zid === ""}
@@ -248,7 +248,7 @@ export function PackagePage() {
               <option value="">— выберите —</option>
               {periods.map((p) => (
                 <option key={p.eid} value={p.eid}>
-                  {p.name} (EID={p.eid})
+                  {p.name} (код {p.eid})
                 </option>
               ))}
             </select>

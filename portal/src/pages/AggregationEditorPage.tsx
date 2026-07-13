@@ -128,14 +128,13 @@ export function AggregationEditorPage() {
         <div>
           <h1>Конфигурация агрегации</h1>
           <p className="admin-desc">
-            Таблица <code>a_tblAgg_List</code> — какие организации (филиалы) входят в свод
-            головной организации. Код организации (<code>code</code>) должен совпадать с legacy ZID
-            (например <code>1@5222</code>).
+            Какие организации входят в свод головной. Код организации должен совпадать с кодом
+            комплекта (например 1@5222).
           </p>
         </div>
         <div className="toolbar-actions">
           <button type="button" className="btn btn-secondary" onClick={() => void handleReimport()}>
-            Импорт из JSON
+            Импорт из файла
           </button>
           <Link to="/tools" className="btn btn-primary">
             Запустить свод
@@ -155,7 +154,7 @@ export function AggregationEditorPage() {
       <section className="admin-section">
         <h2>Фильтр</h2>
         <label>
-          Сводная организация (parent)
+          Сводная организация
           <select
             value={filterParent}
             onChange={(e) =>
@@ -176,21 +175,21 @@ export function AggregationEditorPage() {
         <h2>Добавить связь</h2>
         <form className="settings-form" onSubmit={handleAdd}>
           <label>
-            Сводная (parent ZID)
+            Сводная организация
             <select value={parentZid} onChange={(e) => setParentZid(Number(e.target.value))}>
               {orgs.map((o) => (
                 <option key={o.zid} value={o.zid}>
-                  {o.name} (zid={o.zid}{o.code ? `, ${o.code}` : ""})
+                  {o.name} (код {o.zid}{o.code ? `, ${o.code}` : ""})
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Участник (child ZID)
+            Организация-участник
             <select value={childZid} onChange={(e) => setChildZid(Number(e.target.value))}>
               {orgs.map((o) => (
                 <option key={o.zid} value={o.zid}>
-                  {o.name} (zid={o.zid}{o.code ? `, ${o.code}` : ""})
+                  {o.name} (код {o.zid}{o.code ? `, ${o.code}` : ""})
                 </option>
               ))}
             </select>

@@ -207,6 +207,19 @@ CREATE TABLE IF NOT EXISTS rash_addsum (
 
 CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
 
+-- Cell → sp_rash.kod (a_stblROWs letter-cell binding)
+CREATE TABLE IF NOT EXISTS rash_placements (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id     TEXT NOT NULL,
+    row_no      TEXT NOT NULL,
+    column_key  TEXT NOT NULL DEFAULT '',
+    kod         INTEGER NOT NULL REFERENCES rash_rules(kod) ON DELETE CASCADE,
+    UNIQUE (form_id, row_no, column_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rash_placements_kod ON rash_placements(kod);
+CREATE INDEX IF NOT EXISTS idx_rash_placements_form ON rash_placements(form_id);
+
 -- Rash entry facts (t_ras analog)
 CREATE TABLE IF NOT EXISTS form_rash_entries (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
