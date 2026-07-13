@@ -7,6 +7,33 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
 
+const SCHEMA_VERSION: u32 = 1;
+
+fn write_schema_version(folder: &Path) -> Result<(), AppError> {
+  let oko = folder.join(".oko");
+  fs::create_dir_all(&oko).map_err(|e| AppError::Message(format!("mkdir .oko failed: {e}")))?;
+  fs::write(oko.join("schema_version"), format!("{SCHEMA_VERSION}\n"))
+    .map_err(|e| AppError::Message(format!("write schema_version failed: {e}")))?;
+  Ok(())
+}
+
+fn logs_dir() -> PathBuf {
+  if let Ok(appdata) = std::env::var("APPDATA") {
+    return PathBuf::from(appdata).join("OKO-Filler").join("logs");
+  }
+  if let Ok(home) = std::env::var("HOME") {
+    let mac = PathBuf::from(&home).join("Library").join("Logs").join("OKO-Filler");
+    if cfg!(target_os = "macos") {
+      return mac;
+    }
+    return PathBuf::from(home)
+      .join(".local")
+      .join("share")
+      .join("OKO-Filler")
+      .join("logs");
+  }
+  PathBuf::from("OKO-Filler-logs")
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageMeta {
@@ -395,7 +422,7 @@ fn open_package(
   let db_path = folder.join("oko.db");
   let conn = open_db(&db_path)?;
   let instances = count_instances(&conn)?;
-
+  let _ = write_schema_version(&folder);
   let result = OpenPackageResult {
     folder_path: folder.display().to_string(),
     meta: meta.clone(),
@@ -915,16 +942,30 @@ fn claim_cell(
     )
     .map_err(|e| AppError::Message(format!("release self failed: {e}")))?;
 
-    let occupied: Option<String> = tx
-      .query_row(
+    let occupied: Option<String> = if column_key == "*" {
+      tx.query_row(
         r#"SELECT user_name FROM cell_presence
-         WHERE instance_id = ?1 AND row_no = ?2 AND column_key = ?3
-           AND client_id != ?4 AND heartbeat_at >= ?5"#,
-        params![instance_id, row_no, column_key, client_id, cutoff],
+         WHERE instance_id = ?1 AND row_no = ?2
+           AND client_id != ?3 AND heartbeat_at >= ?4
+         LIMIT 1"#,
+        params![instance_id, row_no, client_id, cutoff],
         |row| row.get(0),
       )
       .optional()
-      .map_err(|e| AppError::Message(format!("occupy check failed: {e}")))?;
+      .map_err(|e| AppError::Message(format!("occupy check failed: {e}")))?
+    } else {
+      tx.query_row(
+        r#"SELECT user_name FROM cell_presence
+         WHERE instance_id = ?1 AND row_no = ?2
+           AND client_id != ?3 AND heartbeat_at >= ?4
+           AND (column_key = ?5 OR column_key = '*')
+         LIMIT 1"#,
+        params![instance_id, row_no, client_id, cutoff, column_key],
+        |row| row.get(0),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("occupy check failed: {e}")))?
+    };
 
     if let Some(name) = occupied {
       tx.commit()
@@ -1605,8 +1646,10 @@ fn import_package_json(
   file_path: String,
   actor: String,
   pin: Option<String>,
+  mode: Option<String>,
   state: State<'_, AppState>,
 ) -> Result<usize, AppError> {
+  let skip_existing = mode.as_deref() == Some("skip");
   let raw = fs::read_to_string(&file_path)
     .map_err(|e| AppError::Message(format!("read import file failed: {e}")))?;
   let value: Value = serde_json::from_str(&raw)
@@ -1625,7 +1668,26 @@ fn import_package_json(
   for inst_val in instances {
     let mut inst: OkoFormInstance = serde_json::from_value(inst_val.clone())
       .map_err(|e| AppError::Message(format!("instance parse failed: {e}")))?;
-    // Keep package org/period alignment from open meta where missing
+
+    let existing_id: Option<String> = with_package(&state, |pkg| {
+      pkg
+        .conn
+        .query_row(
+          "SELECT instance_id FROM form_instances WHERE template_id = ?1 LIMIT 1",
+          params![inst.template_id],
+          |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| AppError::Message(format!("lookup template failed: {e}")))
+    })?;
+
+    if existing_id.is_some() && skip_existing {
+      continue;
+    }
+    if let Some(id) = existing_id {
+      inst.instance_id = id;
+    }
+
     with_package(&state, |pkg| {
       if inst.zid.is_none() {
         inst.zid = Some(pkg.meta.zid);
@@ -1725,6 +1787,7 @@ fn create_empty_package(
     coordinator_pin_hash: None,
   };
   write_package_meta(&folder, &meta)?;
+  write_schema_version(&folder)?;
 
   let db_path = folder.join("oko.db");
   if db_path.exists() {
@@ -1810,6 +1873,31 @@ fn write_text_file(path: String, content: String) -> Result<bool, AppError> {
 }
 
 #[tauri::command]
+fn get_os_user_name() -> String {
+  std::env::var("USERNAME")
+    .or_else(|_| std::env::var("USER"))
+    .unwrap_or_else(|_| "user".into())
+}
+
+#[tauri::command]
+fn append_app_log(level: String, message: String) -> Result<bool, AppError> {
+  // Do not log cell values — callers must keep messages free of field contents.
+  let dir = logs_dir();
+  fs::create_dir_all(&dir).map_err(|e| AppError::Message(format!("mkdir logs failed: {e}")))?;
+  let path = dir.join("renderer.log");
+  let line = format!("{}\t{}\t{}\n", iso_now(), level, message.replace('\n', " "));
+  use std::io::Write;
+  let mut f = fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&path)
+    .map_err(|e| AppError::Message(format!("open log failed: {e}")))?;
+  f.write_all(line.as_bytes())
+    .map_err(|e| AppError::Message(format!("write log failed: {e}")))?;
+  Ok(true)
+}
+
+#[tauri::command]
 fn read_text_file(path: String) -> Result<String, AppError> {
   fs::read_to_string(&path).map_err(|e| AppError::Message(format!("read failed: {e}")))
 }
@@ -1875,7 +1963,9 @@ pub fn run() {
       write_text_file,
       read_text_file,
       write_bytes_file,
-      copy_file
+      copy_file,
+      get_os_user_name,
+      append_app_log
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

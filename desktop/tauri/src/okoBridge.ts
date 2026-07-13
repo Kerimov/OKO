@@ -11,16 +11,21 @@ import {
   type CheckRunResult,
 } from "@oko/engine";
 import type {
-  FormCatalog,
-  FormSchema,
   InstanceSummary,
-  KontrAgent,
   OkoFormInstance,
   PackageCompleteness,
   RowData,
 } from "@portal/types";
 import { buildInitialRows } from "@portal/utils";
 import type { OkoDesktopApi } from "./desktopApi";
+import {
+  getPackageFormRuleCounts,
+  getPackageKontrAgents,
+  loadCatalog,
+  loadSchema,
+  runPackageRashChecks,
+  runPackageRecalc,
+} from "./formEngine";
 import type { AuthUser, OpenPackageResult, PublicUser, SessionInfo, UserRole } from "./types";
 
 type TauriOpen = {
@@ -62,11 +67,14 @@ function toOpenResult(r: TauriOpen): OpenPackageResult {
       hasRash: true,
     },
   };
+  rememberRecent(r.folderPath);
   return { folderPath: r.folderPath, meta, instanceCount: r.instances };
 }
 
 const AUTH_KEY = "oko-tauri-auth-users";
 const SESSION_KEY = "oko-tauri-auth-session";
+const RECENT_KEY = "oko-tauri-recent-packages";
+const MAX_RECENT = 8;
 
 function loadUsers(): PublicUser[] {
   try {
@@ -93,16 +101,50 @@ function setSessionUser(user: AuthUser | null) {
   else localStorage.setItem(SESSION_KEY, JSON.stringify(user));
 }
 
-async function loadCatalog(): Promise<FormCatalog> {
-  const res = await fetch("/schemas/catalog.json");
-  if (!res.ok) throw new Error("Каталог форм не найден");
-  return res.json();
+function rememberRecent(folderPath: string) {
+  const path = folderPath.trim();
+  if (!path) return;
+  let list: string[] = [];
+  try {
+    list = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]") as string[];
+  } catch {
+    list = [];
+  }
+  list = [path, ...list.filter((p) => p !== path)].slice(0, MAX_RECENT);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
 }
 
-async function loadSchema(formId: string): Promise<FormSchema> {
-  const res = await fetch(`/schemas/${formId}.json`);
-  if (!res.ok) throw new Error(`Схема ${formId} не найдена`);
-  return res.json();
+export function listRecentPackages(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+
+async function buildExportWarnings(): Promise<string[]> {
+  const warnings: string[] = [];
+  try {
+    const [catalog, summaries, completeness] = await Promise.all([
+      loadCatalog(),
+      invoke<InstanceSummary[]>("list_summaries"),
+      computeCompleteness(),
+    ]);
+    const empty = catalog.forms.length - summaries.length;
+    if (empty > 0) {
+      warnings.push(`Не создано экземпляров форм: ${empty} из ${catalog.forms.length}.`);
+    }
+    if (completeness.draft > 0) {
+      warnings.push(`Форм в черновике (не сдано): ${completeness.draft}.`);
+    }
+    const unfilled = completeness.items.filter((i) => !i.filled).length;
+    if (unfilled > 0) {
+      warnings.push(`Форм без данных в комплекте: ${unfilled}.`);
+    }
+  } catch {
+    /* ignore */
+  }
+  return warnings;
 }
 
 async function computeCompleteness(): Promise<PackageCompleteness> {
@@ -144,7 +186,15 @@ async function computeCompleteness(): Promise<PackageCompleteness> {
 
 function createApi(): OkoDesktopApi {
   return {
-    getUserName: async () => getSessionUser()?.displayName || "Оператор",
+    getUserName: async () => {
+      const session = getSessionUser()?.displayName;
+      if (session) return session;
+      try {
+        return await invoke<string>("get_os_user_name");
+      } catch {
+        return "Оператор";
+      }
+    },
     getClientId: async () => invoke<string>("get_client_id"),
     authNeedsSetup: async () => loadUsers().length === 0,
     authGetSession: async () => getSessionUser(),
@@ -316,7 +366,7 @@ function createApi(): OkoDesktopApi {
       if (lastSession) lastSession.instanceCount += created;
       return { created };
     },
-    importJson: async (folderPath, jsonPath) => {
+    importJson: async (folderPath, jsonPath, mode) => {
       const raw = await invoke<string>("read_text_file", { path: jsonPath });
       const pkg = JSON.parse(raw) as {
         organization?: string;
@@ -345,6 +395,7 @@ function createApi(): OkoDesktopApi {
         filePath: jsonPath,
         actor: getSessionUser()?.displayName || "Оператор",
         pin: null,
+        mode: mode === "skip" ? "skip" : "overwrite",
       });
       const again = await invoke<TauriOpen>("open_package", { folderPath });
       return toOpenResult(again);
@@ -396,13 +447,11 @@ function createApi(): OkoDesktopApi {
       }
       return runFormChecksWithData(checks, formId, instances, "period") as CheckRunResult;
     },
-    runRashChecks: async () => [],
-    recalcForm: async (_formId, rows) => rows,
-    getFormRuleCounts: async () => ({ rashRuleCount: 0, recalcRuleCount: 0 }),
-    getKontrAgents: async () => {
-      const data = await fetch("/data/kontr.json").then((r) => (r.ok ? r.json() : { agents: [] }));
-      return (data.agents ?? data) as KontrAgent[];
-    },
+    runRashChecks: async (formId, rows, rashEntries) =>
+      runPackageRashChecks(formId, rows, rashEntries ?? []),
+    recalcForm: async (formId, rows) => runPackageRecalc(formId, rows),
+    getFormRuleCounts: async (formId) => getPackageFormRuleCounts(formId),
+    getKontrAgents: async () => getPackageKontrAgents(),
     saveInstance: async (inst) => invoke("save_instance", { inst }),
     saveInstanceJson: async (fileName, content) => {
       const path = await save({
@@ -425,12 +474,13 @@ function createApi(): OkoDesktopApi {
       return true;
     },
     exportJson: async (opts) => {
+      const warnings = await buildExportWarnings();
       const filePath = await invoke<string>("export_package_json", {
         actor: opts?.actor || getSessionUser()?.displayName || "Оператор",
         pin: opts?.pin ?? null,
       });
       const fileName = filePath.split(/[/\\]/).pop() || "export.json";
-      return { filePath, fileName, warnings: [] as string[] };
+      return { filePath, fileName, warnings };
     },
     saveExportAs: async () => {
       const exported = await invoke<string>("export_package_json", {
@@ -447,7 +497,14 @@ function createApi(): OkoDesktopApi {
       }
       return dest;
     },
-    log: async () => true,
+    log: async (level, message) => {
+      try {
+        await invoke("append_app_log", { level, message });
+      } catch {
+        /* ignore */
+      }
+      return true;
+    },
     claimCell: async (payload) => invoke("claim_cell", payload),
     releasePresence: async () => invoke("release_presence"),
     heartbeatCell: async (payload) => invoke("heartbeat_cell", payload),

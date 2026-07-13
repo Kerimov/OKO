@@ -61,6 +61,7 @@ python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
 | Документ | Назначение |
 |----------|------------|
 | [DESKTOP-FILLER-TZ.md](DESKTOP-FILLER-TZ.md) | ТЗ M1–M5 |
+| [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md) | Приоритеты закрытия дыр до приёмки §15 |
 | [../desktop/tauri/README.md](../desktop/tauri/README.md) | Команды и API |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Общая локальная среда |
 
@@ -68,6 +69,13 @@ python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
 
 ## Известные ограничения пилота
 
-- Rash-проверки UI ещё не как в Electron FormPage.
+- Ручная приёмка §15 (2 ПК / SMB / импорт в портал) — см. [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md).
+- Windows NSIS и Linux-бандлы собираются на целевой ОС.
 - Экспорт JSON v1.1 без блока `rules` (v1.2 портала).
 - Нет нотаризации / корпоративного Code Signing в CI по умолчанию.
+
+Автопроверка коллаба:
+
+```bash
+./scripts/acceptance-desktop.sh /path/to/package
+```

@@ -50,7 +50,11 @@ export interface OkoDesktopApi {
     enterpriseCode: string;
   }) => Promise<OpenPackageResult>;
   seedPackage: () => Promise<{ created: number }>;
-  importJson: (folderPath: string, jsonPath: string) => Promise<OpenPackageResult>;
+  importJson: (
+    folderPath: string,
+    jsonPath: string,
+    mode?: "overwrite" | "skip"
+  ) => Promise<OpenPackageResult>;
   closePackage: () => Promise<boolean>;
   getSessionInfo: () => Promise<SessionInfo | null>;
   listInstances: () => Promise<InstanceSummary[]>;

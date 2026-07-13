@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePackage } from "../context/PackageContext";
 import { useAuth } from "../context/AuthContext";
+import { listRecentPackages } from "../okoBridge";
 
 export function WelcomePage() {
   const navigate = useNavigate();
   const { setSession, userName } = usePackage();
   const { isAdmin, logout } = useAuth();
-  const [folderPath, setFolderPath] = useState("");
+  const recent = useMemo(() => listRecentPackages(), []);
+  const [folderPath, setFolderPath] = useState(recent[0] ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [createMode, setCreateMode] = useState(false);
@@ -33,6 +35,22 @@ export function WelcomePage() {
     if (picked) setFolderPath(picked);
   };
 
+  const applySession = async (result: {
+    folderPath: string;
+    meta: import("../types").PackageMeta;
+    instanceCount: number;
+  }) => {
+    const info = await window.oko.getSessionInfo();
+    if (info) setSession(info);
+    else
+      setSession({
+        folderPath: result.folderPath,
+        meta: result.meta,
+        instanceCount: result.instanceCount || (await window.oko.listInstances()).length,
+      });
+    navigate("/package");
+  };
+
   const handleOpen = async () => {
     if (!folderPath.trim()) {
       setError("Укажите путь к папке комплекта");
@@ -45,15 +63,7 @@ export function WelcomePage() {
       if (result.instanceCount === 0) {
         await window.oko.seedPackage();
       }
-      const info = await window.oko.getSessionInfo();
-      if (info) setSession(info);
-      else
-        setSession({
-          folderPath: result.folderPath,
-          meta: result.meta,
-          instanceCount: result.instanceCount || (await window.oko.listInstances()).length,
-        });
-      navigate("/package");
+      await applySession(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка открытия");
     } finally {
@@ -78,15 +88,7 @@ export function WelcomePage() {
         periodEnd,
         enterpriseCode: "1@1",
       });
-      const info = await window.oko.getSessionInfo();
-      if (info) setSession(info);
-      else
-        setSession({
-          folderPath: result.folderPath,
-          meta: result.meta,
-          instanceCount: result.instanceCount,
-        });
-      navigate("/package");
+      await applySession(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка создания");
     } finally {
@@ -101,13 +103,18 @@ export function WelcomePage() {
       setError("Сначала укажите папку, куда положить комплект");
       return;
     }
+    const overwrite = confirm(
+      "При совпадении templateId перезаписать формы?\nОК = перезаписать, Отмена = пропустить совпадения."
+    );
     setBusy(true);
     setError("");
     try {
-      await window.oko.importJson(folderPath.trim(), jsonPath);
-      const info = await window.oko.getSessionInfo();
-      if (info) setSession(info);
-      navigate("/package");
+      const result = await window.oko.importJson(
+        folderPath.trim(),
+        jsonPath,
+        overwrite ? "overwrite" : "skip"
+      );
+      await applySession(result);
     } catch (e) {
       await window.oko.closePackage();
       setSession(null);
@@ -154,6 +161,26 @@ export function WelcomePage() {
             </button>
           </div>
         </label>
+
+        {recent.length > 0 && (
+          <div className="welcome-recent">
+            <span className="muted">Недавние:</span>
+            <ul>
+              {recent.map((p) => (
+                <li key={p}>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => setFolderPath(p)}
+                    title={p}
+                  >
+                    {p}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {error && <p className="error">{error}</p>}
 
