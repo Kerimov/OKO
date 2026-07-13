@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import pyodbc
@@ -288,20 +289,47 @@ def export_rash(cur) -> dict:
 
 
 def export_kontr(cur) -> dict:
-    cur.execute("SELECT id, RowName, OrgForm, inn, kpp FROM sp_kontr ORDER BY id")
+    cur.execute(
+        "SELECT id, RowName, OrgForm, orgType, inn, kpp, Country, City, ogrn, Use "
+        "FROM sp_kontr ORDER BY id"
+    )
     items = []
+    seen_ids: set[int] = set()
     for row in cur.fetchall():
         d = row_to_dict(cur, row)
+        kid = int(d["id"]) if d["id"] is not None else None
+        if kid is None:
+            continue
+        seen_ids.add(kid)
+        org_type = int(d["orgType"]) if d.get("orgType") not in (None, "") else None
         items.append(
             {
-                "id": int(d["id"]) if d["id"] is not None else None,
+                "id": kid,
                 "name": d.get("RowName"),
                 "orgForm": d.get("OrgForm"),
+                "orgType": org_type,
                 "inn": d.get("inn"),
                 "kpp": d.get("kpp"),
+                "country": d.get("Country"),
+                "city": d.get("City"),
+                "ogrn": d.get("ogrn"),
+                "use": bool(d.get("Use")),
+                "mandatoryRash": (d.get("Forms") or "").strip() == "обяз.расшифровка",
             }
         )
-    return {"version": "1.0", "source": str(MDB.name), "total": len(items), "items": items}
+    if 3041 not in seen_ids:
+        items.append(
+            {
+                "id": 3041,
+                "name": "ФИЗИЧЕСКИЕ ЛИЦА",
+                "orgForm": None,
+                "orgType": 3,
+                "inn": "0000000000",
+                "kpp": "000000003",
+                "country": "STL",
+            }
+        )
+    return {"version": "1.2", "source": str(MDB.name), "total": len(items), "items": items}
 
 
 def export_agg(cur) -> dict:
@@ -398,6 +426,15 @@ def main():
 
     conn.close()
     print(f"\nExported to {OUT}")
+
+    # mdbtools-only exporters (Mac/Linux): refs + row-rash index
+    import subprocess
+
+    for script in ("export_rash_support_data.py", "export_row_rash_index.py"):
+        script_path = ROOT / "scripts" / script
+        if script_path.exists():
+            print(f"\nRunning {script}...")
+            subprocess.run([sys.executable, str(script_path)], check=False)
 
 
 if __name__ == "__main__":

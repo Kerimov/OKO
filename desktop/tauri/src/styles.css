@@ -1,0 +1,139 @@
+:root {
+  color: #1a1a1a;
+  background: #f3f1ec;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 2rem 2.5rem 3rem;
+  background:
+    radial-gradient(ellipse at 10% 0%, #e8efe6 0%, transparent 45%),
+    radial-gradient(ellipse at 90% 10%, #e7e2d6 0%, transparent 40%),
+    #f3f1ec;
+}
+
+.brand {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.35rem;
+}
+
+.lead {
+  margin: 0 0 1.5rem;
+  max-width: 40rem;
+  color: #3d3d3d;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+button {
+  appearance: none;
+  border: 1px solid #2c4a3a;
+  background: #2c4a3a;
+  color: #fff;
+  padding: 0.55rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.secondary {
+  background: transparent;
+  color: #2c4a3a;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #d4d0c6;
+  padding: 1rem 1.15rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.sidebar {
+  max-height: calc(100vh - 12rem);
+  overflow: auto;
+}
+
+.editor {
+  min-width: 0;
+  overflow: auto;
+}
+
+.form-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.form-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: transparent;
+  color: #1a1a1a;
+  border: 1px solid transparent;
+  text-align: left;
+  margin-bottom: 0.25rem;
+}
+
+.form-item:hover {
+  border-color: #c4c0b6;
+  background: #fff;
+}
+
+.form-item.active {
+  border-color: #2c4a3a;
+  background: #e8efe6;
+}
+
+.form-item .id {
+  font-weight: 600;
+}
+
+.form-item .st {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.muted {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #8b1e1e;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

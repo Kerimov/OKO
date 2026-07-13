@@ -1721,6 +1721,220 @@ a:hover {
   color: #6b5600;
 }
 
+.cell-with-rash {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.cell-with-rash .num-input,
+.cell-with-rash input,
+.cell-with-rash .rash-locked-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-with-rash .rash-locked-value {
+  display: block;
+  padding: 0.35rem 0.5rem;
+}
+
+.rash-cell-btn {
+  flex-shrink: 0;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rash-cell-btn:hover {
+  background: #eef4ff;
+  border-color: var(--primary);
+}
+
+.rash-cell-btn.has-entries {
+  background: #e8f4ea;
+  border-color: #6aab72;
+  color: #2d6a35;
+}
+
+.rash-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.rash-modal {
+  width: min(96vw, 920px);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.rash-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.rash-modal-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.rash-modal-sub {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.rash-modal-formula {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.rash-modal-close {
+  font-size: 1.4rem;
+}
+
+.rash-modal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.75rem;
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.kontr-table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.kontr-search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.kontr-search-wrap input {
+  width: 100%;
+}
+
+.kontr-search-suggestions {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.kontr-search-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kontr-search-item:hover {
+  background: #f0f4fa;
+}
+
+.kontr-search-inn {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.rash-modal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.rash-show-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.rash-show-filter select {
+  min-width: 16rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.rash-sum-warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.rash-modal-table-wrap {
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.rash-modal-table th .col-letter {
+  display: block;
+  font-weight: 700;
+}
+
+.rash-modal-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.rash-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
 .check-table-wrap {
   overflow-x: auto;
   max-height: 360px;

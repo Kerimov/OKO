@@ -1,6 +1,15 @@
-import { useMemo, type CSSProperties } from "react";
-import type { FormColumn, KontrAgent, RowData } from "../types";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import type { FormColumn, KontrAgent, RashThresholds, RowData } from "../types";
+import type { RashCellSlot } from "../engine/rashEngine";
+import {
+  defaultKontrShowFilter,
+  filterKontrByShow,
+  kontrShowOptionsForRule,
+  rashSlotKey,
+  rashSlotVisible,
+} from "../engine/rashEngine";
 import { cellErrorKey } from "../engine/cellErrors";
+import { KontrInput } from "./KontrInput";
 
 export interface CellFocusInfo {
   rowIndex: number;
@@ -31,6 +40,8 @@ interface Props {
   allowAddRows?: boolean;
   kontrMode?: boolean;
   kontrAgents?: KontrAgent[];
+  kontrRefA1Name?: string | null;
+  rashThresholds?: RashThresholds;
   cellErrors?: Map<string, string>;
   readOnly?: boolean;
   /** Десктоп: ячейки, занятые другими пользователями (ключ `${rowNo}:${column}`). */
@@ -43,6 +54,12 @@ interface Props {
   onCellBlur?: (info: CellBlurInfo) => void;
   /** Десктоп: промежуточное сохранение при вводе (debounce на стороне клиента). */
   onCellEdit?: (info: CellEditInfo) => void;
+  /** Ячейки с кнопкой расшифровки [...] (pattern B). */
+  rashSlots?: RashCellSlot[];
+  rashEntryCounts?: Map<string, number>;
+  onRashOpen?: (slot: RashCellSlot, rowIndex: number) => void;
+  /** Ячейки, заполняемые только из расшифровки (t_ras). */
+  rashReadonlyCells?: Set<string>;
 }
 
 export function FormTable({
@@ -52,6 +69,8 @@ export function FormTable({
   allowAddRows,
   kontrMode,
   kontrAgents = [],
+  kontrRefA1Name,
+  rashThresholds,
   cellErrors,
   readOnly = false,
   occupiedCells,
@@ -60,11 +79,47 @@ export function FormTable({
   onCellFocus,
   onCellBlur,
   onCellEdit,
+  rashSlots = [],
+  rashEntryCounts,
+  onRashOpen,
+  rashReadonlyCells,
 }: Props) {
+  const [kontrShowFilter, setKontrShowFilter] = useState("1,2");
+
+  const kontrShowOptions = useMemo(
+    () => kontrShowOptionsForRule(kontrRefA1Name),
+    [kontrRefA1Name]
+  );
+
+  useEffect(() => {
+    if (kontrRefA1Name) {
+      setKontrShowFilter(defaultKontrShowFilter(kontrRefA1Name));
+    }
+  }, [kontrRefA1Name]);
+
+  const visibleKontrAgents = useMemo(() => {
+    if (!kontrMode) return kontrAgents;
+    return filterKontrByShow(kontrAgents, kontrRefA1Name, kontrShowFilter);
+  }, [kontrAgents, kontrMode, kontrRefA1Name, kontrShowFilter]);
+
+  const kontrOrgTypes = useMemo(() => {
+    const opt = kontrShowOptions.find((o) => o.id === kontrShowFilter);
+    return opt?.orgTypes;
+  }, [kontrShowOptions, kontrShowFilter]);
+
   const kontrListId = useMemo(
     () => (kontrMode ? `kontr-list-${Math.random().toString(36).slice(2)}` : undefined),
     [kontrMode]
   );
+
+  const rashSlotMap = useMemo(() => {
+    const map = new Map<string, RashCellSlot>();
+    for (const slot of rashSlots) {
+      const display = slot.displayColumnKey ?? slot.columnKey;
+      map.set(`${slot.rowNum}:${display}`, slot);
+    }
+    return map;
+  }, [rashSlots]);
 
   const resolveRowNo = (row: RowData, index: number): number => {
     const parsed = parseInt(String(row.num ?? "").trim(), 10);
@@ -183,9 +238,26 @@ export function FormTable({
           ))}
         </div>
       )}
-      {kontrMode && kontrListId && (
+      {kontrMode && kontrShowOptions.length > 1 && !readOnly && (
+        <div className="kontr-table-toolbar">
+          <label className="rash-show-filter">
+            <span>Показать</span>
+            <select
+              value={kontrShowFilter}
+              onChange={(e) => setKontrShowFilter(e.target.value)}
+            >
+              {kontrShowOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {kontrMode && kontrListId && visibleKontrAgents.length <= 400 && (
         <datalist id={kontrListId}>
-          {kontrAgents.map((k) => (
+          {visibleKontrAgents.map((k) => (
             <option key={k.id} value={k.name} label={k.inn ? `ИНН ${k.inn}` : undefined} />
           ))}
         </datalist>
@@ -219,8 +291,46 @@ export function FormTable({
                 const kontrEditable = !readOnly && kontrMode && col.key === "name" && isKontrEditableRow(row);
                 const occupiedBy = occupancyUser(row, rowIdx, col.key);
                 const occupied = !!occupiedBy;
-                const readonly = readOnly || occupied || (col.readonly && !kontrEditable);
+                const rowNum = String(row.num ?? "").trim();
+                const rashLocked =
+                  !!rowNum && !!rashReadonlyCells?.has(`${rowNum}:${col.key}`);
+                const readonly =
+                  readOnly || occupied || rashLocked || (col.readonly && !kontrEditable);
                 const flash = highlightedCells?.has(syncKey);
+                const rashSlot = rowNum
+                  ? rashSlotMap.get(`${rowNum}:${col.key}`)
+                  : undefined;
+                const rashCount =
+                  rashSlot && rashEntryCounts
+                    ? rashEntryCounts.get(
+                        rashSlotKey(rashSlot.rowNum, rashSlot.columnKey, rashSlot.rashKod)
+                      ) ?? 0
+                    : 0;
+
+                const rashVisible =
+                  rashSlot &&
+                  (!rashThresholds ||
+                    rashSlotVisible(rashSlot, row, rashThresholds, rashEntryCounts));
+
+                const showRashBtn =
+                  !!rashSlot &&
+                  !!onRashOpen &&
+                  (rashLocked || rashVisible);
+
+                const rashBtn = showRashBtn ? (
+                  <button
+                    type="button"
+                    className={`rash-cell-btn${rashCount > 0 ? " has-entries" : ""}`}
+                    onClick={() => onRashOpen!(rashSlot!, rowIdx)}
+                    title={
+                      rashCount > 0
+                        ? `Расшифровка (${rashCount} контрагентов)`
+                        : "Расшифровка контрагентов"
+                    }
+                  >
+                    …
+                  </button>
+                ) : null;
 
                 return (
                   <td
@@ -229,7 +339,14 @@ export function FormTable({
                     title={occupiedBy ? `Занято: ${occupiedBy}` : errMsg}
                     style={occupiedBy ? userPresenceStyle(occupiedBy) : undefined}
                   >
-                    {readonly ? (
+                    {rashLocked && rashSlot ? (
+                      <div className="cell-with-rash">
+                        <span className="readonly-cell rash-locked-value">
+                          {String(row[col.key] ?? "")}
+                        </span>
+                        {rashBtn}
+                      </div>
+                    ) : readonly ? (
                       <span className={`readonly-cell${occupied ? " occupied-cell" : ""}`}>
                         {String(row[col.key] ?? "")}
                         {occupiedBy && (
@@ -239,31 +356,31 @@ export function FormTable({
                         )}
                       </span>
                     ) : kontrEditable ? (
-                      <input
-                        type="text"
-                        list={kontrListId}
+                      <KontrInput
                         value={String(row[col.key] ?? "")}
-                        onFocus={() => emitFocus(rowIdx, row, col.key)}
-                        onBlur={() => emitBlur(rowIdx, row, col.key)}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          updateCell(rowIdx, col.key, v);
-                          const agent = kontrAgents.find((k) => k.name === v);
-                          if (agent) pickKontr(rowIdx, agent);
-                        }}
+                        listId={kontrListId!}
+                        agents={visibleKontrAgents}
+                        orgTypes={kontrOrgTypes}
                         className="kontr-input"
                         placeholder="Контрагент…"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        inputMode={col.type === "number" ? "decimal" : "text"}
-                        value={String(row[col.key] ?? "")}
+                        onChange={(v) => updateCell(rowIdx, col.key, v)}
+                        onPick={(agent) => pickKontr(rowIdx, agent)}
                         onFocus={() => emitFocus(rowIdx, row, col.key)}
                         onBlur={() => emitBlur(rowIdx, row, col.key)}
-                        onChange={(e) => updateCell(rowIdx, col.key, e.target.value)}
-                        className={col.type === "number" ? "num-input" : ""}
                       />
+                    ) : (
+                      <div className="cell-with-rash">
+                        <input
+                          type="text"
+                          inputMode={col.type === "number" ? "decimal" : "text"}
+                          value={String(row[col.key] ?? "")}
+                          onFocus={() => emitFocus(rowIdx, row, col.key)}
+                          onBlur={() => emitBlur(rowIdx, row, col.key)}
+                          onChange={(e) => updateCell(rowIdx, col.key, e.target.value)}
+                          className={col.type === "number" ? "num-input" : ""}
+                        />
+                        {rashBtn}
+                      </div>
                     )}
                   </td>
                 );

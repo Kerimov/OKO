@@ -2,11 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckResultsPanel } from "@portal/components/CheckResultsPanel";
 import { FormTable } from "@portal/components/FormTable";
-import { isKontrForm } from "@portal/constants";
-import { type CheckRunResult } from "@portal/engine/checkRunCore";
-import { failedCellsForForm } from "@portal/engine/cellErrors";
+import { RashEditorModal } from "@portal/components/RashEditorModal";
+import { hasRashRules, isKontrForm } from "@portal/constants";
+import { failedCellsForForm, type CheckRunResult } from "@oko/engine";
 import { exportFormToExcel } from "@portal/engine/exportExcel";
-import type { RashValidationIssue } from "@portal/engine/rashEngine";
+import {
+  buildRashCellSlots,
+  entriesForRash,
+  effectiveRashFormula,
+  evaluateTotalFormula,
+  getRashData,
+  getRashRulesForForm,
+  numVal,
+  rashColumnsForRule,
+  rashSlotKey,
+  syncAllRashToRows,
+  syncRashToParentRow,
+  type RashCellSlot,
+  type RashEditorContext,
+  type RashValidationIssue,
+} from "@portal/engine/rashEngine";
+import { loadRowRashIndex, type RowRashIndexData } from "@portal/engine/rowRashIndex";
+import { loadRashRefs, type RashRefsData } from "@portal/engine/rashRefs";
 import {
   exportInstance,
   saveGlobalMeta,
@@ -17,9 +34,11 @@ import {
 import type {
   FormInstanceStatus,
   FormMeta,
+  FormRashEntry,
   FormSchema,
   KontrAgent,
   OkoFormInstance,
+  RashRulesData,
   RowData,
 } from "@portal/types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "@portal/utils";
@@ -60,6 +79,11 @@ export function FormPage() {
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
   const [rashIssues, setRashIssues] = useState<RashValidationIssue[] | null>(null);
   const [rashRuleCount, setRashRuleCount] = useState<number | null>(null);
+  const [rashData, setRashData] = useState<RashRulesData | null>(null);
+  const [rowRashIndex, setRowRashIndex] = useState<RowRashIndexData | null>(null);
+  const [rashRefs, setRashRefs] = useState<RashRefsData | null>(null);
+  const [rashEntries, setRashEntries] = useState<FormRashEntry[]>([]);
+  const [rashModal, setRashModal] = useState<RashEditorContext | null>(null);
   const [checkingRash, setCheckingRash] = useState(false);
   const [autoRecalc, setAutoRecalc] = useState(
     () => localStorage.getItem("oko-auto-recalc") !== "0"
@@ -71,6 +95,7 @@ export function FormPage() {
   const [formLoading, setFormLoading] = useState(true);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
+  const rashMode = hasRashRules(rashRuleCount ?? 0);
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const isLocked = instanceStatus === "submitted";
 
@@ -139,6 +164,7 @@ export function FormPage() {
         setMeta(inst.meta);
         setRows(inst.rows);
         setSignatures(inst.signatures ?? {});
+        setRashEntries(inst.rashEntries ?? []);
         setSchema(sch);
         setCachedForm(instanceId, inst, sch);
       } catch (e) {
@@ -192,22 +218,31 @@ export function FormPage() {
     void window.oko
       .getFormRuleCounts(schema.id)
       .then(({ rashRuleCount: rash, recalcRuleCount: recalc }) => {
-        setRashRuleCount(kontrMode ? rash : null);
+        setRashRuleCount(rash);
         setRecalcRuleCount(recalc);
       })
       .catch(() => {
         setRashRuleCount(null);
         setRecalcRuleCount(null);
       });
-  }, [kontrMode, schema]);
+    void getRashData()
+      .then(setRashData)
+      .catch(() => setRashData(null));
+    void loadRowRashIndex()
+      .then(setRowRashIndex)
+      .catch(() => setRowRashIndex(null));
+    void loadRashRefs()
+      .then(setRashRefs)
+      .catch(() => setRashRefs(null));
+  }, [schema]);
 
   useEffect(() => {
-    if (!kontrMode || !schema) return;
+    if (!rashMode || !schema) return;
     void window.oko
       .getKontrAgents()
       .then(setKontrAgents)
       .catch(() => setKontrAgents([]));
-  }, [kontrMode, schema]);
+  }, [rashMode, schema]);
 
   const handleRowsChange = useCallback(
     (next: RowData[]) => {
@@ -235,7 +270,9 @@ export function FormPage() {
 
   const persist = useCallback(
     async (
-      overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>
+      overrides?: Partial<
+        Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures" | "rashEntries">
+      >
     ) => {
       if (!instance || !schema) return null;
       const updated: OkoFormInstance = {
@@ -244,6 +281,7 @@ export function FormPage() {
         meta: overrides?.meta ?? meta,
         rows: overrides?.rows ?? rows,
         signatures: overrides?.signatures ?? signatures,
+        rashEntries: overrides?.rashEntries ?? rashEntries,
         updatedAt: new Date().toISOString(),
       };
       const saved = await saveInstance(updated);
@@ -252,8 +290,128 @@ export function FormPage() {
       if (instanceId) patchCachedInstance(instanceId, saved);
       return saved;
     },
-    [instance, schema, displayName, meta, rows, signatures, instanceId]
+    [instance, schema, displayName, meta, rows, signatures, rashEntries, instanceId]
   );
+
+  const kontrRefA1Name = useMemo(() => {
+    if (!schema || !rashData) return null;
+    const rules = getRashRulesForForm(rashData.rules, schema.id);
+    return rules.find((r) => r.refA1Name)?.refA1Name ?? null;
+  }, [schema, rashData]);
+
+  const rashSlots = useMemo(() => {
+    if (!schema || !rashData || kontrMode) return [];
+    return buildRashCellSlots(
+      schema.id,
+      rows,
+      schema.columns,
+      rashData.rules,
+      rashData.thresholds,
+      rowRashIndex ?? undefined
+    );
+  }, [schema, rows, rashData, rowRashIndex, kontrMode]);
+
+  const rashEntryCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!schema) return map;
+    for (const e of rashEntries) {
+      if (e.formId !== schema.id) continue;
+      const key = rashSlotKey(String(e.parentRowNo), e.columnKey ?? "", e.rashKod);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [rashEntries, schema]);
+
+  const rashReadonlyCells = useMemo(() => {
+    const set = new Set<string>();
+    if (kontrMode) return set;
+    for (const slot of rashSlots) {
+      const cols = effectiveRashFormula(slot.rule)
+        ? rashColumnsForRule(slot.rule)
+        : [slot.columnKey];
+      for (const col of cols) {
+        set.add(`${slot.rowNum}:${col}`);
+      }
+    }
+    return set;
+  }, [rashSlots, kontrMode]);
+
+  const openRashModal = useCallback(
+    (slot: RashCellSlot, rowIndex: number) => {
+      if (!schema || isLocked) return;
+      const row = rows[rowIndex];
+      setRashModal({
+        formId: schema.id,
+        parentRowNo: parseInt(slot.rowNum, 10),
+        parentRowIndex: rowIndex,
+        columnKey: slot.columnKey,
+        rashKod: slot.rashKod,
+        rule: slot.rule,
+        parentLabel: String(row.name ?? slot.rowNum),
+        parentValue:
+          slot.pattern === "total" && effectiveRashFormula(slot.rule)
+            ? evaluateTotalFormula(effectiveRashFormula(slot.rule)!, row)
+            : numVal(row[slot.columnKey]),
+      });
+    },
+    [schema, rows, isLocked]
+  );
+
+  const handleRashSave = useCallback(
+    async (newLines: FormRashEntry[]) => {
+      if (!rashModal || !schema || !instance) return;
+      const { formId, parentRowNo, rashKod, columnKey, parentRowIndex } = rashModal;
+      const rest = rashEntries.filter(
+        (e) =>
+          !(
+            e.formId === formId &&
+            e.parentRowNo === parentRowNo &&
+            e.rashKod === rashKod &&
+            (e.columnKey == null || e.columnKey === columnKey)
+          )
+      );
+      const tagged = newLines.map((e, i) => ({
+        ...e,
+        formId,
+        parentRowNo,
+        rashKod,
+        columnKey,
+        lineNo: i,
+      }));
+      const nextEntries = [...rest, ...tagged];
+      setRashEntries(nextEntries);
+      let nextRows = rows;
+      if (!kontrMode) {
+        nextRows = syncRashToParentRow(
+          rows,
+          parentRowIndex,
+          nextEntries,
+          formId,
+          rashKod,
+          rashModal.rule
+        );
+        setRows(nextRows);
+        await persist({ rows: nextRows, rashEntries: nextEntries });
+      } else {
+        await persist({ rashEntries: nextEntries });
+      }
+      setRashModal(null);
+      setStatus("Расшифровка сохранена");
+      setTimeout(() => setStatus(""), 3000);
+    },
+    [rashModal, schema, instance, rashEntries, rows, kontrMode, persist]
+  );
+
+  const rashModalEntries = useMemo(() => {
+    if (!rashModal || !schema) return [];
+    return entriesForRash(
+      rashEntries,
+      schema.id,
+      rashModal.parentRowNo,
+      rashModal.rashKod,
+      rashModal.columnKey
+    );
+  }, [rashEntries, rashModal, schema]);
 
   const schedulePersist = useCallback(
     (overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>) => {
@@ -373,11 +531,11 @@ export function FormPage() {
   };
 
   const handleCheckRash = async () => {
-    if (!schema || !kontrMode) return;
+    if (!schema || !rashMode) return;
     setCheckingRash(true);
     setRashIssues(null);
     try {
-      const issues = await window.oko.runRashChecks(schema.id, rows);
+      const issues = await window.oko.runRashChecks(schema.id, rows, rashEntries);
       setRashIssues(issues);
       setStatus(
         issues.length === 0
@@ -503,7 +661,7 @@ export function FormPage() {
           >
             {checking ? "Проверка…" : "Проверить увязки"}
           </button>
-          {kontrMode && (
+          {rashMode && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -575,10 +733,13 @@ export function FormPage() {
 
       <CheckResultsPanel result={checkResult} loading={checking} />
 
-      {kontrMode && rashRuleCount != null && rashRuleCount > 0 && (
+      {rashMode && rashRuleCount != null && rashRuleCount > 0 && (
         <p className="tools-hint">
-          Форма с расшифровкой контрагентов: правил <code>sp_rash</code> —{" "}
-          <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн / 50 млн руб.
+          {kontrMode
+            ? "Форма с расшифровкой контрагентов в строках"
+            : "Кнопка «…» в графах с суммой ≥ 1 тыс. руб. (в т.ч. итоговая гр. M — прокрутите вправо)"}
+          : правил <code>sp_rash</code> — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн /
+          50 млн руб.
         </p>
       )}
 
@@ -665,6 +826,8 @@ export function FormPage() {
         allowAddRows={schema.allowAddRows || kontrMode}
         kontrMode={kontrMode}
         kontrAgents={kontrAgents}
+        kontrRefA1Name={kontrRefA1Name}
+        rashThresholds={rashData?.thresholds}
         cellErrors={cellErrors}
         readOnly={isLocked}
         occupiedCells={collab.occupiedCells}
@@ -673,7 +836,38 @@ export function FormPage() {
         onCellFocus={(info) => void collab.handleCellFocus(info)}
         onCellBlur={(info) => void collab.handleCellBlur(info)}
         onCellEdit={(info) => collab.handleCellEdit(info)}
+        rashSlots={rashSlots}
+        rashEntryCounts={rashEntryCounts}
+        rashReadonlyCells={rashReadonlyCells}
+        onRashOpen={rashMode && !isLocked ? openRashModal : undefined}
       />
+
+      {rashData && (
+        <RashEditorModal
+          open={!!rashModal}
+          onClose={() => setRashModal(null)}
+          onSave={(entries) => void handleRashSave(entries)}
+          context={
+            rashModal
+              ? {
+                  formId: rashModal.formId,
+                  parentRowNo: rashModal.parentRowNo,
+                  columnKey: rashModal.columnKey,
+                  rashKod: rashModal.rashKod,
+                  rule: rashModal.rule,
+                  parentLabel: rashModal.parentLabel,
+                  parentValue: rashModal.parentValue,
+                }
+              : null
+          }
+          entries={rashModalEntries}
+          formColumns={schema.columns}
+          addsum={rashData.addsum}
+          kontrAgents={kontrAgents}
+          rashRefs={rashRefs}
+          readOnly={isLocked}
+        />
+      )}
 
       <CoordinatorPinModal
         open={unlockPinOpen}

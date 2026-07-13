@@ -18,13 +18,14 @@
                             │ HTTPS  /api/*
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  server/ — Express API (TypeScript)                         │
+│  server-nest/ — NestJS REST (TypeScript)                    │
+│  + server/ (домен) · @oko/engine (увязки)                   │
 │  auth · instances · forms · checks · packages · users     │
 └───────────────────────────┬─────────────────────────────────┘
                             │
               ┌─────────────┴─────────────┐
               ▼                           ▼
-     PostgreSQL (prod)              SQLite (dev)
+     PostgreSQL (SoT)              SQLite (opt-in / desktop)
      data/schema.postgresql.sql     data/schema.sql
 ```
 
@@ -99,37 +100,36 @@
 
 ---
 
-## Бэкенд (`server/`)
+## Бэкенд (`server-nest/` + `server/`)
 
 ### Стек
 
-- **Express 4** + **TypeScript**
+- **NestJS 11** + **TypeScript** — HTTP entrypoint (`server-nest/`)
+- Домен и БД — `server/src/*` (без новых Express-роутов)
+- **`@oko/engine`** — period-проверки при сдаче формы
 - **pg** — PostgreSQL (production)
 - **node:sqlite** — SQLite (development, experimental API Node 22)
+
+Swagger: `/api/docs`.
 
 ### Абстракция БД
 
 `server/src/oko-db.ts` — единый интерфейс `OkoDb` для SQLite и PostgreSQL.  
 Выбор по переменной `DATABASE_URL`.
 
-### Модули API
+### Модули
 
-| Файл | Ответственность |
+| Слой | Ответственность |
 |------|-----------------|
-| `index.ts` | Маршруты, сборка приложения |
-| `auth.ts` | Логин, сессии, Bearer-токены, роли |
-| `instances.ts` | CRUD экземпляров форм |
-| `forms.ts` | Шаблоны, строки, колонки |
-| `checks.ts` | Правила увязок |
-| `saldo.ts` | Правила сальдо, FormCorrespondence |
-| `excel.ts` | Маппинг Excel |
-| `rash.ts` | Расшифровки |
-| `aggregation.ts` | Связи parent/child org |
-| `packages.ts` | Организации, периоды, рабочий контекст |
-| `users.ts` | Учётные записи |
-| `audit.ts` | Журнал изменений метаданных |
-| `orgScope.ts` | Фильтрация по ZID для роли org |
-
+| `server-nest/src/**` | Controllers, guards, DTO, Swagger |
+| `server/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
+| `server/src/instances.ts` | CRUD экземпляров |
+| `server/src/instance-submit.ts` | Сдача + серверные проверки |
+| `server/src/auth.ts` | Логин, сессии, Bearer, роли |
+| `server/src/forms.ts` / `checks.ts` / … | Метаданные и правила |
+| `server/src/packages.ts` | Организации, периоды, комплекты |
+| `server/src/orgScope.ts` | Фильтрация по ZID для роли org |
+| `packages/engine` | `runFormChecksWithData`, cell expressions |
 ### Инициализация БД
 
 `server/src/db.ts` → `bootstrapDatabase()`:

@@ -83,15 +83,16 @@ export function saveInstance(
   clientId?: string
 ): void {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
+  const rashEntriesJson = JSON.stringify(inst.rashEntries ?? []);
   const status = normalizeInstanceStatus(inst.status);
   const now = new Date().toISOString();
 
   db.prepare(
     `INSERT INTO form_instances (
       instance_id, template_id, zid, eid, template_title, display_name, organization,
-      period_start, period_end, unit, enterprise_code, signatures_json, status,
+      period_start, period_end, unit, enterprise_code, signatures_json, rash_entries_json, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_id) DO UPDATE SET
       template_id = excluded.template_id,
       zid = excluded.zid,
@@ -104,6 +105,7 @@ export function saveInstance(
       unit = excluded.unit,
       enterprise_code = excluded.enterprise_code,
       signatures_json = excluded.signatures_json,
+      rash_entries_json = excluded.rash_entries_json,
       status = excluded.status,
       updated_at = excluded.updated_at`
   ).run(
@@ -119,6 +121,7 @@ export function saveInstance(
     inst.meta.unit ?? "тыс.руб.",
     inst.meta.enterpriseCode ?? "1@1",
     signaturesJson,
+    rashEntriesJson,
     status,
     inst.createdAt,
     inst.updatedAt || now
@@ -171,7 +174,7 @@ export function loadInstance(db: PackageDatabase, instanceId: string): OkoFormIn
   const header = db
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
-              period_start, period_end, unit, enterprise_code, signatures_json, status,
+              period_start, period_end, unit, enterprise_code, signatures_json, rash_entries_json, status,
               created_at, updated_at
        FROM form_instances WHERE instance_id = ?`
     )
@@ -189,6 +192,7 @@ export function loadInstance(db: PackageDatabase, instanceId: string): OkoFormIn
         unit: string | null;
         enterprise_code: string | null;
         signatures_json: string;
+        rash_entries_json?: string | null;
         status: string | null;
         created_at: string;
         updated_at: string;
@@ -218,6 +222,13 @@ export function loadInstance(db: PackageDatabase, instanceId: string): OkoFormIn
     signatures = {};
   }
 
+  let rashEntries: import("@portal/types").FormRashEntry[] = [];
+  try {
+    rashEntries = JSON.parse(header.rash_entries_json || "[]");
+  } catch {
+    rashEntries = [];
+  }
+
   return {
     instanceId: header.instance_id,
     templateId: header.template_id,
@@ -235,6 +246,7 @@ export function loadInstance(db: PackageDatabase, instanceId: string): OkoFormIn
     },
     rows: rowsFromCells(cells),
     signatures,
+    rashEntries,
     createdAt: header.created_at,
     updatedAt: header.updated_at,
   };

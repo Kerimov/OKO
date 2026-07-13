@@ -101,8 +101,11 @@ const api = {
     formId: string,
     live?: { instanceId: string; rows: import("@portal/types").RowData[] }
   ) => ipcRenderer.invoke("oko:runFormChecks", formId, live),
-  runRashChecks: (formId: string, rows: import("@portal/types").RowData[]) =>
-    ipcRenderer.invoke("oko:runRashChecks", formId, rows),
+  runRashChecks: (
+    formId: string,
+    rows: import("@portal/types").RowData[],
+    rashEntries?: import("@portal/types").FormRashEntry[]
+  ) => ipcRenderer.invoke("oko:runRashChecks", formId, rows, rashEntries),
   recalcForm: (formId: string, rows: import("@portal/types").RowData[]) =>
     ipcRenderer.invoke("oko:recalcForm", formId, rows),
   getFormRuleCounts: (formId: string) =>

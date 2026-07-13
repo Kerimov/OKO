@@ -1,0 +1,107 @@
+import type { OkoFormInstance, RowData } from "./types.js";
+
+export interface AggregateOptions {
+  templateId: string;
+  sources: OkoFormInstance[];
+  displayName?: string;
+}
+
+export interface AggregateResult {
+  instance: OkoFormInstance;
+  sourceCount: number;
+}
+
+function rowKey(row: RowData): string {
+  return String(row.num ?? "").trim();
+}
+
+function parseNum(v: string | number | undefined): number {
+  if (v === undefined || v === null || v === "") return 0;
+  const n = parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isNumericColumn(key: string): boolean {
+  return !["num", "name", "code", "account"].includes(key);
+}
+
+/** Sum numeric columns across instances row-by-row (match by num). */
+export function aggregateInstances(options: AggregateOptions): AggregateResult {
+  const { templateId, sources } = options;
+  if (sources.length === 0) throw new Error("Нет форм для агрегации");
+  if (sources.some((s) => s.templateId !== templateId)) {
+    throw new Error("Все формы должны быть одного шаблона");
+  }
+
+  const base = sources[0];
+  const rowMaps = sources.map((inst) => {
+    const m = new Map<string, RowData>();
+    for (const r of inst.rows) {
+      const k = rowKey(r);
+      if (k) m.set(k, r);
+    }
+    return m;
+  });
+
+  const allKeys = new Set<string>();
+  for (const m of rowMaps) {
+    for (const k of m.keys()) allKeys.add(k);
+  }
+
+  const columnKeys = new Set<string>();
+  for (const inst of sources) {
+    for (const row of inst.rows) {
+      for (const key of Object.keys(row)) {
+        if (isNumericColumn(key)) columnKeys.add(key);
+      }
+    }
+  }
+
+  const rows: RowData[] = [];
+  for (const num of Array.from(allKeys).sort((a, b) => {
+    const na = parseInt(a, 10);
+    const nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  })) {
+    const template = rowMaps.find((m) => m.has(num))?.get(num);
+    const row: RowData = {};
+    if (template?.name) row.name = String(template.name);
+    if (template?.code) row.code = String(template.code);
+    row.num = num;
+
+    for (const col of columnKeys) {
+      let sum = 0;
+      let any = false;
+      for (const m of rowMaps) {
+        const r = m.get(num);
+        if (!r) continue;
+        const v = r[col];
+        if (v !== undefined && v !== "") {
+          sum += parseNum(v);
+          any = true;
+        }
+      }
+      row[col] = any ? sum : "";
+    }
+    rows.push(row);
+  }
+
+  const now = new Date().toISOString();
+  const instance: OkoFormInstance = {
+    instanceId: crypto.randomUUID(),
+    templateId,
+    templateTitle: base.templateTitle,
+    displayName:
+      options.displayName ??
+      `${templateId} — агрегация (${sources.length}) — ${new Date().toLocaleString("ru-RU")}`,
+    meta: { ...base.meta },
+    rows,
+    signatures: { ...base.signatures },
+    status: "draft",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return { instance, sourceCount: sources.length };
+}

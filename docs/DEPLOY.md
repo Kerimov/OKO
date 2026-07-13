@@ -1,11 +1,49 @@
-# Деплой OKO (Phase 2.5)
+# Депой OKO
 
-## Архитектура
+## Production on-prem (ТЗ §11) — целевой контур
+
+Полный стек в одном `docker compose`: **PostgreSQL + API + nginx (портал)**. Без Vercel/Render.
+
+```bash
+cp .env.prod.example .env.prod
+# отредактируйте пароли в .env.prod
+./scripts/prod-up.sh
+```
+
+| Сервис | Назначение |
+|--------|------------|
+| `postgres` | PostgreSQL 16 — единственное хранилище prod |
+| `api` | NestJS API (`server-nest`, Swagger `/api/docs`) |
+| `web` | Статика портала + прокси `/api` → `api:3001` |
+
+Порт по умолчанию: **8080** (`OKO_HTTP_PORT` в `.env.prod`).
+
+Проверка:
+
+```bash
+curl -s http://localhost:8080/api/health
+# {"ok":true,"db":"postgresql",...}
+```
+
+Резервная копия БД:
+
+```bash
+./scripts/pg-backup.sh
+# → backups/oko-pg-YYYYMMDD-HHMMSS.sql.gz
+```
+
+Файлы: `docker-compose.prod.yml`, `deploy/nginx/oko.conf`, `deploy/Dockerfile.portal`.
+
+TLS: терминируйте на внешнем Angie/Nginx или добавьте `ssl_certificate` в `deploy/nginx/oko.conf`.
+
+---
+
+## Демо / облако (устаревающий контур)
 
 | Компонент | Где хостить | Примечание |
 |-----------|-------------|------------|
 | **Портал** (`portal/`) | Vercel, Netlify, nginx | Статика, Root Directory: `portal` |
-| **API** (`server/`) | Render, Railway, Docker | PostgreSQL (prod) или SQLite (dev) |
+| **API** (`server-nest` + домен `server/`) | Render, Railway, Docker | PostgreSQL (prod) или SQLite (dev) |
 
 Портал на Vercel **не** запускает API. Нужен отдельный хост с `docker compose` или `npm start` в `server/`.
 
@@ -36,18 +74,23 @@ curl -s https://your-api.onrender.com/api/health
 ```bash
 docker compose --profile postgres up -d
 export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
-cd server && npm run dev
+cd server-nest && npm run dev
 ```
 
 ---
 
-## SQLite (локально / Docker без Postgres)
+## SQLite (opt-in / legacy)
+
+Для API больше не default. Opt-in:
 
 ```bash
-docker compose up -d --build
+unset DATABASE_URL
+OKO_ALLOW_SQLITE=1 OKO_DB_PATH=./data/oko.db cd server-nest && npm run dev
+# или
+docker compose --profile sqlite up -d --build
 ```
 
-Данные SQLite: volume `oko-data` → `/app/data/oko.db`. **На Render без volume данные теряются при каждом deploy** — для prod используйте PostgreSQL.
+Desktop kits (`desktop/filler`, `desktop/tauri`) хранят комплект в **отдельном** `oko.db` папки — это не API SoT.
 
 ---
 
@@ -101,7 +144,7 @@ VITE_API_URL=https://oko-api.example.com npm run build
 ```
 
 3. На Vercel: Environment Variable `VITE_API_URL` = URL API.
-4. CORS на API уже включён (`cors()`). При необходимости ограничьте origin в `server/src/index.ts`.
+4. CORS на API уже включён в Nest/`legacy-routes`. При необходимости ограничьте origin в `server/src/legacy-routes.ts` или `server-nest/src/main.ts`.
 
 Локально без `VITE_API_URL` прокси Vite направляет `/api` → `localhost:3001`.
 
@@ -120,7 +163,8 @@ VITE_API_URL=https://oko-api.example.com npm run build
 
 ```bash
 # Node 22+
-cd server && npm ci && npm start
+cd server-nest && npm ci && npm start
+# (доменный пакет: npm ci в server/ тоже, если ставите вручную)
 ```
 
 Переменные: `DATABASE_URL` (PostgreSQL) **или** `OKO_DB_PATH` (SQLite), `OKO_BOOTSTRAP_ADMIN_*`, `PORT`.

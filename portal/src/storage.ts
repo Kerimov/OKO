@@ -4,6 +4,7 @@ import type {
   InstanceSummary,
   OkoFormInstance,
   KontrAgent,
+  FormRashEntry,
 } from "./types";
 import { buildInitialRows } from "./utils";
 import { apiFetch } from "./apiClient";
@@ -256,6 +257,18 @@ export async function setInstanceStatus(
   });
 }
 
+/** Server dry-run of period checks (Nest). Offline mode returns null. */
+export async function runInstanceChecks(
+  instanceId: string,
+  mode: "period" | "active" | "all" = "period"
+): Promise<import("./engine/checkEngine").CheckRunResult | null> {
+  if (!useBackend) return null;
+  return apiFetch(`/api/instances/${instanceId}/run-checks`, {
+    method: "POST",
+    body: JSON.stringify({ mode }),
+  });
+}
+
 export async function loadInstance(instanceId: string): Promise<OkoFormInstance | null> {
   if (!useBackend) {
     try {
@@ -365,7 +378,44 @@ export async function loadKontrAgents(): Promise<KontrAgent[]> {
     const data = await res.json();
     return data.items as KontrAgent[];
   }
-  return apiFetch<KontrAgent[]>("/api/kontr");
+  return apiFetch<KontrAgent[]>("/api/kontr?limit=5000");
+}
+
+export async function searchKontrAgents(
+  query: string,
+  orgTypes?: number[],
+  limit = 80
+): Promise<KontrAgent[]> {
+  if (!useBackend) {
+    const all = await loadKontrAgents();
+    const q = query.trim().toLowerCase();
+    const types = orgTypes?.length ? new Set(orgTypes) : null;
+    return all
+      .filter((a) => {
+        if (types && a.orgType != null && !types.has(a.orgType)) {
+          const u = a.name.toUpperCase();
+          if (u !== "ПРОЧИЕ" && u !== "ФИЗИЧЕСКИЕ ЛИЦА") return false;
+        }
+        if (!q) return true;
+        return (
+          a.name.toLowerCase().includes(q) ||
+          (a.inn ?? "").includes(q) ||
+          (a.kpp ?? "").includes(q)
+        );
+      })
+      .slice(0, limit);
+  }
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query.trim()) params.set("q", query.trim());
+  if (orgTypes?.length) params.set("orgTypes", orgTypes.join(","));
+  return apiFetch<KontrAgent[]>(`/api/kontr?${params}`);
+}
+
+export async function reimportKontrAgents(): Promise<number> {
+  const data = await apiFetch<{ reimported: number }>("/api/kontr/reimport", {
+    method: "POST",
+  });
+  return data.reimported;
 }
 
 export async function addKontrAgent(
@@ -378,4 +428,45 @@ export async function addKontrAgent(
     method: "POST",
     body: JSON.stringify(agent),
   });
+}
+
+export async function loadRashEntries(
+  instanceId: string,
+  formId: string
+): Promise<FormRashEntry[]> {
+  if (!useBackend) {
+    const inst = await loadInstance(instanceId);
+    return (inst?.rashEntries ?? []).filter((e) => e.formId === formId);
+  }
+  const data = await apiFetch<{ entries: FormRashEntry[] }>(
+    `/api/instances/${encodeURIComponent(instanceId)}/rash?formId=${encodeURIComponent(formId)}`
+  );
+  return data.entries ?? [];
+}
+
+export async function saveRashEntries(
+  instanceId: string,
+  formId: string,
+  entries: FormRashEntry[]
+): Promise<FormRashEntry[]> {
+  if (!useBackend) {
+    const inst = await loadInstance(instanceId);
+    if (!inst) throw new Error("Not found");
+    const other = (inst.rashEntries ?? []).filter((e) => e.formId !== formId);
+    const updated: OkoFormInstance = {
+      ...inst,
+      rashEntries: [...other, ...entries],
+      updatedAt: new Date().toISOString(),
+    };
+    await saveInstance(updated);
+    return entries;
+  }
+  const data = await apiFetch<{ entries: FormRashEntry[] }>(
+    `/api/instances/${encodeURIComponent(instanceId)}/rash`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ formId, entries }),
+    }
+  );
+  return data.entries ?? entries;
 }

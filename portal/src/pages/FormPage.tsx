@@ -1,18 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { ApiError } from "../apiClient";
 import { loadSchema } from "../api";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { FormTable } from "../components/FormTable";
-import { isKontrForm } from "../constants";
+import { RashEditorModal } from "../components/RashEditorModal";
+import { hasRashRules, isKontrForm } from "../constants";
 import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
 import { failedCellsForForm } from "../engine/cellErrors";
 import { exportFormToExcel } from "../engine/exportExcel";
 import {
+  buildRashCellSlots,
   countRashRulesForForm,
+  entriesForRash,
+  effectiveRashFormula,
+  evaluateTotalFormula,
   getRashData,
-  validateKontrRash,
+  getRashRulesForForm,
+  numVal,
+  rashColumnsForRule,
+  rashSlotKey,
+  syncAllRashToRows,
+  syncRashToParentRow,
+  validateAllRash,
+  type RashCellSlot,
+  type RashEditorContext,
   type RashValidationIssue,
 } from "../engine/rashEngine";
+import { loadRowRashIndex, type RowRashIndexData } from "../engine/rowRashIndex";
+import { loadRashRefs, type RashRefsData } from "../engine/rashRefs";
 import { recalcForm, countRecalcRules } from "../engine/recalcEngine";
 import {
   deleteInstance,
@@ -21,11 +37,23 @@ import {
   loadAllInstances,
   loadInstance,
   loadKontrAgents,
+  loadRashEntries,
   saveGlobalMeta,
   saveInstance,
+  saveRashEntries,
   setInstanceStatus,
+  runInstanceChecks,
 } from "../storage";
-import type { FormInstanceStatus, FormMeta, FormSchema, KontrAgent, OkoFormInstance, RowData } from "../types";
+import type {
+  FormInstanceStatus,
+  FormMeta,
+  FormRashEntry,
+  FormSchema,
+  KontrAgent,
+  OkoFormInstance,
+  RashRulesData,
+  RowData,
+} from "../types";
 import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListBackLabel } from "../formsListLabels";
@@ -55,6 +83,11 @@ export function FormPage() {
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
   const [rashIssues, setRashIssues] = useState<RashValidationIssue[] | null>(null);
   const [rashRuleCount, setRashRuleCount] = useState<number | null>(null);
+  const [rashData, setRashData] = useState<RashRulesData | null>(null);
+  const [rowRashIndex, setRowRashIndex] = useState<RowRashIndexData | null>(null);
+  const [rashRefs, setRashRefs] = useState<RashRefsData | null>(null);
+  const [rashEntries, setRashEntries] = useState<FormRashEntry[]>([]);
+  const [rashModal, setRashModal] = useState<RashEditorContext | null>(null);
   const [checkingRash, setCheckingRash] = useState(false);
   const [autoRecalc, setAutoRecalc] = useState(
     () => localStorage.getItem("oko-auto-recalc") !== "0"
@@ -64,6 +97,7 @@ export function FormPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
+  const rashMode = hasRashRules(rashRuleCount ?? 0);
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
   const formsBackLabel = formsListBackLabel(auth);
@@ -87,16 +121,38 @@ export function FormPage() {
       loadSchema(inst.templateId)
         .then(setSchema)
         .catch((e) => setError(e.message));
+
+      void loadRashEntries(inst.instanceId, inst.templateId)
+        .then((loaded) => {
+          setRashEntries(loaded);
+        })
+        .catch(() => setRashEntries(inst.rashEntries ?? []));
     });
   }, [instanceId]);
 
   useEffect(() => {
-    if (!kontrMode || !schema) return;
-    loadKontrAgents().then(setKontrAgents).catch(() => setKontrAgents([]));
+    if (!schema) return;
     getRashData()
-      .then((data) => setRashRuleCount(countRashRulesForForm(schema.id, data.rules)))
-      .catch(() => setRashRuleCount(null));
-  }, [kontrMode, schema]);
+      .then((data) => {
+        setRashData(data);
+        setRashRuleCount(countRashRulesForForm(schema.id, data.rules));
+      })
+      .catch(() => {
+        setRashData(null);
+        setRashRuleCount(null);
+      });
+    loadRowRashIndex()
+      .then(setRowRashIndex)
+      .catch(() => setRowRashIndex(null));
+    loadRashRefs()
+      .then(setRashRefs)
+      .catch(() => setRashRefs(null));
+  }, [schema]);
+
+  useEffect(() => {
+    if (!rashMode || !schema) return;
+    loadKontrAgents().then(setKontrAgents).catch(() => setKontrAgents([]));
+  }, [rashMode, schema]);
 
   useEffect(() => {
     if (!schema) return;
@@ -139,6 +195,7 @@ export function FormPage() {
         meta: overrides?.meta ?? meta,
         rows: overrides?.rows ?? rows,
         signatures: overrides?.signatures ?? signatures,
+        rashEntries,
         updatedAt: new Date().toISOString(),
       };
       await saveInstance(updated);
@@ -146,8 +203,136 @@ export function FormPage() {
       setInstance(updated);
       return updated;
     },
-    [instance, schema, displayName, meta, rows, signatures]
+    [instance, schema, displayName, meta, rows, signatures, rashEntries]
   );
+
+  useEffect(() => {
+    if (!schema || !rashData || kontrMode || rashEntries.length === 0) return;
+    setRows((prev) => syncAllRashToRows(schema.id, prev, rashEntries, rashData.rules));
+  }, [schema?.id, rashData, kontrMode, rashEntries]);
+
+  const kontrRefA1Name = useMemo(() => {
+    if (!schema || !rashData) return null;
+    const rules = getRashRulesForForm(rashData.rules, schema.id);
+    return rules.find((r) => r.refA1Name)?.refA1Name ?? null;
+  }, [schema, rashData]);
+
+  const rashSlots = useMemo(() => {
+    if (!schema || !rashData || kontrMode) return [];
+    return buildRashCellSlots(
+      schema.id,
+      rows,
+      schema.columns,
+      rashData.rules,
+      rashData.thresholds,
+      rowRashIndex ?? undefined
+    );
+  }, [schema, rows, rashData, rowRashIndex, kontrMode]);
+
+  const rashEntryCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!schema) return map;
+    for (const e of rashEntries) {
+      if (e.formId !== schema.id) continue;
+      const col = e.columnKey ?? "";
+      const key = rashSlotKey(String(e.parentRowNo), col, e.rashKod);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [rashEntries, schema]);
+
+  const rashReadonlyCells = useMemo(() => {
+    const set = new Set<string>();
+    if (kontrMode) return set;
+    for (const slot of rashSlots) {
+      const cols = effectiveRashFormula(slot.rule)
+        ? rashColumnsForRule(slot.rule)
+        : [slot.columnKey];
+      for (const col of cols) {
+        set.add(`${slot.rowNum}:${col}`);
+      }
+    }
+    return set;
+  }, [rashSlots, kontrMode]);
+
+  const openRashModal = useCallback(
+    (slot: RashCellSlot, rowIndex: number) => {
+      if (!schema || isLocked) return;
+      const row = rows[rowIndex];
+      setRashModal({
+        formId: schema.id,
+        parentRowNo: parseInt(slot.rowNum, 10),
+        parentRowIndex: rowIndex,
+        columnKey: slot.columnKey,
+        rashKod: slot.rashKod,
+        rule: slot.rule,
+        parentLabel: String(row.name ?? slot.rowNum),
+        parentValue:
+          slot.pattern === "total" && effectiveRashFormula(slot.rule)
+            ? evaluateTotalFormula(effectiveRashFormula(slot.rule)!, row)
+            : numVal(row[slot.columnKey]),
+      });
+    },
+    [schema, rows, isLocked]
+  );
+
+  const handleRashSave = useCallback(
+    async (newLines: FormRashEntry[]) => {
+      if (!rashModal || !schema || !instance) return;
+      const { formId, parentRowNo, rashKod, columnKey, parentRowIndex } = rashModal;
+      const rest = rashEntries.filter(
+        (e) =>
+          !(
+            e.formId === formId &&
+            e.parentRowNo === parentRowNo &&
+            e.rashKod === rashKod &&
+            (e.columnKey == null || e.columnKey === columnKey)
+          )
+      );
+      const tagged = newLines.map((e, i) => ({
+        ...e,
+        formId,
+        parentRowNo,
+        rashKod,
+        columnKey,
+        lineNo: i,
+      }));
+      const nextEntries = [...rest, ...tagged];
+      setRashEntries(nextEntries);
+      await saveRashEntries(instance.instanceId, schema.id, nextEntries);
+
+      let nextRows = rows;
+      if (!kontrMode) {
+        nextRows = syncRashToParentRow(
+          rows,
+          parentRowIndex,
+          nextEntries,
+          formId,
+          rashKod,
+          rashModal.rule
+        );
+        setRows(nextRows);
+        await persist({ rows: nextRows });
+      } else {
+        await persist();
+      }
+      setRashModal(null);
+      setStatus("Расшифровка сохранена");
+      setTimeout(() => setStatus(""), 3000);
+    },
+    [rashModal, schema, instance, rashEntries, rows, kontrMode, persist]
+  );
+
+  const rashModalEntries = useMemo(() => {
+    if (!rashModal || !schema) return [];
+    return entriesForRash(
+      rashEntries,
+      schema.id,
+      rashModal.parentRowNo,
+      rashModal.rashKod,
+      rashModal.columnKey
+    );
+  }, [rashEntries, rashModal, schema]);
 
   const handleSave = useCallback(async () => {
     if (!instance || isLocked) return;
@@ -162,9 +347,24 @@ export function FormPage() {
       return;
     }
     await persist();
-    const updated = await setInstanceStatus(instance.instanceId, "submitted");
-    setInstance(updated);
-    setStatus("Форма сдана");
+    try {
+      const updated = await setInstanceStatus(instance.instanceId, "submitted");
+      setInstance(updated);
+      setStatus("Форма сдана");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 422) {
+        const body = e.body as {
+          error?: string;
+          result?: CheckRunResult;
+          message?: { error?: string; result?: CheckRunResult };
+        };
+        const result = body?.result ?? body?.message?.result;
+        if (result) setCheckResult(result);
+        setStatus(e.message);
+        return;
+      }
+      setStatus(e instanceof Error ? e.message : "Не удалось сдать форму");
+    }
   };
 
   const handleReopenForm = async () => {
@@ -183,6 +383,10 @@ export function FormPage() {
     for (const name of schema.signatures) sigs[name] = "";
     setRows(fresh);
     setSignatures(sigs);
+    setRashEntries([]);
+    if (instance) {
+      await saveRashEntries(instance.instanceId, schema.id, []);
+    }
     await persist({ rows: fresh, signatures: sigs });
     setCheckResult(null);
     setStatus("Данные сброшены к шаблону");
@@ -265,15 +469,19 @@ export function FormPage() {
   };
 
   const handleCheckRash = async () => {
-    if (!schema || !kontrMode) return;
+    if (!schema || !rashMode || !rashData) return;
     setCheckingRash(true);
     setRashIssues(null);
     try {
-      const data = await getRashData();
-      const numericColumns = schema.columns
-        .filter((c) => c.type === "number")
-        .map((c) => c.key);
-      const issues = validateKontrRash(schema.id, rows, numericColumns, data);
+      const issues = validateAllRash(
+        schema.id,
+        rows,
+        schema.columns,
+        rashEntries,
+        rashData,
+        rowRashIndex ?? undefined,
+        kontrAgents
+      );
       setRashIssues(issues);
       setStatus(
         issues.length === 0
@@ -294,14 +502,25 @@ export function FormPage() {
     setCheckResult(null);
     try {
       await persist();
-      const all = await loadAllInstances();
-      const result = await runFormChecks(schema.id, all);
-      setCheckResult(result);
-      setStatus(
-        result.failed === 0
-          ? "Проверка пройдена"
-          : `Ошибок увязок: ${result.failed}`
-      );
+      const serverResult = await runInstanceChecks(instance.instanceId, "period");
+      if (serverResult) {
+        setCheckResult(serverResult);
+        setStatus(
+          serverResult.failed === 0 && serverResult.skipped === 0
+            ? "Проверка пройдена (сервер)"
+            : `Ошибок увязок: ${serverResult.failed}` +
+              (serverResult.skipped ? `, не разобрано: ${serverResult.skipped}` : "")
+        );
+      } else {
+        const all = await loadAllInstances();
+        const result = await runFormChecks(schema.id, all);
+        setCheckResult(result);
+        setStatus(
+          result.failed === 0
+            ? "Проверка пройдена"
+            : `Ошибок увязок: ${result.failed}`
+        );
+      }
       setTimeout(() => setStatus(""), 5000);
     } catch {
       setError("Не удалось выполнить проверку");
@@ -428,7 +647,7 @@ export function FormPage() {
           <button type="button" className="btn btn-secondary" onClick={handleCheck} disabled={checking}>
             {checking ? "Проверка…" : "Проверить форму"}
           </button>
-          {kontrMode && (
+          {rashMode && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -485,10 +704,21 @@ export function FormPage() {
       )}
       <CheckResultsPanel result={checkResult} loading={checking} />
 
-      {kontrMode && rashRuleCount != null && rashRuleCount > 0 && (
+      {rashMode && rashRuleCount != null && rashRuleCount > 0 && (
         <p className="tools-hint" style={{ margin: "0.5rem 0" }}>
-          Форма с расшифровкой контрагентов: правил <code>sp_rash</code> —{" "}
-          <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн / 50 млн руб. (
+          {kontrMode ? (
+            <>
+              Форма с расшифровкой контрагентов в строках
+            </>
+          ) : (
+            <>
+              Суммы на форме формируются из расшифровки. Ввод в графах B–M вручную
+              недоступен — нажмите кнопку <strong>«…»</strong> справа в ячейке, чтобы
+              открыть окно контрагентов
+            </>
+          )}
+          : правил <code>sp_rash</code> — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. /
+          5 млн / 50 млн руб. (
           <Link to="/admin/rash">настройки</Link>).
         </p>
       )}
@@ -571,9 +801,42 @@ export function FormPage() {
         allowAddRows={schema.allowAddRows || kontrMode}
         kontrMode={kontrMode}
         kontrAgents={kontrAgents}
+        kontrRefA1Name={kontrRefA1Name}
+        rashThresholds={rashData?.thresholds}
         cellErrors={cellErrors}
         readOnly={isLocked}
+        rashSlots={rashSlots}
+        rashEntryCounts={rashEntryCounts}
+        rashReadonlyCells={rashReadonlyCells}
+        onRashOpen={rashMode && !isLocked ? openRashModal : undefined}
       />
+
+      {rashData && (
+        <RashEditorModal
+          open={!!rashModal}
+          onClose={() => setRashModal(null)}
+          onSave={(entries) => void handleRashSave(entries)}
+          context={
+            rashModal
+              ? {
+                  formId: rashModal.formId,
+                  parentRowNo: rashModal.parentRowNo,
+                  columnKey: rashModal.columnKey,
+                  rashKod: rashModal.rashKod,
+                  rule: rashModal.rule,
+                  parentLabel: rashModal.parentLabel,
+                  parentValue: rashModal.parentValue,
+                }
+              : null
+          }
+          entries={rashModalEntries}
+          formColumns={schema.columns}
+          addsum={rashData.addsum}
+          kontrAgents={kontrAgents}
+          rashRefs={rashRefs}
+          readOnly={isLocked}
+        />
+      )}
 
       {schema.signatures.length > 0 && (
         <section className="signatures">

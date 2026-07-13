@@ -13,6 +13,8 @@ export interface FormRowTemplate {
   num?: string;
   code?: string;
   name: string;
+  /** sp_rash kod из row-rash-index */
+  rashKod?: number;
 }
 
 export interface FormSchema {
@@ -57,6 +59,29 @@ export interface KontrAgent {
   orgForm?: string | null;
   inn?: string | null;
   kpp?: string | null;
+  /** 1=внутригрупповой, 2=ассоциированный, 3=внешний */
+  orgType?: number | null;
+  /** sp_kontr.Forms = «обяз.расшифровка» → порог как у ассоциированных (5 млн) */
+  mandatoryRash?: boolean;
+  country?: string | null;
+  city?: string | null;
+}
+
+export interface FormRashEntry {
+  id?: number;
+  formId: string;
+  parentRowNo: number;
+  columnKey?: string | null;
+  rashKod: number;
+  lineNo: number;
+  kontrId?: number | null;
+  kontrName?: string | null;
+  inn?: string | null;
+  kpp?: string | null;
+  attrA2?: string | null;
+  attrA3?: string | null;
+  attrA4?: string | null;
+  values: Record<string, string | number>;
 }
 
 export interface FormMeta {
@@ -81,6 +106,8 @@ export interface OkoFormInstance {
   meta: FormMeta;
   rows: RowData[];
   signatures: Record<string, string>;
+  /** Расшифровки t_ras (localStorage fallback) */
+  rashEntries?: FormRashEntry[];
   createdAt: string;
   updatedAt: string;
 }

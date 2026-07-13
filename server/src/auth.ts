@@ -65,7 +65,7 @@ export function getAuthConfig() {
   };
 }
 
-function extractToken(req: Request): string | null {
+export function extractToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (header?.startsWith("Bearer ")) return header.slice(7).trim();
   const query = req.query.token;
@@ -111,7 +111,16 @@ export async function resolveAuth(req: Request, token: string | null): Promise<b
 }
 
 /** Public routes — no token required even when auth is enabled. */
-const PUBLIC_PATHS = new Set(["/api/health", "/api/auth/login", "/api/auth/me"]);
+export const PUBLIC_API_PATHS = new Set([
+  "/api/health",
+  "/api/auth/login",
+  "/api/auth/me",
+  "/api/templates/minfin",
+]);
+
+export function isPublicApiPath(path: string): boolean {
+  return PUBLIC_API_PATHS.has(path);
+}
 
 export async function authMiddleware(
   req: Request,
@@ -119,7 +128,7 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
-    if (PUBLIC_PATHS.has(req.path)) {
+    if (PUBLIC_API_PATHS.has(req.path)) {
       const token = extractToken(req);
       if (token) await resolveAuth(req, token);
       else if (!isAuthEnabled()) req.apiRole = "admin";
@@ -195,14 +204,87 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: "username and password required" });
     return;
   }
+  try {
+    const result = await loginWithCredentials(username.trim(), password);
+    if (!result) {
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+    res.json(result);
+  } catch (e) {
+    if (e instanceof Error && e.message === "USER_ACCOUNTS_DISABLED") {
+      res.status(400).json({ error: "User accounts are not enabled" });
+      return;
+    }
+    throw e;
+  }
+}
 
+export async function logoutHandler(req: Request, res: Response): Promise<void> {
+  const token = req.sessionToken ?? extractToken(req);
+  if (token) await deleteSession(await getDb(), token);
+  res.json({ ok: true });
+}
+
+export interface AuthMePayload {
+  role: ApiRole | null;
+  user: Record<string, unknown> | null;
+  authRequired: boolean;
+  authMode: "none" | "legacy" | "users" | "mixed";
+  userAccounts: boolean;
+  userTokenConfigured: boolean;
+  loginAvailable: boolean;
+}
+
+export async function buildAuthMePayload(req: Request): Promise<AuthMePayload> {
+  const config = getAuthConfig();
+  let user: Record<string, unknown> | null = null;
+  if (req.apiUser) {
+    const { getUserById } = await import("./users.js");
+    const dto = await getUserById(await getDb(), req.apiUser.id);
+    if (dto) {
+      user = {
+        id: dto.id,
+        username: dto.username,
+        displayName: dto.displayName,
+        role: dto.role,
+        zid: dto.zid,
+        organizationName: dto.organizationName ?? null,
+      };
+    }
+  }
+  return {
+    role: req.apiRole ?? null,
+    user,
+    ...config,
+  };
+}
+
+export interface LoginResult {
+  token: string;
+  role: ApiRole;
+  user: {
+    id: number;
+    username: string;
+    displayName: string | null;
+    role: string;
+    zid: number | null;
+    organizationName: string | null;
+  };
+}
+
+export async function loginWithCredentials(
+  username: string,
+  password: string
+): Promise<LoginResult | null> {
+  if (!hasUserAccounts()) {
+    throw new Error("USER_ACCOUNTS_DISABLED");
+  }
   const db = await getDb();
   const user = await getUserByUsername(db, username);
   if (!user || !user.active || !verifyPassword(password, user.password_hash)) {
-    res.status(401).json({ error: "Invalid username or password" });
-    return;
+    return null;
   }
-
   const token = await createSession(db, user.id);
   const sessionUser = (await resolveSessionUser(db, token))!;
   const org =
@@ -211,8 +293,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
           .prepare("SELECT name FROM organizations WHERE zid = ?")
           .get<{ name: string }>(sessionUser.zid)
       : undefined;
-
-  res.json({
+  return {
     token,
     role: sessionUser.role === "admin" ? "admin" : "user",
     user: {
@@ -223,11 +304,10 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       zid: sessionUser.zid,
       organizationName: org?.name ?? null,
     },
-  });
+  };
 }
 
-export async function logoutHandler(req: Request, res: Response): Promise<void> {
+export async function logoutSession(req: Request): Promise<void> {
   const token = req.sessionToken ?? extractToken(req);
   if (token) await deleteSession(await getDb(), token);
-  res.json({ ok: true });
 }

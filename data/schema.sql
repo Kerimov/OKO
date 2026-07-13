@@ -207,6 +207,29 @@ CREATE TABLE IF NOT EXISTS rash_addsum (
 
 CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
 
+-- Rash entry facts (t_ras analog)
+CREATE TABLE IF NOT EXISTS form_rash_entries (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id     TEXT NOT NULL REFERENCES form_instances(instance_id) ON DELETE CASCADE,
+    form_id         TEXT NOT NULL,
+    parent_row_no   INTEGER NOT NULL,
+    column_key      TEXT,
+    rash_kod        INTEGER NOT NULL,
+    line_no         INTEGER NOT NULL DEFAULT 0,
+    kontr_id        INTEGER,
+    kontr_name      TEXT,
+    inn             TEXT,
+    kpp             TEXT,
+    attr_a2         TEXT,
+    attr_a3         TEXT,
+    attr_a4         TEXT,
+    values_json     TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_rash_entries_instance ON form_rash_entries(instance_id);
+CREATE INDEX IF NOT EXISTS idx_rash_entries_lookup
+  ON form_rash_entries(instance_id, form_id, parent_row_no, rash_kod);
+
 -- User accounts (org cabinets, Phase 3.5)
 CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -4,8 +4,8 @@
 
 | Среда | Портал | API |
 |-------|--------|-----|
-| Production | [Vercel](https://vercel.com) — статика из `portal/` | [Render](https://render.com) — `server/`, PostgreSQL |
-| Локально | http://localhost:5173 | http://localhost:3001 |
+| Production | [Vercel](https://vercel.com) — статика из `portal/` | NestJS (`server-nest` + домен `server/`), PostgreSQL |
+| Локально | http://localhost:5173 | http://localhost:3001 · Swagger `/api/docs` |
 
 ---
 
@@ -26,14 +26,13 @@
 Требуется **Node.js 22+**.
 
 ```bash
-# 1. API (SQLite по умолчанию, порт 3001)
-cd server && npm install && npm run dev
-
-# 2. Портал (порт 5173, прокси /api → localhost:3001)
-cd portal && npm install && npm run dev
+# Postgres + API (NestJS) + портал
+cp .env.example .env
+docker compose up -d postgres
+./dev.sh
 ```
 
-Откройте http://localhost:5173. При первом запуске API создаёт БД и импортирует шаблоны из JSON.
+Откройте http://localhost:5173. Swagger: http://localhost:3001/api/docs.
 
 Подробнее: [**docs/DEVELOPMENT.md**](docs/DEVELOPMENT.md).
 
@@ -44,19 +43,27 @@ cd portal && npm install && npm run dev
 ```
 OKO/
 ├── portal/          # React-приложение (Vite + TypeScript)
-├── server/          # Express API (TypeScript)
+├── server-nest/     # NestJS REST API (целевой entrypoint)
+├── server/          # Доменный слой (БД, правила) + legacy Express shell
+├── desktop/tauri/   # Целевой десктоп (Tauri 2)
+├── desktop/filler/  # Electron-пилот
+├── packages/engine/ # @oko/engine — общие проверки увязок
 ├── data/            # SQL-схемы БД (SQLite / PostgreSQL)
 ├── scripts/         # Python: выгрузка и генерация из MDB Access
 ├── docs/            # Документация проекта
 ├── reference/       # Исходный комплект ПК «ОКО» (MDB локально, не в git)
 ├── docker-compose.yml
-└── Dockerfile       # Сборка API для production
+└── deploy/Dockerfile.api-nest
 ```
 
 | Каталог | Назначение | README |
 |---------|------------|--------|
 | `portal/` | UI: каталог, редактор форм, админка, инструкции | [portal/README.md](portal/README.md) |
-| `server/` | REST API, авторизация, хранение экземпляров и метаданных | [server/README.md](server/README.md) |
+| `server-nest/` | NestJS HTTP API, Swagger | [server-nest/README.md](server-nest/README.md) |
+| `server/` | Домен: auth, instances, checks, … | [server/README.md](server/README.md) |
+| `packages/engine/` | `@oko/engine` | — |
+| `desktop/tauri/` | Целевой десктоп (Tauri 2) | [desktop/tauri/README.md](desktop/tauri/README.md) |
+| `desktop/filler/` | Electron-пилот (переходный) | [desktop/filler/README.md](desktop/filler/README.md) |
 | `data/` | Схемы таблиц | [data/README.md](data/README.md) |
 | `scripts/` | Инструменты миграции данных из `z261.mdb` | [scripts/README.md](scripts/README.md) |
 | `reference/` | Эталонный комплект Access для сверки | [reference/README.md](reference/README.md) |

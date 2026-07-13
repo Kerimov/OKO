@@ -1,8 +1,11 @@
-# OKO API — Node 22 (SQLite local / PostgreSQL production)
+# DEPRECATED: Express-only image (no REST handlers after Nest migration).
+# Prefer: deploy/Dockerfile.api-nest (used by docker-compose.prod.yml).
+# Kept for rollback: docker build -f Dockerfile .
 FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+COPY packages/engine/ ./packages/engine/
 COPY server/package.json server/package-lock.json* ./server/
 RUN cd server && npm ci --omit=dev
 
@@ -13,6 +16,7 @@ COPY data/schema.postgresql.sql ./data/schema.postgresql.sql
 
 ENV PORT=3001
 ENV OKO_DB_PATH=/app/data/oko.db
+ENV NODE_OPTIONS=--experimental-sqlite
 
 RUN mkdir -p /app/data
 

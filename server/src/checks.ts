@@ -164,6 +164,74 @@ export async function getChecksStats(db: OkoDb) {
   return { total, active, periodActive, aggrOnly };
 }
 
+export interface ListCheckRulesOptions {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  formId?: string;
+  active?: string;
+  periodActive?: string;
+}
+
+export async function listCheckRules(db: OkoDb, options: ListCheckRulesOptions = {}) {
+  const limit = Math.min(options.limit ?? 50, 500);
+  const offset = options.offset ?? 0;
+  const q = (options.q ?? "").trim();
+  const formId = (options.formId ?? "").trim();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (q) {
+    conditions.push(
+      "(CAST(number AS TEXT) LIKE ? OR expression LIKE ? OR message LIKE ? OR expression_alt LIKE ?)"
+    );
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  if (formId) {
+    conditions.push("(expression LIKE ? OR expression_alt LIKE ?)");
+    params.push(`%${formId}%`, `%${formId}%`);
+  }
+  if (options.active === "1" || options.active === "true") {
+    conditions.push("active = 1");
+  }
+  if (options.periodActive === "1" || options.periodActive === "true") {
+    conditions.push("period_active = 1");
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const total = (
+    await db.prepare(`SELECT COUNT(*) AS c FROM check_rules ${where}`).get(...params)
+  )?.c as number;
+
+  const rows = (await db
+    .prepare(
+      `SELECT number, expression, expression_alt, message,
+              for_aggr_only, first_level, active, period_active, period, info
+       FROM check_rules ${where}
+       ORDER BY number
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset)) as CheckRuleRow[];
+
+  return { total, limit, offset, items: rows.map(rowToDto) };
+}
+
+export async function getCheckRuleByNumber(
+  db: OkoDb,
+  number: number
+): Promise<CheckRuleDto | null> {
+  const row = (await db
+    .prepare(
+      `SELECT number, expression, expression_alt, message,
+              for_aggr_only, first_level, active, period_active, period, info
+       FROM check_rules WHERE number = ?`
+    )
+    .get(number)) as CheckRuleRow | undefined;
+  return row ? rowToDto(row) : null;
+}
+
 export async function exportChecksPayload(db: OkoDb) {
   const rows = (await db
     .prepare(

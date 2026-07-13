@@ -104,6 +104,12 @@ export function migrateDb(db: PackageDatabase): void {
     db.exec("ALTER TABLE form_cell_values ADD COLUMN updated_client_id TEXT");
   }
 
+  const instCols = db.prepare("PRAGMA table_info(form_instances)").all() as Array<{ name: string }>;
+  const instNames = new Set(instCols.map((c) => c.name));
+  if (!instNames.has("rash_entries_json")) {
+    db.exec("ALTER TABLE form_instances ADD COLUMN rash_entries_json TEXT DEFAULT '[]'");
+  }
+
   db.prepare(
     `INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`

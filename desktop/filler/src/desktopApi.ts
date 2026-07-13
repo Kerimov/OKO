@@ -1,5 +1,5 @@
 import type { OkoFormInstance, InstanceSummary, FormSchema, FormCatalog, RowData, KontrAgent, PackageCompleteness } from "@portal/types";
-import type { CheckRunResult } from "@portal/engine/checkRunCore";
+import type { CheckRunResult } from "@oko/engine";
 import type { RashValidationIssue } from "@portal/engine/rashEngine";
 import type { OpenPackageResult, SessionInfo } from "./types";
 import type { AuthUser, PublicUser, UserRole } from "./types";
@@ -67,7 +67,11 @@ export interface OkoDesktopApi {
     formId: string,
     live?: { instanceId: string; rows: RowData[] }
   ) => Promise<CheckRunResult>;
-  runRashChecks: (formId: string, rows: RowData[]) => Promise<RashValidationIssue[]>;
+  runRashChecks: (
+    formId: string,
+    rows: RowData[],
+    rashEntries?: import("@portal/types").FormRashEntry[]
+  ) => Promise<RashValidationIssue[]>;
   recalcForm: (formId: string, rows: RowData[]) => Promise<RowData[]>;
   getFormRuleCounts: (formId: string) => Promise<{ rashRuleCount: number; recalcRuleCount: number }>;
   getKontrAgents: () => Promise<KontrAgent[]>;

@@ -1,0 +1,31 @@
+{
+  "name": "oko-filler-tauri",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ОКО Заполнение — целевой десктоп (Tauri 2). Electron desktop/filler остаётся пилотом.",
+  "scripts": {
+    "dev": "vite",
+    "dev:tauri": "tauri dev",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "build:tauri": "tauri build"
+  },
+  "dependencies": {
+    "@oko/engine": "file:../../packages/engine",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.2.1",
+    "@tauri-apps/plugin-fs": "^2.2.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

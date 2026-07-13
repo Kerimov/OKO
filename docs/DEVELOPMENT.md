@@ -23,21 +23,30 @@
 git clone https://github.com/Kerimov/OKO.git
 cd OKO
 
-# API
-cd server
-npm install
-cp ../.env.example ../.env   # OKO_AUTH_DISABLED=1 — auth выключен для локальной разработки
-npm run dev
-# → http://localhost:3001/api/health
+cp .env.example .env   # DATABASE_URL → Postgres; OKO_AUTH_DISABLED=1
 
-# Портал (новый терминал)
-cd portal
-npm install
-npm run dev
-# → http://localhost:5173
+# Postgres (если ещё не запущен)
+docker compose up -d postgres
+
+# API (NestJS) + портал — ./dev.sh сам поднимет postgres при отсутствии DATABASE_URL
+./dev.sh
+# → API http://localhost:3001/api/health
+# → Swagger http://localhost:3001/api/docs
+# → Portal http://localhost:5173
+```
+
+Вручную:
+
+```bash
+export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
+cd server-nest && npm install && npm run dev
+cd portal && npm install && npm run dev
 ```
 
 Vite проксирует `/api` на `localhost:3001` (см. `portal/vite.config.ts`).
+
+Legacy Express shell (без REST): `OKO_API_RUNTIME=express ./dev.sh`.  
+Opt-in SQLite API: уберите `DATABASE_URL`, задайте `OKO_ALLOW_SQLITE=1`.
 
 ### Первый вход
 
@@ -57,17 +66,19 @@ OKO_BOOTSTRAP_ADMIN_PASSWORD=admin123
 ## Структура работы
 
 ```
-portal/src/pages/     — добавляйте новые экраны здесь + маршрут в App.tsx
-portal/src/engine/    — бизнес-логика без UI
-server/src/           — новые API-эндпоинты + регистрация в index.ts
-data/                 — изменения схемы БД (оба файла: sqlite + postgresql)
+portal/src/pages/     — экраны + маршрут в App.tsx
+portal/src/engine/    — UI-обёртки; ядро увязок в packages/engine (@oko/engine)
+server-nest/src/      — Nest-контроллеры / модули
+server/src/           — домен (БД, проверки, instances) — без новых Express-роутов
+packages/engine/      — общий движок увязок
+data/                 — схема БД (sqlite + postgresql)
 ```
 
 ### Соглашения
 
 - TypeScript strict, ES modules (`"type": "module"`).
 - Имена файлов: `PascalCase` для React-компонентов, `camelCase` для утилит.
-- API-модули — один домен на файл (`checks.ts`, `instances.ts`).
+- API: HTTP в `server-nest`, домен в `server/src/*.ts`.
 - Коммиты на английском, повелительное наклонение: `Add …`, `Fix …`.
 
 Подробнее: [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -88,10 +99,14 @@ data/                 — изменения схемы БД (оба файла:
 ## PostgreSQL локально
 
 ```bash
-docker compose --profile postgres up -d
+docker compose up -d postgres
 export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
-cd server && npm run dev
+cd server-nest && npm run dev
 ```
+
+API SoT — PostgreSQL. SQLite для API deprecated (opt-in `OKO_ALLOW_SQLITE=1`). Offline desktop kits по-прежнему используют файл `oko.db` в папке комплекта.
+
+Подробнее без Docker: [LOCAL-POSTGRES.md](LOCAL-POSTGRES.md).
 
 ---
 
@@ -152,4 +167,5 @@ docker compose up -d --build
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [DEPLOY.md](DEPLOY.md)
 - [portal/README.md](../portal/README.md)
+- [server-nest/README.md](../server-nest/README.md)
 - [server/README.md](../server/README.md)

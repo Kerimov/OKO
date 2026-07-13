@@ -320,6 +320,51 @@ export async function exportRashPayload(db: OkoDb) {
   };
 }
 
+export interface ListRashRulesOptions {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  formId?: string;
+}
+
+export async function listRashRules(db: OkoDb, options: ListRashRulesOptions = {}) {
+  const limit = Math.min(options.limit ?? 50, 500);
+  const offset = options.offset ?? 0;
+  const q = (options.q ?? "").trim();
+  const formId = (options.formId ?? "").trim();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (q) {
+    conditions.push("(CAST(kod AS TEXT) LIKE ? OR name LIKE ? OR note LIKE ? OR ref_rows LIKE ?)");
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  if (formId) {
+    conditions.push("(name = ? OR name LIKE ? OR ref_rows LIKE ?)");
+    params.push(formId, `${formId}_%`, `%${formId}%`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const total = (
+    await db.prepare(`SELECT COUNT(*) AS c FROM rash_rules ${where}`).get(...params)
+  )?.c as number;
+
+  const rows = (await db
+    .prepare(
+      `SELECT kod, name, note, ref_rows, total_formula,
+              ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
+              ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
+       FROM rash_rules ${where}
+       ORDER BY kod
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset)) as RashRuleRow[];
+
+  return { total, limit, offset, items: rows.map(rowToDto) };
+}
+
 export async function getRashRule(db: OkoDb, kod: number): Promise<RashRuleDto | null> {
   const row = (await db
     .prepare(

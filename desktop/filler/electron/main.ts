@@ -304,8 +304,14 @@ function registerIpc(): void {
     ) => runDbTask(() => runPackageFormChecks(formId, live))
   );
 
-  ipcMain.handle("oko:runRashChecks", (_e, formId: string, rows: import("@portal/types").RowData[]) =>
-    runDbTask(() => runPackageRashChecks(formId, rows))
+  ipcMain.handle(
+    "oko:runRashChecks",
+    (
+      _e,
+      formId: string,
+      rows: import("@portal/types").RowData[],
+      rashEntries?: import("@portal/types").FormRashEntry[]
+    ) => runDbTask(() => runPackageRashChecks(formId, rows, rashEntries ?? []))
   );
 
   ipcMain.handle("oko:recalcForm", (_e, formId: string, rows: import("@portal/types").RowData[]) =>
