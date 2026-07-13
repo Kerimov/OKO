@@ -191,11 +191,60 @@ def client_loop(
         pass
 
 
+def conflict_claim_test(db_path: Path, instance_id: str) -> None:
+    """§15.2: second claim on same cell must fail while first holds it."""
+    a = str(uuid.uuid4())
+    b = str(uuid.uuid4())
+    now = iso_now()
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        migrate(conn)
+        conn.execute("DELETE FROM cell_presence WHERE instance_id = ?", (instance_id,))
+        conn.execute(
+            """INSERT INTO cell_presence
+               (instance_id, row_no, column_key, user_name, machine_name, client_id, heartbeat_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (instance_id, 1, "colA", "user-a", "pc-a", a, now),
+        )
+        conn.commit()
+        occupied = conn.execute(
+            """SELECT user_name FROM cell_presence
+               WHERE instance_id=? AND row_no=? AND column_key=?
+                 AND client_id != ?""",
+            (instance_id, 1, "colA", b),
+        ).fetchone()
+        if not occupied:
+            raise AssertionError("conflict-test: expected occupied cell")
+        # row-star lock: presence on * blocks any column
+        conn.execute(
+            """INSERT OR REPLACE INTO cell_presence
+               (instance_id, row_no, column_key, user_name, machine_name, client_id, heartbeat_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (instance_id, 2, "*", "user-a", "pc-a", a, now),
+        )
+        conn.commit()
+        star = conn.execute(
+            """SELECT user_name FROM cell_presence
+               WHERE instance_id=? AND row_no=? AND client_id != ?
+                 AND (column_key = ? OR column_key = '*')""",
+            (instance_id, 2, b, "colB"),
+        ).fetchone()
+        if not star:
+            raise AssertionError("conflict-test: expected * row lock")
+        conn.execute("DELETE FROM cell_presence WHERE client_id = ?", (a,))
+        conn.commit()
+    print("conflict-test: PASS (cell + row-* lock)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("package_folder", type=Path, help="Folder with oko.db")
     ap.add_argument("--clients", type=int, default=10, help="Concurrent clients (default 10)")
     ap.add_argument("--seconds", type=float, default=15, help="Run duration seconds")
+    ap.add_argument(
+        "--conflict-test",
+        action="store_true",
+        help="Assert same-cell and row-* claim exclusion (§15.2 / §6.4)",
+    )
     args = ap.parse_args()
 
     folder: Path = args.package_folder
@@ -210,6 +259,13 @@ def main() -> int:
     if not instance_id:
         print("ERROR: form_instances is empty — open/seed a package first", file=sys.stderr)
         return 2
+
+    if args.conflict_test:
+        try:
+            conflict_claim_test(db_path, instance_id)
+        except Exception as e:  # noqa: BLE001
+            print(f"ERROR: conflict-test failed: {e}", file=sys.stderr)
+            return 1
 
     print(
         f"collab smoke: db={db_path} instance={instance_id} "

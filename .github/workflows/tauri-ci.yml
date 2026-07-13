@@ -1,0 +1,96 @@
+name: tauri-ci
+
+on:
+  push:
+    paths:
+      - "desktop/tauri/**"
+      - "packages/engine/**"
+      - "portal/public/**"
+      - "scripts/tauri-collab-smoke.py"
+      - "scripts/acceptance-desktop.sh"
+      - ".github/workflows/tauri-ci.yml"
+  pull_request:
+    paths:
+      - "desktop/tauri/**"
+      - "packages/engine/**"
+      - "portal/public/**"
+      - "scripts/tauri-collab-smoke.py"
+      - ".github/workflows/tauri-ci.yml"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/tauri/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  collab-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create minimal package DB
+        run: |
+          python3 - <<'PY'
+          import sqlite3, uuid
+          from pathlib import Path
+          p = Path("ci-package")
+          p.mkdir(exist_ok=True)
+          (p / "package.meta.json").write_text(
+            '{"formatVersion":1,"zid":1,"eid":1,"organization":"CI","periodStart":"2026-01-01","periodEnd":"2026-03-31","enterpriseCode":"1@1"}\n',
+            encoding="utf-8",
+          )
+          db = p / "oko.db"
+          conn = sqlite3.connect(db)
+          conn.executescript("""
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE form_instances (
+              instance_id TEXT PRIMARY KEY,
+              template_id TEXT NOT NULL,
+              zid INTEGER, eid INTEGER,
+              display_name TEXT NOT NULL,
+              organization TEXT,
+              period_start TEXT, period_end TEXT,
+              unit TEXT, status TEXT DEFAULT 'draft',
+              created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+              template_title TEXT, enterprise_code TEXT,
+              signatures_json TEXT DEFAULT '{}',
+              rash_entries_json TEXT DEFAULT '[]'
+            );
+            CREATE TABLE form_cell_values (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              instance_id TEXT NOT NULL,
+              row_no INTEGER NOT NULL,
+              row_name TEXT,
+              column_key TEXT NOT NULL,
+              value_num REAL, value_text TEXT,
+              updated_at TEXT, updated_by TEXT, updated_client_id TEXT,
+              UNIQUE (instance_id, row_no, column_key)
+            );
+          """)
+          iid = str(uuid.uuid4())
+          now = "2026-01-01T00:00:00Z"
+          conn.execute(
+            "INSERT INTO form_instances VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (iid, "N01_01", 1, 1, "N01_01", "CI", "2026-01-01", "2026-03-31",
+             "тыс.руб.", "draft", now, now, "Test", "1@1", "{}", "[]"),
+          )
+          conn.commit()
+          conn.close()
+          print("package", p.resolve(), "instance", iid)
+          PY
+      - name: Collab smoke + conflict claim
+        run: |
+          python3 scripts/tauri-collab-smoke.py ci-package --clients 8 --seconds 8 --conflict-test
+          ./scripts/acceptance-desktop.sh ci-package

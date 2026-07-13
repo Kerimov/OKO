@@ -40,10 +40,16 @@ npm run dev:tauri
 npm run build:tauri
 # или точечно:
 npm run build:tauri:dmg    # macOS
-npm run build:tauri:nsis   # Windows NSIS
+npm run build:tauri:nsis   # Windows NSIS (только на Windows)
 ```
 
 Артефакты: `src-tauri/target/release/bundle/`.
+
+Установка macOS без двух старых копий в «Программах»:
+
+```bash
+./scripts/install-macos-oko.sh path/to/OKO\ Zapolnenie_0.1.0_aarch64.dmg
+```
 
 Иконки: `npm run icons` (из `src-tauri/icons/icon.png`).
 

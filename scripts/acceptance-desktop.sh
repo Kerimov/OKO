@@ -9,8 +9,8 @@ if [[ -z "$PKG" || ! -f "$PKG/oko.db" ]]; then
   exit 1
 fi
 
-echo "== collab smoke (10 clients) =="
-python3 "$ROOT/scripts/tauri-collab-smoke.py" "$PKG" --clients 10 --seconds 20
+echo "== collab smoke (10 clients) + §15.2 claim =="
+python3 "$ROOT/scripts/tauri-collab-smoke.py" "$PKG" --clients 10 --seconds 20 --conflict-test
 
 echo "== schema_version =="
 if [[ -f "$PKG/.oko/schema_version" ]]; then

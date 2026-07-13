@@ -122,6 +122,39 @@ export function listRecentPackages(): string[] {
   }
 }
 
+async function loadRulesBundle(): Promise<Record<string, unknown>> {
+  const fetchOne = async (path: string) => {
+    try {
+      const res = await fetch(`/${path}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  };
+  const [checks, rash, recalc, rowFormulas, kontr] = await Promise.all([
+    fetchOne("data/checks.json"),
+    fetchOne("data/rash-rules.json"),
+    fetchOne("data/recalc-rules.json"),
+    fetchOne("data/row-formulas.json"),
+    fetchOne("data/kontr.json"),
+  ]);
+  const kontrItems =
+    kontr && typeof kontr === "object"
+      ? ((kontr as { items?: unknown; agents?: unknown }).items ??
+        (kontr as { agents?: unknown }).agents ??
+        kontr)
+      : [];
+  return {
+    exportedAt: new Date().toISOString(),
+    ...(checks ? { checks } : {}),
+    ...(rash ? { rash } : {}),
+    ...(recalc ? { recalc } : {}),
+    ...(rowFormulas ? { rowFormulas } : {}),
+    kontr: { items: Array.isArray(kontrItems) ? kontrItems : [] },
+  };
+}
+
 async function buildExportWarnings(): Promise<string[]> {
   const warnings: string[] = [];
   try {
@@ -479,6 +512,18 @@ function createApi(): OkoDesktopApi {
         actor: opts?.actor || getSessionUser()?.displayName || "Оператор",
         pin: opts?.pin ?? null,
       });
+      try {
+        const raw = await invoke<string>("read_text_file", { path: filePath });
+        const pkg = JSON.parse(raw) as Record<string, unknown>;
+        pkg.version = "1.2";
+        pkg.rules = await loadRulesBundle();
+        await invoke("write_text_file", {
+          path: filePath,
+          content: `${JSON.stringify(pkg, null, 2)}\n`,
+        });
+      } catch {
+        /* keep file without rules if enrichment fails */
+      }
       const fileName = filePath.split(/[/\\]/).pop() || "export.json";
       return { filePath, fileName, warnings };
     },
