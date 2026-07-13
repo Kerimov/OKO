@@ -69,15 +69,14 @@ python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
 
 ## Известные ограничения пилота
 
-- Ручная приёмка §15 на SMB / 2 ПК и импорт в портал — см. [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md).
-- Windows NSIS и Linux-бандлы — на целевой ОС.
-- Нет нотаризации / корпоративного Code Signing в CI по умолчанию.
+- Корпоративная подпись бинарников — по желанию, см. [DESKTOP-SIGNING.md](DESKTOP-SIGNING.md).
+- Windows NSIS / Linux AppImage собираются в GitHub Actions (`tauri-ci`).
 
-Автопроверка:
+Полная автоприёмка §15 (включая импорт 76 форм в портал):
 
 ```bash
-./scripts/acceptance-desktop.sh /path/to/package
-# включает smoke + --conflict-test (§15.2 / kontr *)
+# Nest на :3001 с admin-доступом
+python3 scripts/acceptance-tz-remaining.py
 ```
 
 Установка macOS:
