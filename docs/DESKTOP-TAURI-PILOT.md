@@ -69,13 +69,19 @@ python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
 
 ## Известные ограничения пилота
 
-- Ручная приёмка §15 (2 ПК / SMB / импорт в портал) — см. [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md).
-- Windows NSIS и Linux-бандлы собираются на целевой ОС.
-- Экспорт JSON v1.1 без блока `rules` (v1.2 портала).
+- Ручная приёмка §15 на SMB / 2 ПК и импорт в портал — см. [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md).
+- Windows NSIS и Linux-бандлы — на целевой ОС.
 - Нет нотаризации / корпоративного Code Signing в CI по умолчанию.
 
-Автопроверка коллаба:
+Автопроверка:
 
 ```bash
 ./scripts/acceptance-desktop.sh /path/to/package
+# включает smoke + --conflict-test (§15.2 / kontr *)
+```
+
+Установка macOS:
+
+```bash
+./scripts/install-macos-oko.sh desktop/tauri/src-tauri/target/release/bundle/dmg/*.dmg
 ```

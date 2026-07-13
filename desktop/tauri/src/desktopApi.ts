@@ -62,7 +62,7 @@ export interface OkoDesktopApi {
   loadAllInstances: () => Promise<OkoFormInstance[]>;
   setInstanceStatus: (
     instanceId: string,
-    status: "draft" | "submitted"
+    status: "draft" | "submitted" | "ready" | "accepted"
   ) => Promise<OkoFormInstance>;
   loadSchema: (formId: string) => Promise<FormSchema>;
   loadCatalog: () => Promise<FormCatalog>;

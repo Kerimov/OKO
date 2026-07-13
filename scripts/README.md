@@ -38,8 +38,9 @@ python scripts/export_mdb_data.py
 | `missing_forms_info.py` | Какие формы отсутствуют в каталоге |
 | `mde_gap.py` | Разрыв между MDE и порталом |
 | `empty_portal_forms.py` | Генерация пустых экземпляров |
-| `tauri-collab-smoke.py` | M5: 10 клиентов на одном `oko.db` (presence + write) |
+| `tauri-collab-smoke.py` | M5: 10 клиентов + опционально `--conflict-test` |
 | `acceptance-desktop.sh` | Smoke + чеклист ручной приёмки §15 |
+| `install-macos-oko.sh` | Установка DMG в «Программы» (оба имени .app) |
 | `generate_schemas.py` | Устаревший генератор (используйте `generate_schemas_from_mdb.py`) |
 
 ---

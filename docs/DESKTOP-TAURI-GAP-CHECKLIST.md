@@ -11,77 +11,64 @@
 
 | # | Пункт ТЗ | Работа | Готово |
 |---|----------|--------|--------|
-| P0.1 | §15.1–2 | Ручной тест на **2 ПК / SMB**: разные ячейки ≤ 5 с; занятая не берётся | [ ] |
-| P0.2 | §15.4 | Потеря SMB → `offline`, после — resync | [ ] |
-| P0.3 | §15.5 | PIN → force-unlock + backup перед экспортом | [ ] |
-| P0.4 | §15.3 | Экспорт JSON → импорт в портал ЦО (76 форм) | [ ] |
-| P0.5 | §2 Win | Сборка **NSIS** на **Windows-агенте** (`npm run build:tauri:nsis`) | [ ] |
-| P0.6 | M4 / §8.3 | **recalc** + **rash** в bridge (`formEngine.ts`) | [x] |
-
-Авточасть коллаба/нагрузки:
+| P0.1 | §15.1–2 | Ручной тест на **2 ПК / SMB** | [ ] авто: `--conflict-test` в smoke [x] |
+| P0.2 | §15.4 | Потеря SMB → `offline`, resync | [ ] (UI есть; нужен SMB-стенд) |
+| P0.3 | §15.5 | PIN → force-unlock + backup перед экспортом | [ ] (код есть; нужен прогон) |
+| P0.4 | §15.3 | Экспорт JSON → импорт в портал ЦО | [ ] (экспорт **v1.2 + rules** [x]) |
+| P0.5 | §2 Win | NSIS на Windows-агенте | [ ] |
+| P0.6 | M4 / §8.3 | recalc + rash в bridge | [x] |
 
 ```bash
 ./scripts/acceptance-desktop.sh /path/to/package
+./scripts/install-macos-oko.sh path/to/*.dmg
 ```
 
-**Windows NSIS (P0.5):** на macOS/Linux NSIS-бандл Windows не собирается. На машине с VS Build Tools:
-
-```bash
-cd desktop/tauri && npm ci && npm run build:tauri:nsis
-```
+**Windows NSIS:** только на Win + VS Build Tools: `npm run build:tauri:nsis`.
 
 ---
 
-## P1 — соответствие ТЗ по функционалу
+## P1 — функционал
 
-| # | Пункт ТЗ | Работа | Готово |
-|---|----------|--------|--------|
-| P1.1 | §3 | Имя из ОС (`USERNAME`/`USER`) как fallback; collab через displayName | [x] |
-| P1.2 | §6.4 | Контрагенты: claim с учётом `column_key = '*'` (строка целиком) | [x] |
-| P1.3 | §7.4–7.5 | Recalc в bridge; конфликт чужой ячейки — подсветка + тост 3 с | [x] |
-| P1.4 | §8.1 | Недавние комплекты (localStorage) | [x] |
-| P1.5 | §8.5 | Предложение бэкапа + warnings при экспорте | [x] |
-| P1.6 | §9–10 | Статусы: UI `draft`/`submitted` ↔ ТЗ `ready` (сдача = submitted) | [~] |
-| P1.7 | §10 | Импорт JSON: диалог overwrite / skip по `templateId` | [x] |
-| P1.8 | §8.3 | Панель «В комплекте» / presence — из Electron UI | [x] |
-
----
-
-## P2 — нефункционалка и выкладка
-
-| # | Пункт ТЗ | Работа | Готово |
-|---|----------|--------|--------|
-| P2.1 | §2 Linux | AppImage/deb на Linux-агенте | [ ] |
-| P2.2 | §11 | Логи → APPDATA / Library/Logs / `.local/share` (`append_app_log`) | [x] |
-| P2.3 | §11 | `.oko/schema_version` при open/create | [x] |
-| P2.4 | §11 | Размер ≤ 30 МБ (macOS DMG ~5–6 МБ) | [~] |
-| P2.5 | M5 | Code signing / нотаризация | [ ] |
-| P2.6 | пилот | Экспорт `rules` v1.2 | [ ] |
+| # | Пункт | Готово |
+|---|-------|--------|
+| P1.1 | Имя из ОС | [x] |
+| P1.2 | kontr `*` row lock | [x] |
+| P1.3 | recalc + конфликт-тост | [x] |
+| P1.4 | недавние комплекты | [x] |
+| P1.5 | бэкап + warnings экспорта | [x] |
+| P1.6 | `ready`/`accepted` → `submitted` в API | [x] |
+| P1.7 | import overwrite/skip | [x] |
+| P1.8 | UI presence / «В комплекте» | [x] |
 
 ---
 
-## P3 — косметика
+## P2 — нефункционалка
+
+| # | Пункт | Готово |
+|---|-------|--------|
+| P2.1 | Linux bundle | [ ] |
+| P2.2 | логи APPDATA/Library | [x] |
+| P2.3 | `.oko/schema_version` | [x] |
+| P2.4 | размер ≤ 30 МБ | [~] macOS ок |
+| P2.5 | code signing | [ ] |
+| P2.6 | экспорт `rules` v1.2 | [x] |
+
+---
+
+## P3 — косметика / CI
 
 | # | Работа | Готово |
 |---|--------|--------|
-| P3.1 | displayName кириллица vs ASCII productName | [~] |
-| P3.2 | Скрипт установки без двух `.app` в README | [ ] |
-| P3.3 | Упростить local admin auth (согласование) | [ ] |
-| P3.4 | CI артефакты | [ ] |
+| P3.1 | title кириллица; productName ASCII (DMG) | [x] |
+| P3.2 | `scripts/install-macos-oko.sh` | [x] |
+| P3.3 | упростить local auth | [ ] согласование |
+| P3.4 | CI `tauri-ci` (frontend + smoke) | [x] |
 
 ---
 
-## Уже закрыто (база M1–M5)
+## Осталось только на стенде
 
-- [x] M1–M5 каркас, UI parity Electron, Tauri 2 + rusqlite
-- [x] P0.6 rash/recalc, P1.1–1.5/1.7–1.8, P2.2–2.3
-
----
-
-## Осталось снаружи этой машины
-
-1. P0.1–P0.4 на реальном SMB + портал  
-2. P0.5 NSIS на Windows  
-3. P2.1 Linux bundle, P2.5 подпись  
-
-Вне scope §14 не планировать.
+1. SMB + 2 клиента (P0.1–P0.3)  
+2. Импорт выгрузки в портал (P0.4)  
+3. Windows NSIS (P0.5) и при необходимости Linux (P2.1)  
+4. Подпись / нотаризация (P2.5)

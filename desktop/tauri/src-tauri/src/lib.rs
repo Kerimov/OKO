@@ -267,6 +267,10 @@ fn open_db(db_path: &Path) -> Result<Connection, AppError> {
         details TEXT,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
       "#,
     )
     .map_err(|e| AppError::Message(format!("migrate presence failed: {e}")))?;
@@ -1412,7 +1416,7 @@ fn set_instance_status(
   status: String,
   state: State<'_, AppState>,
 ) -> Result<OkoFormInstance, AppError> {
-  let status = if status == "submitted" {
+  let status = if matches!(status.as_str(), "submitted" | "ready" | "accepted") {
     "submitted"
   } else {
     "draft"
@@ -1590,7 +1594,7 @@ fn export_package_json(
     meta.period_start.clone()
   };
   let payload = serde_json::json!({
-    "version": "1.1",
+    "version": "1.2",
     "exportedAt": iso_now(),
     "organization": org,
     "periodStart": meta.period_start,
@@ -1665,6 +1669,8 @@ fn import_package_json(
   })?;
 
   let mut count = 0usize;
+  let rules = value.get("rules").cloned();
+
   for inst_val in instances {
     let mut inst: OkoFormInstance = serde_json::from_value(inst_val.clone())
       .map_err(|e| AppError::Message(format!("instance parse failed: {e}")))?;
@@ -1702,6 +1708,58 @@ fn import_package_json(
     })?;
     save_instance(inst, state.clone())?;
     count += 1;
+  }
+
+  if let Some(rules_val) = rules {
+    with_package(&state, |pkg| {
+      let write_meta = |key: &str, v: &Value| -> Result<(), AppError> {
+        let s = serde_json::to_string(v)
+          .map_err(|e| AppError::Message(format!("rules serialize failed: {e}")))?;
+        pkg
+          .conn
+          .execute(
+            r#"INSERT INTO app_meta (key, value) VALUES (?1, ?2)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value"#,
+            params![key, s],
+          )
+          .map_err(|e| AppError::Message(format!("app_meta write failed: {e}")))?;
+        Ok(())
+      };
+      if let Some(v) = rules_val.get("checks") {
+        write_meta("rules_checks", v)?;
+      }
+      if let Some(v) = rules_val.get("rash") {
+        write_meta("rules_rash", v)?;
+      }
+      if let Some(v) = rules_val.get("recalc") {
+        write_meta("rules_recalc", v)?;
+      }
+      if let Some(v) = rules_val.get("rowFormulas") {
+        write_meta("rules_row_formulas", v)?;
+      }
+      if let Some(v) = rules_val.get("kontr") {
+        write_meta("rules_kontr", v)?;
+      }
+      let exported = rules_val
+        .get("exportedAt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+      let exported = if exported.is_empty() {
+        iso_now()
+      } else {
+        exported
+      };
+      pkg
+        .conn
+        .execute(
+          r#"INSERT INTO app_meta (key, value) VALUES ('rules_exported_at', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value"#,
+          params![exported],
+        )
+        .map_err(|e| AppError::Message(format!("app_meta write failed: {e}")))?;
+      Ok(())
+    })?;
   }
 
   with_package(&state, |pkg| {
