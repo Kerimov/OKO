@@ -26,7 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app", "nsis", "msi"],
+    "targets": ["dmg", "app", "nsis", "msi", "appimage", "deb"],
     "category": "Business",
     "shortDescription": "ОКО Заполнение — офлайн-заполнение форм комплекта",
     "longDescription": "Десктоп-клиент для совместного заполнения отчётного комплекта ОКО на общей папке (SMB) с SQLite WAL.",

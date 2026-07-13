@@ -20,8 +20,10 @@ else
 fi
 
 echo
-echo "Manual remaining (§15):"
-echo "  1) 2 ПК + SMB: разные ячейки ≤5с; занятая не берётся"
-echo "  2) отключить сеть к папке → «Нет доступа к папке» → resync"
-echo "  3) PIN: force-unlock + backup + export → импорт в портал"
-echo "  4) Windows: npm run build:tauri:nsis на Win-агенте"
+echo "== TZ remaining (local; portal if API up) =="
+if curl -sf "$OKO_API_URL/api/health" >/dev/null 2>&1 || curl -sf http://localhost:3001/api/health >/dev/null 2>&1; then
+  python3 "$ROOT/scripts/acceptance-tz-remaining.py" --forms "${OKO_ACCEPT_FORMS:-76}"
+else
+  python3 "$ROOT/scripts/acceptance-tz-remaining.py" --forms 10 --skip-portal
+  echo "(portal skipped — start Nest for full §15.3)"
+fi
