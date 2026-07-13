@@ -12,6 +12,7 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
+      "@oko/engine": ["../../packages/engine/src/index.ts"],
       "@portal/*": ["../../portal/src/*"]
     }
   },

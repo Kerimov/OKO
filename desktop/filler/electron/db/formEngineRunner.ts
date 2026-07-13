@@ -1,8 +1,8 @@
-import type { RowData } from "@portal/types";
+import type { RowData, FormRashEntry } from "@portal/types";
 import type { RashRulesData } from "@portal/types";
 import {
   countRashRulesForForm,
-  validateKontrRash,
+  validateAllRash,
   type RashValidationIssue,
 } from "@portal/engine/rashEngine";
 import {
@@ -41,13 +41,35 @@ function rulesForForm(formId: string): RecalcRule[] {
   }
 }
 
-export function runPackageRashChecks(formId: string, rows: RowData[]): RashValidationIssue[] {
+export function runPackageRashChecks(
+  formId: string,
+  rows: RowData[],
+  rashEntries: FormRashEntry[] = []
+): RashValidationIssue[] {
   const schema = loadSchemaFromDisk(formId);
   const data = readPublicJson("data/rash-rules.json") as RashRulesData;
-  const numericColumns = schema.columns
-    .filter((c) => c.type === "number")
-    .map((c) => c.key);
-  return validateKontrRash(formId, rows, numericColumns, data);
+  let index: import("@portal/engine/rowRashIndex").RowRashIndexData | undefined;
+  let kontrAgents: import("@portal/types").KontrAgent[] = [];
+  try {
+    index = readPublicJson("data/row-rash-index.json") as import("@portal/engine/rowRashIndex").RowRashIndexData;
+  } catch {
+    index = undefined;
+  }
+  try {
+    const kontr = readPublicJson("data/kontr.json") as { items?: import("@portal/types").KontrAgent[] };
+    kontrAgents = kontr.items ?? [];
+  } catch {
+    kontrAgents = [];
+  }
+  return validateAllRash(
+    formId,
+    rows,
+    schema.columns,
+    rashEntries,
+    data,
+    index,
+    kontrAgents
+  );
 }
 
 export function countPackageRashRules(formId: string): number {

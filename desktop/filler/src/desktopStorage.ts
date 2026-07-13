@@ -48,6 +48,29 @@ export async function loadKontrAgents(): Promise<KontrAgent[]> {
   return (await window.oko.getKontrAgents()) as KontrAgent[];
 }
 
+export async function searchKontrAgents(
+  q: string,
+  orgTypes?: number[] | null,
+  limit = 80
+): Promise<KontrAgent[]> {
+  const all = await loadKontrAgents();
+  const needle = q.trim().toLowerCase();
+  let filtered = all;
+  if (orgTypes?.length) {
+    const set = new Set(orgTypes);
+    filtered = filtered.filter((k) => k.orgType != null && set.has(k.orgType));
+  }
+  if (!needle) return filtered.slice(0, limit);
+  return filtered
+    .filter(
+      (k) =>
+        k.name.toLowerCase().includes(needle) ||
+        (k.inn && k.inn.includes(needle)) ||
+        (k.kpp && k.kpp.includes(needle))
+    )
+    .slice(0, limit);
+}
+
 export function exportInstance(instance: OkoFormInstance): void {
   const label = (instance.displayName ?? instance.templateId ?? "form")
     .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")

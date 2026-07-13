@@ -2,12 +2,14 @@
   "name": "oko-server",
   "private": true,
   "version": "1.0.0",
+  "description": "Domain layer for OKO API (Nest entrypoint is server-nest). Express index is deprecated shell-only.",
   "type": "module",
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--experimental-sqlite tsx watch src/index.ts",
     "start": "cross-env NODE_OPTIONS=--experimental-sqlite tsx src/index.ts"
   },
   "dependencies": {
+    "@oko/engine": "file:../packages/engine",
     "cors": "^2.8.5",
     "cross-env": "^7.0.3",
     "dotenv": "^17.4.2",

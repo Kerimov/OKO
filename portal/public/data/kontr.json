@@ -1,91 +1,172 @@
 {
-  "version": "1.0",
-  "source": "z261.mdb",
-  "total": 12,
+  "version": "1.2",
+  "source": "z261.m_b",
+  "total": 13,
   "items": [
     {
-      "id": 1,
-      "name": "Администрация ПАО Газпром",
-      "orgForm": null,
-      "inn": "7736050003",
-      "kpp": "997250001"
-    },
-    {
-      "id": 10,
-      "name": "Газпром добыча Надым ООО",
-      "orgForm": null,
-      "inn": "8903019871",
-      "kpp": "997250001"
-    },
-    {
-      "id": 51,
-      "name": "Газпром авиа ООО",
-      "orgForm": null,
-      "inn": "7736046504",
-      "kpp": "781401001"
-    },
-    {
-      "id": 56,
-      "name": "Газпром флот ООО",
-      "orgForm": null,
-      "inn": "7740000037",
-      "kpp": "774850001"
-    },
-    {
-      "id": 2334,
-      "name": "Аэропорт Белоярский АО",
-      "orgForm": null,
-      "inn": "8611002077",
-      "kpp": "861101001"
-    },
-    {
-      "id": 3040,
-      "name": "ПРОЧИЕ",
-      "orgForm": null,
-      "inn": "0000000000",
-      "kpp": "000000002"
-    },
-    {
-      "id": 25179,
-      "name": "Газпром СПГ Владивосток ООО",
-      "orgForm": null,
-      "inn": "7736182401",
-      "kpp": "253101001"
-    },
-    {
-      "id": 27721,
-      "name": "Аэро Мурманск ООО",
+      "id": 37338,
+      "name": "Isource Supply International doo Beograd-Vraсar",
       "orgForm": "ГПН",
-      "inn": "5105091572",
-      "kpp": "510501001"
-    },
-    {
-      "id": 27762,
-      "name": "Арктика Медиа ООО",
-      "orgForm": "ГПН",
-      "inn": "8905067133",
-      "kpp": "890301001"
+      "orgType": 1,
+      "inn": null,
+      "kpp": null,
+      "country": "RS",
+      "city": null,
+      "ogrn": "21572039",
+      "use": false,
+      "mandatoryRash": false
     },
     {
       "id": 28506,
       "name": "АвиаГСМ Шереметьево ООО",
       "orgForm": "ГПН",
+      "orgType": 1,
       "inn": "5047095550",
-      "kpp": "504701001"
+      "kpp": "504701001",
+      "country": "RU",
+      "city": null,
+      "ogrn": "1085047006571",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 1,
+      "name": "Администрация ПАО Газпром",
+      "orgForm": null,
+      "orgType": 1,
+      "inn": "7736050003",
+      "kpp": "997250001",
+      "country": "RU",
+      "city": "Москва",
+      "ogrn": "1027700070518",
+      "use": false,
+      "mandatoryRash": false
     },
     {
       "id": 28659,
       "name": "Алтайское подворье ООО",
       "orgForm": "ГПН",
+      "orgType": 1,
       "inn": "7728704774",
-      "kpp": "772801001"
+      "kpp": "772801001",
+      "country": "RU",
+      "city": null,
+      "ogrn": "1097746398683",
+      "use": false,
+      "mandatoryRash": false
     },
     {
-      "id": 37338,
-      "name": "Isource Supply International doo Beograd-Vraсar",
+      "id": 27762,
+      "name": "Арктика Медиа ООО",
       "orgForm": "ГПН",
-      "inn": null,
-      "kpp": null
+      "orgType": 1,
+      "inn": "8905067133",
+      "kpp": "890301001",
+      "country": "RU",
+      "city": "Ноябрьск",
+      "ogrn": "1218900000880",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 27721,
+      "name": "Аэро Мурманск ООО",
+      "orgForm": "ГПН",
+      "orgType": 1,
+      "inn": "5105091572",
+      "kpp": "510501001",
+      "country": "RU",
+      "city": null,
+      "ogrn": "1085105000221",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 2334,
+      "name": "Аэропорт Белоярский АО",
+      "orgForm": null,
+      "orgType": 3,
+      "inn": "8611002077",
+      "kpp": "861101001",
+      "country": "RU",
+      "city": "Белоярский",
+      "ogrn": "1028601522036",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 51,
+      "name": "Газпром авиа ООО",
+      "orgForm": null,
+      "orgType": 1,
+      "inn": "7736046504",
+      "kpp": "781401001",
+      "country": "RU",
+      "city": null,
+      "ogrn": "1025007509768",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 10,
+      "name": "Газпром добыча Надым ООО",
+      "orgForm": null,
+      "orgType": 1,
+      "inn": "8903019871",
+      "kpp": "997250001",
+      "country": "RU",
+      "city": "Надым",
+      "ogrn": "1028900578080",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 25179,
+      "name": "Газпром СПГ Владивосток ООО",
+      "orgForm": null,
+      "orgType": 3,
+      "inn": "7736182401",
+      "kpp": "253101001",
+      "country": "RU",
+      "city": null,
+      "ogrn": "1037700086588",
+      "use": true,
+      "mandatoryRash": true
+    },
+    {
+      "id": 56,
+      "name": "Газпром флот ООО",
+      "orgForm": null,
+      "orgType": 1,
+      "inn": "7740000037",
+      "kpp": "774850001",
+      "country": "RU",
+      "city": "Москва",
+      "ogrn": "1027700198635",
+      "use": false,
+      "mandatoryRash": false
+    },
+    {
+      "id": 3040,
+      "name": "ПРОЧИЕ",
+      "orgForm": null,
+      "orgType": 3,
+      "inn": "0000000000",
+      "kpp": "000000002",
+      "country": "STL",
+      "city": null,
+      "ogrn": null,
+      "use": true,
+      "mandatoryRash": false
+    },
+    {
+      "id": 3041,
+      "name": "ФИЗИЧЕСКИЕ ЛИЦА",
+      "orgForm": null,
+      "orgType": 3,
+      "inn": "0000000000",
+      "kpp": "000000003",
+      "country": "STL"
     }
   ]
 }

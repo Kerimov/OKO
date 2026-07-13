@@ -197,6 +197,28 @@ CREATE TABLE IF NOT EXISTS rash_addsum (
 CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
 CREATE INDEX IF NOT EXISTS idx_rash_rules_ref ON rash_rules(ref_rows);
 
+CREATE TABLE IF NOT EXISTS form_rash_entries (
+    id              SERIAL PRIMARY KEY,
+    instance_id     TEXT NOT NULL REFERENCES form_instances(instance_id) ON DELETE CASCADE,
+    form_id         TEXT NOT NULL,
+    parent_row_no   INTEGER NOT NULL,
+    column_key      TEXT,
+    rash_kod        INTEGER NOT NULL REFERENCES rash_rules(kod),
+    line_no         INTEGER NOT NULL DEFAULT 0,
+    kontr_id        INTEGER,
+    kontr_name      TEXT,
+    inn             TEXT,
+    kpp             TEXT,
+    attr_a2         TEXT,
+    attr_a3         TEXT,
+    attr_a4         TEXT,
+    values_json     TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_rash_entries_instance ON form_rash_entries(instance_id);
+CREATE INDEX IF NOT EXISTS idx_rash_entries_lookup
+  ON form_rash_entries(instance_id, form_id, parent_row_no, rash_kod);
+
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
     username        TEXT NOT NULL,
@@ -258,7 +280,15 @@ CREATE TABLE IF NOT EXISTS kontragents (
     name TEXT NOT NULL,
     org_form TEXT,
     inn TEXT,
-    kpp TEXT
+    kpp TEXT,
+    org_type INTEGER,
+    mandatory_rash INTEGER DEFAULT 0,
+    country TEXT,
+    city TEXT,
+    ogrn TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_kontragents_name ON kontragents(name);
+CREATE INDEX IF NOT EXISTS idx_kontragents_org_type ON kontragents(org_type);
 
 CREATE INDEX IF NOT EXISTS idx_periods_zid ON periods(zid);

@@ -1,13 +1,25 @@
 .DS_Store
 *.local
+.oko-dev-pids
+
 portal/node_modules
 portal/dist
 server/node_modules
+server-nest/node_modules
+server-nest/dist
+packages/**/node_modules
+packages/**/dist
 desktop/filler/node_modules
 desktop/filler/dist
 desktop/filler/dist-electron
 desktop/filler/release
 desktop/filler/installer
+desktop/tauri/node_modules
+desktop/tauri/dist
+desktop/tauri/src-tauri/target
+
+# Accidental tsc emit next to TypeScript sources
+server/src/**/*.js
 
 # SQLite database
 data/oko.db
@@ -20,10 +32,12 @@ portal/public/pdf/*.pdf
 reference/*.mdb
 reference/*.mde
 # Локальная копия комплекта ОКО (не публиковать)
-12345/*.mdb
+12345/
 *.mde
 .env
 desktop/filler/.env.signing
 desktop/filler/build/*.pfx
 desktop/filler/build/*.cer
 *.pfx
+*.pem
+*.key

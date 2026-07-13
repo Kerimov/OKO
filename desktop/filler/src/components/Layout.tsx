@@ -1,5 +1,7 @@
 import { Outlet, Link, useNavigate, useMatch } from "react-router-dom";
 
+import { useEffect, useState } from "react";
+
 import { usePackage } from "../context/PackageContext";
 
 import { useAuth } from "../context/AuthContext";
@@ -27,6 +29,38 @@ export function Layout() {
   const formMatch = useMatch("/form/:instanceId");
 
   const selectedInstanceId = formMatch?.params.instanceId;
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("oko-sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const [packageSidebarHidden, setPackageSidebarHidden] = useState(() => {
+    try {
+      return localStorage.getItem("oko-package-sidebar-hidden") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("oko-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("oko-package-sidebar-hidden", packageSidebarHidden ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [packageSidebarHidden]);
 
 
 
@@ -64,9 +98,9 @@ export function Layout() {
 
     <div className="app">
 
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
 
-        <Link to="/package" className="sidebar-brand">
+        <Link to="/package" className="sidebar-brand" title="ОКО Заполнение">
 
           <span className="sidebar-brand-mark">ОКО</span>
 
@@ -74,13 +108,33 @@ export function Layout() {
 
         </Link>
 
+        <button
+          type="button"
+          className="sidebar-toggle"
+          aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+          title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+          onClick={() => setSidebarCollapsed((v) => !v)}
+        >
+          {sidebarCollapsed ? "→" : "←"}
+        </button>
+
         <nav className="sidebar-nav">
 
-          <Link to="/package">Комплект</Link>
+          <Link to="/package" title={sidebarCollapsed ? "Комплект" : undefined}>
+            Комплект
+          </Link>
 
-          {isCoordinator && <Link to="/assignments">Назначения</Link>}
+          {isCoordinator && (
+            <Link to="/assignments" title={sidebarCollapsed ? "Назначения" : undefined}>
+              Назначения
+            </Link>
+          )}
 
-          {isAdmin && <Link to="/admin">Пользователи</Link>}
+          {isAdmin && (
+            <Link to="/admin" title={sidebarCollapsed ? "Пользователи" : undefined}>
+              Пользователи
+            </Link>
+          )}
 
         </nav>
 
@@ -112,25 +166,54 @@ export function Layout() {
 
         <header className="page-header compact">
 
-          <div>
+          <div className="page-header-left">
+            <button
+              type="button"
+              className="header-menu-btn"
+              aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+              title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+              onClick={() => setSidebarCollapsed((v) => !v)}
+            >
+              Меню
+            </button>
 
-            <h1>{session.meta.organization}</h1>
+            {selectedInstanceId && (
+              <button
+                type="button"
+                className="header-menu-btn"
+                aria-label={packageSidebarHidden ? "Показать список форм" : "Скрыть список форм"}
+                title={packageSidebarHidden ? "Показать список форм" : "Скрыть список форм"}
+                onClick={() => setPackageSidebarHidden((v) => !v)}
+              >
+                Список
+              </button>
+            )}
 
-            <p className="muted">
+            <div className="page-title">
 
-              ZID {session.meta.zid} · EID {session.meta.eid} ·{" "}
+              <h1>{session.meta.organization}</h1>
 
-              {formatPeriod(session.meta.periodStart, session.meta.periodEnd)}
+              <p className="muted">
 
-            </p>
+                ZID {session.meta.zid} · EID {session.meta.eid} ·{" "}
 
+                {formatPeriod(session.meta.periodStart, session.meta.periodEnd)}
+
+              </p>
+
+            </div>
           </div>
 
         </header>
 
         <div className={`workspace${selectedInstanceId ? " workspace-split" : ""}`}>
 
-          {selectedInstanceId && <PackageSidebar selectedInstanceId={selectedInstanceId} />}
+          {selectedInstanceId && (
+            <PackageSidebar
+              selectedInstanceId={selectedInstanceId}
+              hidden={packageSidebarHidden}
+            />
+          )}
 
           <div className="workspace-main">
 

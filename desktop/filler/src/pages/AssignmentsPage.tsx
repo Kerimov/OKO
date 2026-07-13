@@ -190,55 +190,57 @@ export function AssignmentsPage() {
               />
             </label>
           </div>
-          <table className="assignments-table">
-            <thead>
-              <tr>
-                <th>Код</th>
-                <th>Форма</th>
-                <th>Исполнитель</th>
-                <th>Статус</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((row) => (
-                <tr key={row.templateId}>
-                  <td className="mono">{row.templateId}</td>
-                  <td>{row.title}</td>
-                  <td>
-                    <input
-                      list="assignee-list"
-                      value={row.assignee}
-                      onChange={(e) => updateRow(row.templateId, { assignee: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={row.status}
-                      onChange={(e) =>
-                        updateRow(row.templateId, {
-                          status: e.target.value as AssignmentStatus,
-                        })
-                      }
-                    >
-                      {STATUS_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    {row.instanceId ? (
-                      <Link to={`/form/${row.instanceId}`}>Открыть</Link>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
+          <div className="table-wrap tight">
+            <table className="assignments-table">
+              <thead>
+                <tr>
+                  <th>Код</th>
+                  <th>Форма</th>
+                  <th>Исполнитель</th>
+                  <th>Статус</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((row) => (
+                  <tr key={row.templateId}>
+                    <td className="mono">{row.templateId}</td>
+                    <td>{row.title}</td>
+                    <td>
+                      <input
+                        list="assignee-list"
+                        value={row.assignee}
+                        onChange={(e) => updateRow(row.templateId, { assignee: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={row.status}
+                        onChange={(e) =>
+                          updateRow(row.templateId, {
+                            status: e.target.value as AssignmentStatus,
+                          })
+                        }
+                      >
+                        {STATUS_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      {row.instanceId ? (
+                        <Link to={`/form/${row.instanceId}`}>Открыть</Link>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ))}
     </div>

@@ -19,6 +19,7 @@ MDE = ROOT / "reference" / "OKO26-1.mde"
 if not MDE.exists():
     MDE = ROOT / "12345" / "OKO26-1.mde"
 OUT_DIR = ROOT / "portal" / "public" / "schemas"
+ROW_RASH_INDEX = ROOT / "portal" / "public" / "data" / "row-rash-index.json"
 
 SKIP_FIELDS = {"ZID", "EID", "Sort"}
 SYSTEM_FIELDS = {"Number", "Name"}
@@ -178,7 +179,7 @@ def load_fields(cur, form_id: str) -> list:
 
 def load_rows(cur, form_id: str) -> list:
     cur.execute(
-        "SELECT RowNo, RowNoOLD, RowName, kod "
+        "SELECT RowNo, RowNoOLD, RowName, kod, znak "
         "FROM a_stblROWs WHERE TName=? ORDER BY Sort",
         form_id,
     )
@@ -381,6 +382,44 @@ def main():
             print(f"  removed obsolete: {path.name}")
 
     print(f"\nGenerated {len(schemas)} forms -> {OUT_DIR}")
+    merge_rash_kod_from_index()
+
+
+def merge_rash_kod_from_index() -> None:
+    if not ROW_RASH_INDEX.exists():
+        print(f"  skip rashKod merge: {ROW_RASH_INDEX.name} not found")
+        return
+    index = json.loads(ROW_RASH_INDEX.read_text(encoding="utf-8"))
+    forms = index.get("forms", {})
+    patched = 0
+    for path in sorted(OUT_DIR.glob("*.json")):
+        if path.name == "catalog.json":
+            continue
+        form_id = path.stem
+        form_rows = forms.get(form_id, {})
+        if not form_rows:
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        changed = False
+        for row in data.get("rows", []):
+            num_raw = row.get("num")
+            if num_raw is None or num_raw == "":
+                continue
+            num = str(int(num_raw))
+            meta = form_rows.get(num)
+            if not meta or meta.get("defaultKod") is None:
+                continue
+            kod = meta["defaultKod"]
+            if row.get("rashKod") != kod:
+                row["rashKod"] = kod
+                changed = True
+        if changed:
+            path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            patched += 1
+    if patched:
+        print(f"  merged rashKod in {patched} schema files from {ROW_RASH_INDEX.name}")
 
 
 if __name__ == "__main__":

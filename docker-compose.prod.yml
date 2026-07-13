@@ -1,0 +1,54 @@
+# OKO production stack (on-prem, ТЗ §11)
+# Usage: cp .env.prod.example .env.prod && ./scripts/prod-up.sh
+#
+# Services: PostgreSQL + NestJS API + nginx portal
+
+name: oko-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oko}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-oko}
+    volumes:
+      - oko-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oko} -d ${POSTGRES_DB:-oko}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api-nest
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oko}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oko}
+      OKO_BOOTSTRAP_ADMIN_USER: ${OKO_BOOTSTRAP_ADMIN_USER:-admin}
+      OKO_BOOTSTRAP_ADMIN_PASSWORD: ${OKO_BOOTSTRAP_ADMIN_PASSWORD:?Set OKO_BOOTSTRAP_ADMIN_PASSWORD in .env.prod}
+      OKO_ADMIN_TOKEN: ${OKO_ADMIN_TOKEN:-}
+      OKO_USER_TOKEN: ${OKO_USER_TOKEN:-}
+      OKO_AUTH_DISABLED: ${OKO_AUTH_DISABLED:-0}
+      OKO_REIMPORT_KONTR_ON_START: ${OKO_REIMPORT_KONTR_ON_START:-0}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.portal
+    ports:
+      - "${OKO_HTTP_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  oko-pg-data:

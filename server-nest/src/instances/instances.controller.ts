@@ -1,0 +1,302 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpException,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import type { Request } from "express";
+import { getDb } from "../../../server/src/db.js";
+import {
+  assertInstanceEditable,
+  buildEvalSnapshotFromDb,
+  deleteInstanceFromDb,
+  getInstanceStorageStats,
+  listInstanceSummaries,
+  loadInstance,
+  migratePortalPayloadsToCells,
+  setInstanceStatus,
+  upsertInstance,
+} from "../../../server/src/instances.js";
+import { submitInstanceWithChecks, runInstancePeriodChecks } from "../../../server/src/instance-submit.js";
+import {
+  assertOrgInstanceAccess,
+  enforceOrgInstanceWrite,
+  mergeOrgFilter,
+  userZid,
+} from "../../../server/src/orgScope.js";
+import { loadRashEntries, saveRashEntries } from "../../../server/src/rash-data.js";
+import type { RashEntryDto } from "../../../server/src/rash-data.js";
+import type { OkoFormInstance } from "../../../server/src/types.js";
+import { AdminGuard } from "../auth/admin.guard.js";
+import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
+import { rethrowAsHttp } from "../common/oko-http.js";
+import {
+  InstanceMigrateDto,
+  InstanceRashPutDto,
+  InstanceRunChecksDto,
+  InstanceStatusDto,
+} from "./dto/instances.dto.js";
+
+@ApiTags("instances")
+@ApiBearerAuth()
+@Controller("instances")
+export class InstancesController {
+  @Get("stats")
+  @ApiOperation({ summary: "Статистика хранения экземпляров" })
+  async stats() {
+    return getInstanceStorageStats(await getDb());
+  }
+
+  @Get("eval-snapshot")
+  @ApiOperation({ summary: "Снимок данных для движка проверок" })
+  async evalSnapshot(@Req() req: Request) {
+    const zid = userZid(req);
+    return buildEvalSnapshotFromDb(await getDb(), zid ?? undefined);
+  }
+
+  @Post("normalize")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Миграция payload → form_cell_values (admin)" })
+  async normalize() {
+    try {
+      const count = await migratePortalPayloadsToCells(await getDb());
+      return { migrated: count };
+    } catch (e) {
+      rethrowAsHttp(e, "normalize failed");
+    }
+  }
+
+  @Get()
+  @ApiOperation({ summary: "Список экземпляров" })
+  @ApiQuery({ name: "zid", required: false })
+  @ApiQuery({ name: "eid", required: false })
+  async list(
+    @Req() req: Request,
+    @Query("zid") zidRaw?: string,
+    @Query("eid") eidRaw?: string
+  ) {
+    const filter =
+      zidRaw != null || eidRaw != null
+        ? {
+            zid: zidRaw != null ? Number(zidRaw) : undefined,
+            eid: eidRaw != null ? Number(eidRaw) : undefined,
+          }
+        : undefined;
+    return listInstanceSummaries(await getDb(), mergeOrgFilter(req, filter));
+  }
+
+  @Post("migrate")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Пакетный импорт экземпляров (admin)" })
+  async migrate(@Body() body: InstanceMigrateDto) {
+    if (body.settings) {
+      const db = await getDb();
+      const upsert = db.prepare(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      );
+      for (const [key, value] of Object.entries(body.settings)) {
+        const stored = typeof value === "string" ? value : JSON.stringify(value);
+        await upsert.run(key, stored);
+      }
+    }
+    let count = 0;
+    const db = await getDb();
+    for (const inst of (body.instances ?? []) as OkoFormInstance[]) {
+      await upsertInstance(db, inst);
+      count++;
+    }
+    return { migrated: count };
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: "Экземпляр формы по ID" })
+  async getOne(@Req() req: Request, @Param("id") id: string) {
+    const inst = await loadInstance(await getDb(), id);
+    if (!inst) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    try {
+      assertOrgInstanceAccess(req, inst);
+    } catch (e) {
+      rethrowAsHttp(e);
+    }
+    return inst;
+  }
+
+  @Post()
+  @HttpCode(201)
+  @ApiOperation({ summary: "Создать / сохранить экземпляр" })
+  async create(@Req() req: Request, @Body() body: OkoFormInstance) {
+    try {
+      const inst = enforceOrgInstanceWrite(req, body);
+      if (!inst.status) inst.status = "draft";
+      await upsertInstance(await getDb(), inst);
+      return inst;
+    } catch (e) {
+      rethrowAsHttp(e, "save failed");
+    }
+  }
+
+  @Put(":id")
+  @ApiOperation({ summary: "Обновить экземпляр" })
+  async update(
+    @Req() req: OkoRequest,
+    @Param("id") id: string,
+    @Body() body: OkoFormInstance
+  ) {
+    if (body.instanceId !== id) {
+      throw new BadRequestException({ error: "ID mismatch" });
+    }
+    try {
+      const existing = await loadInstance(await getDb(), id);
+      if (existing) {
+        assertOrgInstanceAccess(req, existing);
+        assertInstanceEditable(existing, req.apiRole === "admin");
+      }
+      const scoped = enforceOrgInstanceWrite(req, body);
+      await upsertInstance(await getDb(), scoped);
+      return scoped;
+    } catch (e) {
+      rethrowAsHttp(e, "save failed");
+    }
+  }
+
+  @Patch(":id/status")
+  @ApiOperation({ summary: "Сменить статус draft / submitted (submitted — после period-проверок)" })
+  async patchStatus(
+    @Req() req: OkoRequest,
+    @Param("id") id: string,
+    @Body() body: InstanceStatusDto
+  ) {
+    const { status } = body;
+    try {
+      const existing = await loadInstance(await getDb(), id);
+      if (!existing) {
+        throw new NotFoundException({ error: "Not found" });
+      }
+      assertOrgInstanceAccess(req, existing);
+      if (status === "draft" && req.apiRole !== "admin") {
+        throw new ForbiddenException({ error: "Only admin can reopen submitted forms" });
+      }
+      const updated =
+        status === "submitted"
+          ? await submitInstanceWithChecks(await getDb(), id)
+          : await setInstanceStatus(await getDb(), id, status);
+      if (!updated) {
+        throw new NotFoundException({ error: "Not found" });
+      }
+      return updated;
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "status update failed");
+    }
+  }
+
+  @Post(":id/run-checks")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Dry-run period-проверок (без смены статуса)" })
+  async runChecks(
+    @Req() req: OkoRequest,
+    @Param("id") id: string,
+    @Body() body: InstanceRunChecksDto = {}
+  ) {
+    try {
+      const existing = await loadInstance(await getDb(), id);
+      if (!existing) {
+        throw new NotFoundException({ error: "Not found" });
+      }
+      assertOrgInstanceAccess(req, existing);
+      const ran = await runInstancePeriodChecks(
+        await getDb(),
+        id,
+        body.mode ?? "period"
+      );
+      if (!ran) {
+        throw new NotFoundException({ error: "Not found" });
+      }
+      return ran.result;
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "run-checks failed");
+    }
+  }
+
+  @Delete(":id")
+  @ApiOperation({ summary: "Удалить экземпляр" })
+  async remove(@Req() req: Request, @Param("id") id: string) {
+    try {
+      const existing = await loadInstance(await getDb(), id);
+      if (existing) assertOrgInstanceAccess(req, existing);
+      await deleteInstanceFromDb(await getDb(), id);
+      return { ok: true as const };
+    } catch (e) {
+      rethrowAsHttp(e, "delete failed");
+    }
+  }
+
+  @Get(":id/rash")
+  @ApiOperation({ summary: "Записи расшифровки экземпляра" })
+  @ApiQuery({ name: "formId", required: false })
+  async getRash(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Query("formId") formIdQuery?: string
+  ) {
+    const db = await getDb();
+    const existing = await loadInstance(db, id);
+    if (!existing) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    try {
+      assertOrgInstanceAccess(req, existing);
+    } catch (e) {
+      rethrowAsHttp(e);
+    }
+    const formId = String(formIdQuery ?? existing.templateId).trim();
+    const entries = await loadRashEntries(db, id, formId || undefined);
+    return { entries };
+  }
+
+  @Put(":id/rash")
+  @ApiOperation({ summary: "Сохранить расшифровку экземпляра" })
+  async putRash(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: InstanceRashPutDto
+  ) {
+    const db = await getDb();
+    const existing = await loadInstance(db, id);
+    if (!existing) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    try {
+      assertOrgInstanceAccess(req, existing);
+    } catch (e) {
+      rethrowAsHttp(e);
+    }
+    const formId = String(body.formId ?? existing.templateId).trim();
+    if (!formId) {
+      throw new BadRequestException({ error: "formId required" });
+    }
+    const entries = await saveRashEntries(
+      db,
+      id,
+      formId,
+      (body.entries ?? []) as RashEntryDto[]
+    );
+    return { entries };
+  }
+}

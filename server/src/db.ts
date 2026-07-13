@@ -24,6 +24,12 @@ import {
 import { migrateAuditTable } from "./audit.js";
 import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
 import { migrateRashTables, seedRashFromJson } from "./rash.js";
+import { migrateRashDataTables } from "./rash-data.js";
+import {
+  migrateKontrTable,
+  reimportKontrFromJson,
+  seedKontrFromJson,
+} from "./kontr.js";
 import { migrateUserTables, seedBootstrapAdmin } from "./users.js";
 import {
   migrateAggTables,
@@ -63,44 +69,14 @@ CREATE TABLE IF NOT EXISTS kontragents (
   name TEXT NOT NULL,
   org_form TEXT,
   inn TEXT,
-  kpp TEXT
+  kpp TEXT,
+  org_type INTEGER,
+  mandatory_rash INTEGER DEFAULT 0,
+  country TEXT,
+  city TEXT,
+  ogrn TEXT
 );
 `;
-
-async function seedKontr(database: OkoDb): Promise<void> {
-  const count = await database
-    .prepare("SELECT COUNT(*) AS c FROM kontragents")
-    .get<{ c: number }>();
-  if ((count?.c ?? 0) > 0 || !fs.existsSync(KONTR_PATH)) return;
-
-  const data = JSON.parse(fs.readFileSync(KONTR_PATH, "utf-8")) as {
-    items: Array<{
-      id: number;
-      name: string;
-      orgForm?: string | null;
-      inn?: string | null;
-      kpp?: string | null;
-    }>;
-  };
-
-  const upsertSql =
-    database.dialect === "postgres"
-      ? `INSERT INTO kontragents (id, name, org_form, inn, kpp)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name,
-           org_form = EXCLUDED.org_form,
-           inn = EXCLUDED.inn,
-           kpp = EXCLUDED.kpp`
-      : `INSERT OR REPLACE INTO kontragents (id, name, org_form, inn, kpp) VALUES (?, ?, ?, ?, ?)`;
-
-  await database.transaction(async (tx) => {
-    const insert = tx.prepare(upsertSql);
-    for (const k of data.items) {
-      await insert.run(k.id, k.name, k.orgForm ?? null, k.inn ?? null, k.kpp ?? null);
-    }
-  });
-}
 
 async function initSchema(database: OkoDb): Promise<void> {
   if (database.dialect === "sqlite") {
@@ -112,6 +88,8 @@ async function initSchema(database: OkoDb): Promise<void> {
   await migrateExcelTables(database);
   await migrateInstanceTables(database);
   await migrateRashTables(database);
+  await migrateRashDataTables(database);
+  await migrateKontrTable(database);
   await migrateAuditTable(database);
   await migrateOrgTables(database);
   await migrateUserTables(database);
@@ -161,7 +139,13 @@ async function initSchema(database: OkoDb): Promise<void> {
   if (migratedInstances > 0) {
     console.log(`Migrated ${migratedInstances} instances from payload to form_cell_values`);
   }
-  await seedKontr(database);
+  const seededKontr = await seedKontrFromJson(database);
+  if (seededKontr > 0) {
+    console.log(`Seeded ${seededKontr} kontr agents from kontr.json`);
+  } else if (process.env.OKO_REIMPORT_KONTR_ON_START === "1" && fs.existsSync(KONTR_PATH)) {
+    const n = await reimportKontrFromJson(database);
+    console.log(`Reimported ${n} kontr agents from kontr.json`);
+  }
   await refreshUserAccountsCache();
 }
 

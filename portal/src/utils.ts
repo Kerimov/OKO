@@ -15,6 +15,7 @@ export function templateToRow(t: FormRowTemplate, schema: FormSchema): RowData {
   if (t.num) row.num = t.num;
   if (t.code) row.code = t.code;
   if (t.name) row.name = t.name;
+  if (t.rashKod != null) (row as RowData & { rashKod?: number }).rashKod = t.rashKod;
   const accountCode = t.code ?? t.num;
   if (schema.columns.some((c) => c.key === "account") && accountCode) {
     row.account = `${accountCode} ${t.name ?? ""}`.trim();

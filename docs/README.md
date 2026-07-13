@@ -10,6 +10,7 @@
 |----------|----------|
 | [AUDIT-OVERVIEW.md](AUDIT-OVERVIEW.md) | Обзор проекта для аудита: цели, этапы, объём работ, решения |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Техническая архитектура системы |
+| [ОКО-архитектура-файлы-увязки.md](ОКО-архитектура-файлы-увязки.md) | Архитектура, описание файлов проекта и увязки (с примерами) |
 | [PORTAL-GUIDE.md](PORTAL-GUIDE.md) | Руководство пользователя и администратора портала |
 | [../CHANGELOG.md](../CHANGELOG.md) | Хронология разработки |
 | [CHAT-LOG.md](CHAT-LOG.md) | Журнал решений из чата разработки |
@@ -33,10 +34,12 @@
 | Документ | Описание |
 |----------|----------|
 | [../portal/README.md](../portal/README.md) | Фронтенд-приложение |
-| [../server/README.md](../server/README.md) | REST API |
+| [../server-nest/README.md](../server-nest/README.md) | NestJS REST API |
+| [../server/README.md](../server/README.md) | Доменный слой API |
 | [../data/README.md](../data/README.md) | Схемы базы данных |
 | [../scripts/README.md](../scripts/README.md) | Скрипты выгрузки из MDB |
-| [../reference/README.md](../reference/README.md) | Эталонный комплект Access |
+| [../desktop/tauri/README.md](../desktop/tauri/README.md) | Целевой десктоп Tauri 2 |
+| [../desktop/filler/README.md](../desktop/filler/README.md) | Electron-пилот |
 | [../reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) | Анализ исходного ПК «ОКО» |
 
 ---

@@ -3,6 +3,18 @@ const TOKEN_KEY = "oko-api-token";
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export function getApiBase(): string {
   return API_BASE;
 }
@@ -67,8 +79,14 @@ export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Res
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetchRaw(path, init);
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(formatApiError(res.status, err) || res.statusText);
+    const text = await res.text();
+    let parsed: unknown = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      /* keep text */
+    }
+    throw new ApiError(res.status, parsed, formatApiError(res.status, text) || res.statusText);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -76,10 +94,24 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 function formatApiError(status: number, body: string): string {
   try {
-    const data = JSON.parse(body) as { error?: string; authRequired?: boolean };
+    const data = JSON.parse(body) as {
+      error?: string;
+      authRequired?: boolean;
+      message?: string | string[];
+      result?: { failed?: number; skipped?: number };
+    };
     if (status === 401 && data.authRequired) {
       return "Требуется вход в систему. Откройте главную страницу (/) и войдите под учётной записью администратора.";
     }
+    if (status === 422 && (data.error === "checks_failed" || (data as { message?: { error?: string } }).message?.error === "checks_failed")) {
+      const nested = (data as { message?: { result?: { failed?: number; skipped?: number } } }).message?.result;
+      const result = data.result ?? nested;
+      const failed = result?.failed ?? 0;
+      const skipped = result?.skipped ?? 0;
+      return `Сдача отклонена: не пройдены проверки увязки (ошибок: ${failed}, не разобрано: ${skipped}).`;
+    }
+    if (typeof data.message === "string") return data.message;
+    if (Array.isArray(data.message)) return data.message.join("; ");
     return data.error ?? body;
   } catch {
     return body;

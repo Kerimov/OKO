@@ -17,3 +17,8 @@ export const KONTR_FORM_IDS = new Set([
 export function isKontrForm(formId: string): boolean {
   return KONTR_FORM_IDS.has(formId);
 }
+
+/** Форма с правилами sp_rash (контрагенты в строках и/или кнопка [...]). */
+export function hasRashRules(ruleCount: number): boolean {
+  return ruleCount > 0;
+}

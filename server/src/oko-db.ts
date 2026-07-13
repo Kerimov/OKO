@@ -238,7 +238,26 @@ async function createPostgresDb(): Promise<OkoDb> {
 
 export async function initDatabase(): Promise<OkoDb> {
   if (dbInstance) return dbInstance;
-  dbInstance = isPostgresMode() ? await createPostgresDb() : await createSqliteDb();
+  if (isPostgresMode()) {
+    dbInstance = await createPostgresDb();
+  } else {
+    const isProd = process.env.NODE_ENV === "production";
+    const allowSqlite =
+      process.env.OKO_ALLOW_SQLITE === "1" ||
+      process.env.OKO_ALLOW_SQLITE === "true" ||
+      !isProd;
+    if (!allowSqlite) {
+      throw new Error(
+        "DATABASE_URL is required (PostgreSQL is the API source of truth). " +
+          "For SQLite opt-in set OKO_ALLOW_SQLITE=1 and omit DATABASE_URL."
+      );
+    }
+    console.warn(
+      "[deprecated] SQLite API mode — prefer DATABASE_URL (PostgreSQL). " +
+        "SQLite remains for offline desktop kits. Set OKO_ALLOW_SQLITE=1 to acknowledge."
+    );
+    dbInstance = await createSqliteDb();
+  }
   const schemaPath = dbInstance.dialect === "postgres" ? SCHEMA_POSTGRES : SCHEMA_SQLITE;
   await applySchemaFile(dbInstance, schemaPath);
   return dbInstance;

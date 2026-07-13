@@ -5,7 +5,7 @@ import {
   runFormChecksWithData,
   type CheckRule,
   type CheckRunResult,
-} from "@portal/engine/checkRunCore";
+} from "@oko/engine";
 import {
   getPackageInstance,
   loadPackageInstancesForTemplates,

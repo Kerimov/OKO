@@ -8,9 +8,10 @@ import { useCoordinator } from "../context/CoordinatorContext";
 
 interface Props {
   selectedInstanceId?: string;
+  hidden?: boolean;
 }
 
-export function PackageSidebar({ selectedInstanceId }: Props) {
+export function PackageSidebar({ selectedInstanceId, hidden }: Props) {
   const { userName, session } = usePackage();
   const { isCoordinator } = useCoordinator();
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
@@ -72,7 +73,10 @@ export function PackageSidebar({ selectedInstanceId }: Props) {
   }, [visibleInstances]);
 
   return (
-    <aside className="package-sidebar" aria-label="Формы комплекта">
+    <aside
+      className={`package-sidebar${hidden ? " hidden" : ""}`}
+      aria-label="Формы комплекта"
+    >
       <div className="package-sidebar-head">
         <Link to="/package" className="package-sidebar-title">
           Комплект

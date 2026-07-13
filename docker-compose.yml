@@ -1,8 +1,52 @@
 # OKO API for VPS / Railway / local production
 # Portal: deploy separately (Vercel) with VITE_API_URL pointing to this API
+#
+# Default SoT: PostgreSQL. Opt-in SQLite: OKO_USE_SQLITE=1 + compose profile "sqlite".
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oko}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oko}
+      POSTGRES_DB: ${POSTGRES_DB:-oko}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - oko-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oko} -d ${POSTGRES_DB:-oko}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api-nest
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://oko:oko@postgres:5432/oko}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      OKO_ADMIN_TOKEN: ${OKO_ADMIN_TOKEN:-}
+      OKO_USER_TOKEN: ${OKO_USER_TOKEN:-}
+      OKO_BOOTSTRAP_ADMIN_USER: ${OKO_BOOTSTRAP_ADMIN_USER:-}
+      OKO_BOOTSTRAP_ADMIN_PASSWORD: ${OKO_BOOTSTRAP_ADMIN_PASSWORD:-}
+      OKO_AUTH_DISABLED: ${OKO_AUTH_DISABLED:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Legacy opt-in: docker compose --profile sqlite up
+  api-sqlite:
+    profiles: ["sqlite"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api-nest
     ports:
       - "3001:3001"
     volumes:
@@ -10,29 +54,13 @@ services:
     environment:
       PORT: "3001"
       OKO_DB_PATH: /app/data/oko.db
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: ""
       OKO_ADMIN_TOKEN: ${OKO_ADMIN_TOKEN:-}
       OKO_USER_TOKEN: ${OKO_USER_TOKEN:-}
       OKO_BOOTSTRAP_ADMIN_USER: ${OKO_BOOTSTRAP_ADMIN_USER:-}
       OKO_BOOTSTRAP_ADMIN_PASSWORD: ${OKO_BOOTSTRAP_ADMIN_PASSWORD:-}
+      OKO_AUTH_DISABLED: ${OKO_AUTH_DISABLED:-1}
     restart: unless-stopped
-
-  postgres:
-    profiles: ["postgres"]
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: oko
-      POSTGRES_PASSWORD: oko
-      POSTGRES_DB: oko
-    ports:
-      - "5432:5432"
-    volumes:
-      - oko-pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oko -d oko"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   oko-data:
