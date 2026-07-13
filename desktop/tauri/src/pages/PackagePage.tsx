@@ -134,7 +134,7 @@ export function PackagePage() {
   const rulesSync = session?.rulesSync;
   const rulesLabel = rulesSync?.fromPackage
     ? `Правила с ЦО: ${rulesSync.exportedAt ? new Date(rulesSync.exportedAt).toLocaleString("ru-RU") : "импортированы"}`
-    : "Правила: встроенные в программу (импортируйте JSON с ЦО для актуальных)";
+    : "Правила: встроенные в программу (импортируйте комплект с ЦО для актуальных)";
 
   return (
     <div className="content">
@@ -180,7 +180,7 @@ export function PackagePage() {
                 disabled={busy || instances.length === 0}
                 onClick={() => handleCoordinatorAction("export")}
               >
-                Экспорт JSON для ЦО
+                Экспорт комплекта для ЦО
               </button>
             </>
           )}
@@ -191,7 +191,7 @@ export function PackagePage() {
           )}
           {!hasPin && (
             <button type="button" onClick={() => setSetPinModalOpen(true)}>
-              Задать PIN
+              Задать ПИН
             </button>
           )}
           {isCoordinator && hasPin && (
@@ -218,7 +218,7 @@ export function PackagePage() {
       {visibleInstances.length === 0 ? (
         <p className="muted">
           {instances.length === 0
-            ? "Комплект пуст. Нажмите «Завести пустые формы» или импортируйте JSON."
+            ? "Комплект пуст. Нажмите «Завести пустые формы» или импортируйте комплект."
             : "Нет форм по выбранному фильтру."}
         </p>
       ) : (
@@ -262,9 +262,9 @@ export function PackagePage() {
         open={pinOpen}
         title={
           pendingAction === "backup"
-            ? "Резервная копия — PIN координатора"
+            ? "Резервная копия — ПИН координатора"
             : pendingAction === "export"
-              ? "Экспорт — PIN координатора"
+              ? "Экспорт — ПИН координатора"
               : "Вход координатора"
         }
         requirePin={hasPin}

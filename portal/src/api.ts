@@ -597,3 +597,45 @@ export async function reimportRashFromJson() {
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<{ reimported: number }>;
 }
+
+export async function saveRashAddsum(kod: number, items: RashAddsum[]) {
+  const res = await apiFetchRaw(`/api/rash/${kod}/addsum`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<RashAddsum[]>;
+}
+
+export interface RashPlacement {
+  formId: string;
+  rowNo: string;
+  columnKey: string;
+  kod: number;
+}
+
+export async function fetchRashPlacements(kod: number) {
+  const res = await apiFetchRaw(`/api/rash/${kod}/placements`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<RashPlacement[]>;
+}
+
+export async function saveRashPlacements(
+  kod: number,
+  items: Array<Omit<RashPlacement, "kod"> & { kod?: number }>
+) {
+  const res = await apiFetchRaw(`/api/rash/${kod}/placements`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<RashPlacement[]>;
+}
+
+export async function reimportRashPlacementsFromJson() {
+  const res = await apiFetchRaw("/api/rash/placements/reimport", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ reimported: number }>;
+}

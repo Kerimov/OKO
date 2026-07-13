@@ -3,6 +3,7 @@ import { logout } from "../auth";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
+import { roleLabel } from "../uiLabels";
 
 type NavItem = {
   to: string;
@@ -84,7 +85,7 @@ export function Layout() {
           isActive: (p) => p.startsWith("/admin/checks"),
         },
         { to: "/admin/saldo", label: "Сальдо", isActive: (p) => p === "/admin/saldo" },
-        { to: "/admin/excel", label: "Excel", isActive: (p) => p === "/admin/excel" },
+        { to: "/admin/excel", label: "Маппинг Excel", isActive: (p) => p === "/admin/excel" },
         { to: "/admin/rash", label: "Расшифровки", isActive: (p) => p === "/admin/rash" },
         {
           to: "/admin/aggregation",
@@ -139,7 +140,7 @@ export function Layout() {
           )}
           {isBackendMode() && auth.legacyToken && (
             <div className="sidebar-auth-note">
-              Подключено по токену · роль {auth.role}
+              Подключено по токену · {roleLabel(auth.role)}
             </div>
           )}
           {user && (

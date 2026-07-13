@@ -18,14 +18,22 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger"
 import {
   deleteRashRule,
   exportRashPayload,
+  exportRowRashIndex,
   getRashRule,
   getRashStats,
   getRashThresholds,
+  listPlacementsByKod,
   listRashAddsum,
   listRashRules,
+  reimportPlacementsFromJson,
   reimportRashFromJson,
+  replacePlacementsForKod,
+  replaceRashAddsum,
+  seedPlacementsFromJson,
   setRashThresholds,
   upsertRashRule,
+  type RashAddsumDto,
+  type RashPlacementDto,
   type RashRuleDto,
   type RashThresholdsDto,
 } from "../../../server/src/rash.js";
@@ -61,6 +69,26 @@ export class RashController {
     return exportRashPayload(await getDb());
   }
 
+  @Get("placements/export")
+  @ApiOperation({ summary: "Экспорт карты привязок kod→ячейка (row-rash-index)" })
+  async exportPlacements() {
+    return exportRowRashIndex(await getDb());
+  }
+
+  @Post("placements/reimport")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Перезагрузить привязки из row-rash-index.json" })
+  async reimportPlacements() {
+    try {
+      const count = await reimportPlacementsFromJson(await getDb());
+      return { reimported: count };
+    } catch (e) {
+      throw new InternalServerErrorException({
+        error: e instanceof Error ? e.message : "placements reimport failed",
+      });
+    }
+  }
+
   @Get()
   @ApiOperation({ summary: "Список правил расшифровок (пагинация)" })
   @ApiQuery({ name: "limit", required: false })
@@ -83,14 +111,76 @@ export class RashController {
 
   @Post("reimport")
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: "Перезагрузить правила из rash.json" })
+  @ApiOperation({ summary: "Перезагрузить правила из rash-rules.json" })
   async reimport() {
     try {
-      const count = await reimportRashFromJson(await getDb());
-      return { reimported: count };
+      const db = await getDb();
+      const count = await reimportRashFromJson(db);
+      // CASCADE clears placements with rules — restore from row-rash-index.json
+      const placements = await seedPlacementsFromJson(db);
+      return { reimported: count, placementsSeeded: placements };
     } catch (e) {
       throw new InternalServerErrorException({
         error: e instanceof Error ? e.message : "reimport failed",
+      });
+    }
+  }
+
+  @Get(":kod/addsum")
+  @ApiOperation({ summary: "Доп. графы правила (sp_rash_addsum)" })
+  async getAddsum(@Param("kod") kodRaw: string) {
+    const kod = Number(kodRaw);
+    if (!(await getRashRule(await getDb(), kod))) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    return listRashAddsum(await getDb(), kod);
+  }
+
+  @Put(":kod/addsum")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Заменить доп. графы правила" })
+  async putAddsum(@Param("kod") kodRaw: string, @Body() body: RashAddsumDto[] | { items: RashAddsumDto[] }) {
+    const kod = Number(kodRaw);
+    const items = Array.isArray(body) ? body : (body.items ?? []);
+    try {
+      return await replaceRashAddsum(await getDb(), kod, items);
+    } catch (e) {
+      if (e instanceof Error && /not found/i.test(e.message)) {
+        throw new NotFoundException({ error: e.message });
+      }
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "addsum save failed",
+      });
+    }
+  }
+
+  @Get(":kod/placements")
+  @ApiOperation({ summary: "Привязки правила к ячейкам форм" })
+  async getPlacements(@Param("kod") kodRaw: string) {
+    const kod = Number(kodRaw);
+    if (!(await getRashRule(await getDb(), kod))) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    return listPlacementsByKod(await getDb(), kod);
+  }
+
+  @Put(":kod/placements")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Заменить привязки правила к ячейкам" })
+  async putPlacements(
+    @Param("kod") kodRaw: string,
+    @Body() body: RashPlacementDto[] | { items: RashPlacementDto[] }
+  ) {
+    const kod = Number(kodRaw);
+    const items = Array.isArray(body) ? body : (body.items ?? []);
+    try {
+      return await replacePlacementsForKod(await getDb(), kod, items);
+    } catch (e) {
+      if (e instanceof Error && /not found/i.test(e.message)) {
+        throw new NotFoundException({ error: e.message });
+      }
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "placements save failed",
       });
     }
   }
@@ -106,6 +196,7 @@ export class RashController {
     return {
       ...rule,
       addsum: await listRashAddsum(await getDb(), kod),
+      placements: await listPlacementsByKod(await getDb(), kod),
     };
   }
 

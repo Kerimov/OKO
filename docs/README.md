@@ -43,6 +43,7 @@
 | [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md) | Чеклист дыр Tauri vs ТЗ / §15 |
 | [DESKTOP-SIGNING.md](DESKTOP-SIGNING.md) | Подпись macOS/Windows (опционально) |
 | [../reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) | Анализ исходного ПК «ОКО» |
+| [ACCESS-GUIDE-CHECKLIST.md](ACCESS-GUIDE-CHECKLIST.md) | Access `txt2026-1KV` → экраны портала / Tauri |
 
 ---
 

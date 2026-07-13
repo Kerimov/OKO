@@ -459,7 +459,7 @@ export function FormPage() {
         meta,
         rows,
       });
-      setStatus("Excel сохранён");
+      setStatus("Файл Excel сохранён");
       setTimeout(() => setStatus(""), 3000);
     } catch {
       setError("Не удалось сформировать Excel");
@@ -642,7 +642,7 @@ export function FormPage() {
             onClick={handleExportExcel}
             disabled={exportingExcel}
           >
-            {exportingExcel ? "Excel…" : "Excel"}
+            {exportingExcel ? "Выгрузка…" : "Выгрузить в Excel"}
           </button>
           <button type="button" className="btn btn-secondary" onClick={handleCheck} disabled={checking}>
             {checking ? "Проверка…" : "Проверить форму"}
@@ -655,7 +655,7 @@ export function FormPage() {
               disabled={checkingRash}
               title={
                 rashRuleCount != null
-                  ? `Правил sp_rash для ${schema.id}: ${rashRuleCount}`
+                  ? `Правил расшифровки для ${schema.id}: ${rashRuleCount}`
                   : undefined
               }
             >
@@ -663,7 +663,7 @@ export function FormPage() {
             </button>
           )}
           <button type="button" className="btn btn-secondary" onClick={handleExport}>
-            Экспорт JSON
+            Экспорт формы
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => void handleReset()}>
             Сбросить данные
@@ -717,7 +717,7 @@ export function FormPage() {
               открыть окно контрагентов
             </>
           )}
-          : правил <code>sp_rash</code> — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. /
+          : правил расшифровки — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. /
           5 млн / 50 млн руб. (
           <Link to="/admin/rash">настройки</Link>).
         </p>

@@ -192,7 +192,7 @@ export function WelcomePage() {
             {createMode ? "Скрыть создание" : "Создать новый"}
           </button>
           <button type="button" disabled={busy} onClick={() => void handleImportJson()}>
-            Импорт JSON от ЦО
+            Импорт комплекта от ЦО
           </button>
         </div>
 
@@ -205,7 +205,7 @@ export function WelcomePage() {
             </label>
             <div className="field-grid">
               <label className="field">
-                <span>ZID</span>
+                <span>Код организации</span>
                 <input
                   type="number"
                   value={zid}
@@ -213,7 +213,7 @@ export function WelcomePage() {
                 />
               </label>
               <label className="field">
-                <span>EID</span>
+                <span>Код периода</span>
                 <input
                   type="number"
                   value={eid}

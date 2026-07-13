@@ -49,14 +49,14 @@ export function AuditLogPage() {
       <div className="admin-page">
         <h1>Журнал аудита</h1>
         <div className="error-box">
-          Доступ только для роли <strong>admin</strong>.{" "}
+          Доступ только для администратора.{" "}
           {auth.loginAvailable ? (
             <>
               Войдите на <Link to="/">главной странице</Link>.
             </>
           ) : (
             <>
-              Укажите admin-токен в <Link to="/settings">настройках</Link>.
+              Укажите токен администратора в <Link to="/settings">настройках</Link>.
             </>
           )}
         </div>
@@ -70,7 +70,7 @@ export function AuditLogPage() {
         <div>
           <h1>Журнал аудита</h1>
           <p className="admin-desc">
-            Таблица <code>report_log</code> — изменения метаданных (увязки, формы, сальдо, Excel).
+            Журнал изменений метаданных (увязки, формы, сальдо, маппинг Excel).
           </p>
         </div>
       </header>
@@ -147,7 +147,7 @@ export function AuditLogPage() {
 
       {auth.authRequired && (
         <p className="admin-desc" style={{ marginTop: "1rem" }}>
-          Записи появляются при сохранении метаданных под токеном admin.
+          Записи появляются при сохранении метаданных под учётной записью администратора.
         </p>
       )}
     </div>

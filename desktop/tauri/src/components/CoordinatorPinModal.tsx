@@ -17,7 +17,7 @@ export function CoordinatorPinModal({ open, title, requirePin, onClose, onSubmit
 
   const handleSubmit = async () => {
     if (requirePin && !pin.trim()) {
-      setError("Введите PIN");
+      setError("Введите ПИН");
       return;
     }
     setBusy(true);
@@ -25,7 +25,7 @@ export function CoordinatorPinModal({ open, title, requirePin, onClose, onSubmit
     try {
       const ok = await onSubmit(pin);
       if (ok === false) {
-        setError("Неверный PIN");
+        setError("Неверный ПИН");
         return;
       }
       setPin("");
@@ -42,7 +42,7 @@ export function CoordinatorPinModal({ open, title, requirePin, onClose, onSubmit
       <div className="modal-card">
         <h2>{title}</h2>
         <label className="field">
-          <span>PIN координатора</span>
+          <span>ПИН координатора</span>
           <input
             type="password"
             autoFocus
@@ -100,10 +100,10 @@ export function SetCoordinatorPinModal({ open, hasExistingPin, onClose, onSave }
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="modal-card">
-        <h2>{hasExistingPin ? "Сменить PIN координатора" : "Задать PIN координатора"}</h2>
+        <h2>{hasExistingPin ? "Сменить ПИН координатора" : "Задать ПИН координатора"}</h2>
         {hasExistingPin && (
           <label className="field">
-            <span>Текущий PIN</span>
+            <span>Текущий ПИН</span>
             <input
               type="password"
               value={oldPin}
@@ -112,7 +112,7 @@ export function SetCoordinatorPinModal({ open, hasExistingPin, onClose, onSave }
           </label>
         )}
         <label className="field">
-          <span>{hasExistingPin ? "Новый PIN" : "PIN"}</span>
+          <span>{hasExistingPin ? "Новый ПИН" : "ПИН"}</span>
           <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} />
         </label>
         <p className="muted modal-hint">Минимум 4 символа. Нужен для экспорта и разблокировки ячеек.</p>

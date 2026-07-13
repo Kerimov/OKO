@@ -23,7 +23,7 @@ import {
 } from "./saldo.js";
 import { migrateAuditTable } from "./audit.js";
 import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
-import { migrateRashTables, seedRashFromJson } from "./rash.js";
+import { migrateRashTables, seedRashFromJson, seedPlacementsFromJson } from "./rash.js";
 import { migrateRashDataTables } from "./rash-data.js";
 import {
   migrateKontrTable,
@@ -75,6 +75,10 @@ async function initSchema(database: OkoDb): Promise<void> {
   const seededRash = await seedRashFromJson(database);
   if (seededRash > 0) {
     console.log(`Seeded ${seededRash} rash rules from rash-rules.json`);
+  }
+  const seededPlacements = await seedPlacementsFromJson(database);
+  if (seededPlacements > 0) {
+    console.log(`Seeded ${seededPlacements} rash cell placements from row-rash-index.json`);
   }
   const seededChecks = await seedCheckRulesFromJson(database);
   if (seededChecks > 0) {

@@ -521,7 +521,7 @@ export function FormPage() {
           await window.oko.saveExcelFile(fileName, btoa(binary));
         },
       });
-      setStatus("Excel сохранён");
+      setStatus("Файл Excel сохранён");
       setTimeout(() => setStatus(""), 3000);
     } catch {
       setError("Не удалось сформировать Excel");
@@ -651,7 +651,7 @@ export function FormPage() {
             onClick={() => void handleExportExcel()}
             disabled={exportingExcel}
           >
-            {exportingExcel ? "Excel…" : "Excel"}
+            {exportingExcel ? "Выгрузка…" : "Выгрузить в Excel"}
           </button>
           <button
             type="button"
@@ -669,7 +669,7 @@ export function FormPage() {
               disabled={checkingRash}
               title={
                 rashRuleCount != null
-                  ? `Правил sp_rash для ${schema.id}: ${rashRuleCount}`
+                  ? `Правил расшифровки для ${schema.id}: ${rashRuleCount}`
                   : undefined
               }
             >
@@ -677,7 +677,7 @@ export function FormPage() {
             </button>
           )}
           <button type="button" className="btn btn-secondary" onClick={handleExport}>
-            Экспорт JSON
+            Экспорт формы
           </button>
           {isCoordinator && (
             <button
@@ -738,7 +738,7 @@ export function FormPage() {
           {kontrMode
             ? "Форма с расшифровкой контрагентов в строках"
             : "Кнопка «…» в графах с суммой ≥ 1 тыс. руб. (в т.ч. итоговая гр. M — прокрутите вправо)"}
-          : правил <code>sp_rash</code> — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн /
+          : правил расшифровки — <strong>{rashRuleCount}</strong>. Пороги: 1 тыс. / 5 млн /
           50 млн руб.
         </p>
       )}

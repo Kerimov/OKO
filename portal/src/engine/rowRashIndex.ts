@@ -7,13 +7,25 @@ export interface RowRashIndexData {
   version: string;
   source?: string;
   forms: Record<string, Record<string, RowRashRowMeta>>;
-  stats?: { forms: number; rows: number };
+  stats?: { forms: number; rows: number; placements?: number };
 }
 
 let cached: RowRashIndexData | null = null;
 
 export async function loadRowRashIndex(): Promise<RowRashIndexData> {
   if (cached) return cached;
+  try {
+    const apiRes = await fetch("/api/rash/placements/export");
+    if (apiRes.ok) {
+      const data = (await apiRes.json()) as RowRashIndexData;
+      if (data.forms && Object.keys(data.forms).length > 0) {
+        cached = data;
+        return cached;
+      }
+    }
+  } catch {
+    /* fall through to static JSON */
+  }
   try {
     const res = await fetch("/data/row-rash-index.json");
     if (res.ok) {

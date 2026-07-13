@@ -8,6 +8,7 @@ import {
   refreshAuthRole,
   saveApiToken,
 } from "../auth";
+import { roleLabel } from "../uiLabels";
 import { getApiToken } from "../apiClient";
 import { useAuth } from "../useAuth";
 
@@ -120,8 +121,8 @@ export function SettingsPage() {
           <h2 style={{ marginTop: "2rem" }}>Учётная запись</h2>
           <p className="settings-desc">
             Вы вошли как <strong>{user.displayName || user.username}</strong>
-            {user.organizationName ? ` (${user.organizationName})` : ""}. Роль API:{" "}
-            <strong>{auth.role}</strong>.
+            {user.organizationName ? ` (${user.organizationName})` : ""}. Роль:{" "}
+            <strong>{roleLabel(auth.role)}</strong>.
           </p>
           <button type="button" className="btn btn-secondary" onClick={handleLogout}>
             Выйти
@@ -137,7 +138,7 @@ export function SettingsPage() {
               </>
             ) : (
               <>
-                Токен для доступа к API-серверу (Bearer). Admin — редакторы метаданных; user —
+                Токен для доступа к API-серверу. Администратор — редакторы метаданных; организация —
                 только заполнение форм. В dev без <code>OKO_ADMIN_TOKEN</code> и без учётных
                 записей авторизация не требуется.
               </>
@@ -145,8 +146,8 @@ export function SettingsPage() {
           </p>
           {loginMode && auth.legacyToken && (
             <div className="error-box" style={{ marginTop: "0.75rem" }}>
-              В браузере сохранён Bearer-токен (режим legacy), поэтому вы видите роль{" "}
-              <strong>{auth.role}</strong> и урезанный функционал. Нажмите «Сбросить токен» и
+              В браузере сохранён служебный токен (устаревший режим), поэтому вы видите роль{" "}
+              <strong>{roleLabel(auth.role)}</strong> и урезанный функционал. Нажмите «Сбросить токен» и
               войдите на <Link to="/">главной странице</Link>.
               <div style={{ marginTop: "0.75rem" }}>
                 <button type="button" className="btn btn-secondary" onClick={handleClearToken}>
@@ -163,14 +164,14 @@ export function SettingsPage() {
                   type="password"
                   value={apiToken}
                   onChange={(e) => setApiToken(e.target.value)}
-                  placeholder="Bearer-токен из .env сервера"
+                  placeholder="Токен из настроек сервера"
                   autoComplete="off"
                 />
               </label>
               {auth.role && (
                 <p className="settings-desc">
-                  Текущая роль: <strong>{auth.role}</strong>
-                  {auth.authRequired ? "" : " (auth отключён на сервере)"}
+                  Текущая роль: <strong>{roleLabel(auth.role)}</strong>
+                  {auth.authRequired ? "" : " (вход на сервере отключён)"}
                 </p>
               )}
               <div className="toolbar-actions" style={{ gap: "0.5rem" }}>

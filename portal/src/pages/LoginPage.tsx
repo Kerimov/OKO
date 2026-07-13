@@ -75,7 +75,7 @@ export function LoginPage() {
         {legacyOnly ? (
           <form className="login-form" onSubmit={handleTokenLogin}>
             <label>
-              API-токен (Bearer)
+              Токен API
               <input
                 type="password"
                 value={apiToken}

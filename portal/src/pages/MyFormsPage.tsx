@@ -136,7 +136,7 @@ function InstanceCard({
           </span>
           {showPackageIds && (inst.zid != null || inst.eid != null) && (
             <span className="package-id-badge">
-              ZID={inst.zid ?? "—"}, EID={inst.eid ?? "—"}
+              организация {inst.zid ?? "—"}, период {inst.eid ?? "—"}
             </span>
           )}
         </div>
@@ -446,12 +446,12 @@ export function MyFormsPage() {
             <span className="forms-package-group-title">{periodTitle}</span>
             <span className="forms-package-group-meta">
               {nested && group.eid != null ? (
-                <>EID={group.eid} · </>
+                <>период {group.eid} · </>
               ) : (
                 group.zid != null && (
                   <>
-                    ZID={group.zid}
-                    {group.eid != null ? `, EID=${group.eid}` : ""}
+                    организация {group.zid}
+                    {group.eid != null ? `, период ${group.eid}` : ""}
                     {" · "}
                   </>
                 )
@@ -508,7 +508,7 @@ export function MyFormsPage() {
                 </span>
                 <span className="forms-org-group-title">{org.orgName}</span>
                 <span className="forms-org-group-meta">
-                  {org.zid != null && <>ZID={org.zid} · </>}
+                  {org.zid != null && <>организация {org.zid} · </>}
                   {org.periods.length}{" "}
                   {org.periods.length === 1 ? "период" : org.periods.length < 5 ? "периода" : "периодов"}
                   {" · "}
@@ -605,7 +605,7 @@ export function MyFormsPage() {
             <option value="">Все организации</option>
             {orgs.map((o) => (
               <option key={o.zid} value={o.zid}>
-                {o.name} (ZID={o.zid})
+                {o.name} (код {o.zid})
               </option>
             ))}
           </select>
@@ -674,7 +674,7 @@ export function MyFormsPage() {
             input?.click();
           }}
         >
-          Импорт JSON
+          Импорт комплекта
         </button>
         <input
           id="import-instance"

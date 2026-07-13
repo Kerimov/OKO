@@ -195,7 +195,7 @@ export function Layout() {
 
               <p className="muted">
 
-                ZID {session.meta.zid} · EID {session.meta.eid} ·{" "}
+                орг. {session.meta.zid} · период {session.meta.eid} ·{" "}
 
                 {formatPeriod(session.meta.periodStart, session.meta.periodEnd)}
 

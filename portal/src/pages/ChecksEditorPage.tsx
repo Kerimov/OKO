@@ -171,7 +171,8 @@ export function ChecksEditorPage() {
         <div>
           <h1>Редактор увязок</h1>
           <p className="admin-desc">
-            Аналог таблицы <code>a_tblchecks</code> в z261.mdb. Изменения сохраняются в SQLite.
+            Правила межформенных проверок (аналог таблицы увязок исходного комплекта). Изменения
+            сохраняются в базе портала.
           </p>
         </div>
         {stats && (
@@ -218,10 +219,10 @@ export function ChecksEditorPage() {
                   setOffset(0);
                 }}
               />
-              Только period_active
+              Только для периода
             </label>
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
-              Импорт из JSON
+              Импорт из файла
             </button>
             <button
               type="button"
@@ -304,7 +305,7 @@ export function ChecksEditorPage() {
               />
             </label>
             <label className="full-width">
-              Выражение (LExpCheck)
+              Основное выражение
               <textarea
                 rows={4}
                 value={draft.expression}
@@ -313,7 +314,7 @@ export function ChecksEditorPage() {
               />
             </label>
             <label className="full-width">
-              Доп. выражение (LExpCheck1)
+              Дополнительное выражение
               <textarea
                 rows={2}
                 value={draft.expressionAlt ?? ""}
@@ -334,7 +335,7 @@ export function ChecksEditorPage() {
                   checked={!!draft.periodActive}
                   onChange={(e) => setDraft({ ...draft, periodActive: e.target.checked })}
                 />
-                period_active (pg_aktiv)
+                Учитывать в проверке за период
               </label>
               <label>
                 <input
@@ -342,7 +343,7 @@ export function ChecksEditorPage() {
                   checked={!!draft.active}
                   onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
                 />
-                active (aktiv)
+                Активно
               </label>
               <label>
                 <input
@@ -350,7 +351,7 @@ export function ChecksEditorPage() {
                   checked={!!draft.forAggrOnly}
                   onChange={(e) => setDraft({ ...draft, forAggrOnly: e.target.checked })}
                 />
-                for_aggr_only
+                Только для агрегации
               </label>
               <label>
                 <input
@@ -358,7 +359,7 @@ export function ChecksEditorPage() {
                   checked={!!draft.firstLevel}
                   onChange={(e) => setDraft({ ...draft, firstLevel: e.target.checked })}
                 />
-                first_level
+                Первый уровень
               </label>
             </div>
             <div className="checks-actions">

@@ -85,7 +85,7 @@ export function FormsEditorPage() {
   };
 
   const handleReimport = async () => {
-    if (!confirm("Перезаписать все шаблоны форм из JSON? Изменения в БД будут потеряны.")) {
+    if (!confirm("Перезаписать все шаблоны форм из файла? Изменения в базе будут потеряны.")) {
       return;
     }
     try {
@@ -160,12 +160,12 @@ export function FormsEditorPage() {
         <div>
           <h1>Конструктор форм</h1>
           <p className="admin-desc">
-            Аналог таблиц <code>a_stblROWs</code> и <code>a_stblFIELDs</code> в z261.mdb.
+            Структура шаблонов форм: строки, графы и параметры таблицы.
           </p>
         </div>
         <div className="checks-actions">
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
-            Импорт из JSON
+            Импорт из файла
           </button>
           <button
             type="button"
@@ -222,7 +222,7 @@ export function FormsEditorPage() {
                     {t === "meta" && "Свойства"}
                     {t === "columns" && `Графы (${schema.columns.length})`}
                     {t === "rows" && `Строки (${schema.rows.length})`}
-                    {t === "preview" && "Превью"}
+                    {t === "preview" && "Просмотр"}
                   </button>
                 ))}
               </div>
@@ -309,7 +309,7 @@ export function FormsEditorPage() {
                           <th>Ширина</th>
                           <th>Закр.</th>
                           <th>Только чт.</th>
-                          <th>FTotal</th>
+                          <th>Итоговая</th>
                           <th />
                         </tr>
                       </thead>
@@ -338,8 +338,8 @@ export function FormsEditorPage() {
                                   })
                                 }
                               >
-                                <option value="number">number</option>
-                                <option value="text">text</option>
+                                <option value="number">Число</option>
+                                <option value="text">Текст</option>
                               </select>
                             </td>
                             <td>
@@ -376,7 +376,7 @@ export function FormsEditorPage() {
                                     readonly: e.target.checked ? true : col.readonly,
                                   })
                                 }
-                                title="Итоговая графа (FTotal)"
+                                title="Итоговая графа"
                               />
                             </td>
                             <td>
@@ -459,7 +459,7 @@ export function FormsEditorPage() {
               {tab === "preview" && (
                 <section>
                   <p className="period-hint">
-                    Превью таблицы после сохранения будет использоваться при создании новых экземпляров.
+                    Просмотр таблицы после сохранения будет использоваться при создании новых экземпляров.
                     <Link to="/catalog"> Создать форму в каталоге</Link>
                   </p>
                   <FormTable
