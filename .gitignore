@@ -1,6 +1,7 @@
 .DS_Store
 *.local
 .oko-dev-pids
+.oko-logs/
 
 portal/node_modules
 portal/dist

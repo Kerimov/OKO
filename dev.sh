@@ -3,6 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIDS_FILE="${ROOT_DIR}/.oko-dev-pids"
+LOG_DIR="${ROOT_DIR}/.oko-logs"
+DETACH=0
+if [[ "${1:-}" == "--detach" || "${1:-}" == "-d" ]]; then
+  DETACH=1
+fi
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -21,24 +26,35 @@ if ! command -v docker >/dev/null 2>&1; then
   fi
 fi
 
+# Load repo .env so DATABASE_URL / PORT are available to child processes
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env"
+  set +a
+fi
+
 cleanup() {
   if [[ -f "${PIDS_FILE}" ]]; then
     while IFS= read -r pid; do
       [[ -n "${pid}" ]] || continue
+      # Kill process group if started with setsid-ish nohup npm (parent shell wrapper)
       kill "${pid}" >/dev/null 2>&1 || true
+      # Also try children of npm/tsx/vite
+      pkill -P "${pid}" >/dev/null 2>&1 || true
     done < "${PIDS_FILE}"
     rm -f "${PIDS_FILE}" || true
   fi
 }
 
-trap cleanup EXIT INT TERM
-
 run_service() {
   local name="$1"
   local dir="$2"
   local cmd="$3"
+  local log="${LOG_DIR}/$(echo "${name}" | tr '[:upper:]' '[:lower:]').log"
 
-  echo "==> ${name}: starting"
+  echo "==> ${name}: starting (log: ${log})"
+  mkdir -p "${LOG_DIR}"
   cd "${ROOT_DIR}/${dir}"
 
   if [[ ! -d node_modules ]]; then
@@ -46,8 +62,8 @@ run_service() {
     npm ci
   fi
 
-  # Start in background and remember PID
-  bash -lc "${cmd}" &
+  # nohup so services survive when the parent exits (e.g. ./dev.sh --detach)
+  nohup bash -c "${cmd}" >"${log}" 2>&1 &
   local pid=$!
   echo "${pid}" >> "${PIDS_FILE}"
   echo "==> ${name}: pid ${pid}"
@@ -69,7 +85,13 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   fi
 fi
 
+# Stop previous detached stack if any
+if [[ -f "${PIDS_FILE}" ]]; then
+  echo "==> stopping previous stack from ${PIDS_FILE}"
+  cleanup
+fi
 rm -f "${PIDS_FILE}"
+mkdir -p "${LOG_DIR}"
 
 # Default: NestJS. Legacy Express middleware-only shell: OKO_API_RUNTIME=express ./dev.sh
 API_RUNTIME="${OKO_API_RUNTIME:-nest}"
@@ -91,8 +113,14 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
 else
   echo "DB:     SQLite (deprecated for API)"
 fi
+echo "Logs:   ${LOG_DIR}/"
 echo ""
+
+if [[ "${DETACH}" -eq 1 ]]; then
+  echo "Detached. Stop later with: kill \$(cat ${PIDS_FILE}) or rm and restart ./dev.sh --detach"
+  exit 0
+fi
+
+trap cleanup EXIT INT TERM
 echo "Press Ctrl+C to stop."
-
 wait
-

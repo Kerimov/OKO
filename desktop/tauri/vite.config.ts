@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const portalPublic = path.resolve(__dirname, "../../portal/public");
 const portalSrc = path.resolve(__dirname, "../../portal/src");
 const enginePkg = path.resolve(__dirname, "../../packages/engine/src/index.ts");
+const portalStorage = path.resolve(portalSrc, "storage.ts");
+const desktopStorage = path.resolve(__dirname, "src/desktopStorage.ts");
 const apiStub = path.resolve(__dirname, "src/portalApiStub.ts");
 
 const host = process.env.TAURI_DEV_HOST;
@@ -18,6 +20,9 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: "@oko/engine", replacement: enginePkg },
+      { find: "@portal/storage", replacement: desktopStorage },
+      { find: portalStorage, replacement: desktopStorage },
+      { find: /portal[\\/]src[\\/]storage\.ts$/, replacement: desktopStorage },
       { find: path.resolve(portalSrc, "api.ts"), replacement: apiStub },
       { find: "@portal", replacement: portalSrc },
     ],
