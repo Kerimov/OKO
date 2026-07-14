@@ -15,12 +15,15 @@ import { SaldoModule } from "./saldo/saldo.module.js";
 import { ExcelModule } from "./excel/excel.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { RecalcModule } from "./recalc/recalc.module.js";
+import { MethodologyModule } from "./methodology/methodology.module.js";
 import { TemplatesModule } from "./templates/templates.module.js";
+import { ObservabilityModule } from "./observability/observability.module.js";
 
 @Module({
   imports: [
     DatabaseModule,
     AuthModule,
+    ObservabilityModule,
     HealthModule,
     InstancesModule,
     SettingsModule,
@@ -36,6 +39,7 @@ import { TemplatesModule } from "./templates/templates.module.js";
     AuditModule,
     RecalcModule,
     TemplatesModule,
+    MethodologyModule,
   ],
 })
 export class AppModule {}

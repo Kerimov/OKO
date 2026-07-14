@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
-import type { OkoFormInstance } from "../../../server/src/types.js";
+import {
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from "class-validator";
+import type { OkoFormInstance } from "../../../../server/src/types.js";
 
 export class CreateOrganizationDto {
   @ApiProperty()
@@ -70,11 +77,30 @@ export class PackageZidEidDto {
   eid!: number;
 }
 
+export class PackageWorkflowPutDto extends PackageZidEidDto {
+  @ApiProperty({ enum: ["draft", "submitted", "returned", "corrected", "accepted"] })
+  @IsString()
+  @IsNotEmpty()
+  status!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  comment?: string | null;
+}
+
 export class PackageImportDto extends PackageZidEidDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   overwrite?: boolean;
+
+  /** PartReceiveZID: accept only these forms (omit = all). */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  templateIds?: string[];
 
   @ApiProperty()
   package!: {

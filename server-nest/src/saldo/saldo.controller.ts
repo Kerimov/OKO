@@ -84,9 +84,21 @@ export class SaldoController {
       conditions.push("(target_form = ? OR source_form = ?)");
       params.push(formId, formId);
     }
-    if (saldoType === "t") conditions.push("saldo_t = 1");
-    if (saldoType === "s") conditions.push("saldo_s = 1");
-    if (saldoType === "g") conditions.push("saldo_g = 1");
+    if (saldoType === "t") {
+      conditions.push(
+        "(saldo_t = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
+      );
+    }
+    if (saldoType === "s") {
+      conditions.push(
+        "(saldo_s = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
+      );
+    }
+    if (saldoType === "g") {
+      conditions.push(
+        "(saldo_g = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND end_column IS NOT NULL AND end_row IS NOT NULL))"
+      );
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const total = (
