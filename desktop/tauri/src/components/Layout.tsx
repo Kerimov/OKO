@@ -136,6 +136,14 @@ export function Layout() {
             </Link>
           )}
 
+          <Link to="/help" title={sidebarCollapsed ? "Справка" : undefined}>
+            Справка
+          </Link>
+
+          <Link to="/saldo-rules" title={sidebarCollapsed ? "Сальдо" : undefined}>
+            Правила сальдо
+          </Link>
+
         </nav>
 
         <div className="sidebar-footer">
