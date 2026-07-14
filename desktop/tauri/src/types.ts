@@ -13,6 +13,7 @@ export interface OpenPackageResult {
   folderPath: string;
   meta: PackageMeta;
   instanceCount: number;
+  dailyBackupPath?: string | null;
 }
 
 export interface SessionInfo {
@@ -21,9 +22,11 @@ export interface SessionInfo {
   instanceCount: number;
   rulesSync?: {
     exportedAt: string | null;
+    version?: string | null;
     fromPackage: boolean;
     hasChecks: boolean;
     hasRash?: boolean;
+    hasReorgChecks?: boolean;
   };
   hasCoordinatorPin?: boolean;
   restrictExecutorsToAssignments?: boolean;

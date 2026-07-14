@@ -240,6 +240,40 @@ export async function saveInstance(instance: OkoFormInstance): Promise<void> {
   }
 }
 
+/**
+ * Persist many instances atomically when API is available (single DB transaction).
+ * Offline/local mode updates all localStorage keys in one pass (same process).
+ */
+export async function saveInstancesAtomic(
+  instances: OkoFormInstance[]
+): Promise<{ saved: number }> {
+  if (!instances.length) return { saved: 0 };
+  const now = new Date().toISOString();
+  const stamped = instances.map((inst) => ({ ...inst, updatedAt: now }));
+
+  if (!useBackend) {
+    const index = readIndexLocal();
+    const byId = new Map(index.map((s) => [s.instanceId, s]));
+    for (const instance of stamped) {
+      localStorage.setItem(
+        INSTANCE_PREFIX + instance.instanceId,
+        JSON.stringify(instance)
+      );
+      byId.set(instance.instanceId, summaryFromInstance(instance));
+    }
+    const next = Array.from(byId.values()).sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+    writeIndexLocal(next);
+    return { saved: stamped.length };
+  }
+
+  return apiFetch<{ saved: number }>("/api/instances/batch", {
+    method: "POST",
+    body: JSON.stringify({ instances: stamped }),
+  });
+}
+
 export async function setInstanceStatus(
   instanceId: string,
   status: "draft" | "submitted"
@@ -400,7 +434,8 @@ export async function searchKontrAgents(
         return (
           a.name.toLowerCase().includes(q) ||
           (a.inn ?? "").includes(q) ||
-          (a.kpp ?? "").includes(q)
+          (a.kpp ?? "").includes(q) ||
+          (a.oldName ?? "").toLowerCase().includes(q)
         );
       })
       .slice(0, limit);
@@ -427,6 +462,32 @@ export async function addKontrAgent(
   return apiFetch<KontrAgent>("/api/kontr", {
     method: "POST",
     body: JSON.stringify(agent),
+  });
+}
+
+export async function updateKontrAgent(
+  id: number,
+  patch: Partial<Omit<KontrAgent, "id">>
+): Promise<KontrAgent> {
+  if (!useBackend) {
+    throw new Error("Обновление контрагентов доступно только в режиме API");
+  }
+  return apiFetch<KontrAgent>(`/api/kontr/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function renameKontrAgent(
+  id: number,
+  name: string
+): Promise<KontrAgent> {
+  if (!useBackend) {
+    throw new Error("Переименование доступно только в режиме API");
+  }
+  return apiFetch<KontrAgent>(`/api/kontr/${id}/rename`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
   });
 }
 

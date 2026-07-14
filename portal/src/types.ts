@@ -7,6 +7,11 @@ export interface FormColumn {
   readonly?: boolean;
   /** Итоговая графа (FTotal из a_stblFIELDs) */
   fTotal?: boolean;
+  helpText?: string | null;
+  align?: "left" | "center" | "right" | null;
+  decimals?: number | null;
+  hidden?: boolean;
+  formula?: string | null;
 }
 
 export interface FormRowTemplate {
@@ -15,6 +20,10 @@ export interface FormRowTemplate {
   name: string;
   /** sp_rash kod из row-rash-index */
   rashKod?: number;
+  kind?: "data" | "header" | "total" | "section" | "hidden" | null;
+  level?: number | null;
+  readonly?: boolean;
+  formula?: string | null;
 }
 
 export interface FormSchema {
@@ -35,6 +44,8 @@ export interface FormSchema {
   allowAddRows?: boolean;
   kontrForm?: boolean;
   signatures: string[];
+  archived?: boolean;
+  schemaVersion?: number;
 }
 
 export interface FormCatalog {
@@ -48,6 +59,7 @@ export interface FormCatalog {
     category: string;
     pages: number;
     pdfFile: string;
+    archived?: boolean;
   }>;
 }
 
@@ -65,6 +77,11 @@ export interface KontrAgent {
   mandatoryRash?: boolean;
   country?: string | null;
   city?: string | null;
+  /** Access sp_kontr.OldName — «Другое наименование» (N99) */
+  oldName?: string | null;
+  ogrn?: string | null;
+  /** Access idOBDNSI */
+  idObdnsi?: string | null;
 }
 
 export interface FormRashEntry {
@@ -93,6 +110,20 @@ export interface FormMeta {
 }
 
 export type FormInstanceStatus = "draft" | "submitted";
+
+export type PackageWorkflowStatus =
+  | "draft"
+  | "submitted"
+  | "returned"
+  | "corrected"
+  | "accepted";
+
+export interface PackageWorkflow {
+  status: PackageWorkflowStatus;
+  comment: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
 
 /** Сохранённый экземпляр заполненной формы */
 export interface OkoFormInstance {
@@ -156,6 +187,7 @@ export interface PackageCompleteness {
   filled: number;
   draft: number;
   submitted: number;
+  workflow?: PackageWorkflow;
   items: Array<{
     formId: string;
     title: string;
@@ -180,6 +212,8 @@ export interface PackageDashboardRow {
   draft: number;
   submitted: number;
   percent: number;
+  packageStatus?: PackageWorkflowStatus;
+  packageComment?: string | null;
 }
 
 export interface CreatePackageResult {

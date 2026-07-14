@@ -378,6 +378,25 @@ export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<
     );
 }
 
+/** Save many instances in one DB transaction (or none). */
+export async function upsertInstancesBatch(
+  db: OkoDb,
+  instances: OkoFormInstance[],
+  isAdmin: boolean
+): Promise<{ saved: number }> {
+  if (!instances.length) return { saved: 0 };
+  await db.transaction(async (tx) => {
+    for (const inst of instances) {
+      const existing = await loadInstance(tx, inst.instanceId);
+      if (existing) {
+        assertInstanceEditable(existing, isAdmin);
+      }
+      await upsertInstance(tx, inst);
+    }
+  });
+  return { saved: instances.length };
+}
+
 export async function loadInstance(
   db: OkoDb,
   instanceId: string

@@ -5,6 +5,9 @@ import {
   Get,
   HttpCode,
   InternalServerErrorException,
+  Param,
+  ParseIntPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -15,7 +18,9 @@ import {
   getKontrStats,
   listKontrAgents,
   reimportKontrFromJson,
+  renameKontrAgent,
   searchKontrAgents,
+  updateKontrAgent,
   type KontrAgentDto,
 } from "../../../server/src/kontr.js";
 import { getDb } from "../../../server/src/db.js";
@@ -76,11 +81,47 @@ export class KontrController {
 
   @Post()
   @HttpCode(201)
-  @ApiOperation({ summary: "Создать контрагента" })
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Создать контрагента (admin)" })
   async create(@Body() body: Omit<KontrAgentDto, "id"> & { name: string }) {
     if (!body.name?.trim()) {
       throw new BadRequestException({ error: "name required" });
     }
     return createKontrAgent(await getDb(), body);
+  }
+
+  @Patch(":id")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Обновить контрагента (admin)" })
+  async update(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: Partial<Omit<KontrAgentDto, "id">>
+  ) {
+    try {
+      return await updateKontrAgent(await getDb(), id, body);
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "update failed",
+      });
+    }
+  }
+
+  @Post(":id/rename")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Переименовать: имя → oldName, новое имя (N99)" })
+  async rename(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { name?: string }
+  ) {
+    if (!body.name?.trim()) {
+      throw new BadRequestException({ error: "name required" });
+    }
+    try {
+      return await renameKontrAgent(await getDb(), id, body.name);
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "rename failed",
+      });
+    }
   }
 }

@@ -1,7 +1,20 @@
 import type { OkoFormInstance, RowData } from "../types";
 import type { EvalContext } from "./cellExpression";
-import { loadAllInstances, isBackendMode } from "../storage";
+import {
+  loadAllInstances,
+  loadInstance,
+  listInstances,
+  isBackendMode,
+} from "../storage";
 import { fetchEvalSnapshot } from "../api";
+
+/** Scope for check evaluation: prefer ZID/EID package; fall back to period dates. */
+export type CheckScopeFilter = {
+  start?: string;
+  end?: string;
+  zid?: number | null;
+  eid?: number | null;
+};
 
 /** formId -> rowNum -> row data */
 export type FormDataIndex = Map<string, Map<string, RowData>>;
@@ -106,6 +119,7 @@ function evalContextFromRowsAndIndex(
 ): EvalContext {
   return {
     getCell: cellGetterFromIndex(index),
+    getCellSv: cellGetterFromIndex(index),
     getCellK(form, column, condition, rowKey) {
       const rows = rowsByForm.get(form) ?? [];
       return getCellKValue(rows, column, condition, rowKey);
@@ -133,6 +147,9 @@ export function evalContextFromSnapshot(snapshot: {
     getCell(form, column, row) {
       return snapshot.cellIndex[form]?.[String(row)]?.[column] ?? 0;
     },
+    getCellSv(form, column, row) {
+      return snapshot.cellIndex[form]?.[String(row)]?.[column] ?? 0;
+    },
     getCellK(form, column, condition, rowKey) {
       const rows = rowsByForm.get(form) ?? [];
       return getCellKValue(rows, column, condition, rowKey);
@@ -149,28 +166,71 @@ export function evalContextFromSnapshot(snapshot: {
 }
 
 export async function loadEvalContextForChecks(
-  filterPeriod?: { start: string; end: string }
+  filter?: CheckScopeFilter
 ): Promise<EvalContext> {
-  if (isBackendMode() && !filterPeriod?.start && !filterPeriod?.end) {
+  const scoped =
+    filter?.zid != null ||
+    filter?.eid != null ||
+    !!filter?.start ||
+    !!filter?.end;
+  // Global snapshot mixes orgs — only use it when no package/period filter is set.
+  if (isBackendMode() && !scoped) {
     const snapshot = await fetchEvalSnapshot();
     if (snapshot) return evalContextFromSnapshot(snapshot);
   }
-  const instances = latestInstancePerTemplate(await loadInstancesForCheck(filterPeriod));
+  const instances = latestInstancePerTemplate(await loadInstancesForCheck(filter));
   return evalContextFromInstances(instances);
 }
 
+function numId(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+/** Pure filter used by loadInstancesForCheck (also covered by unit tests). */
+export function instanceMatchesCheckScope(
+  inst: Pick<OkoFormInstance, "zid" | "eid" | "meta">,
+  filter?: CheckScopeFilter
+): boolean {
+  if (!filter) return true;
+  if (filter.start && inst.meta.periodStart !== filter.start) return false;
+  if (filter.end && inst.meta.periodEnd !== filter.end) return false;
+  if (filter.zid != null) {
+    const z = numId(inst.zid);
+    if (z != null && z !== filter.zid) return false;
+  }
+  if (filter.eid != null) {
+    const e = numId(inst.eid);
+    if (e != null && e !== filter.eid) return false;
+  }
+  return true;
+}
+
 export async function loadInstancesForCheck(
-  filterPeriod?: { start: string; end: string }
+  filter?: CheckScopeFilter
 ): Promise<OkoFormInstance[]> {
+  if (filter?.zid != null && filter?.eid != null) {
+    const summaries = await listInstances({ zid: filter.zid, eid: filter.eid });
+    const out: OkoFormInstance[] = [];
+    for (const s of summaries) {
+      const inst = await loadInstance(s.instanceId);
+      if (inst) {
+        out.push({
+          ...inst,
+          zid: numId(inst.zid) ?? filter.zid,
+          eid: numId(inst.eid) ?? filter.eid,
+        });
+      }
+    }
+    return out;
+  }
+
   const all = await loadAllInstances();
-  if (!filterPeriod?.start && !filterPeriod?.end) return all;
-  return all.filter((inst) => {
-    if (filterPeriod.start && inst.meta.periodStart !== filterPeriod.start)
-      return false;
-    if (filterPeriod.end && inst.meta.periodEnd !== filterPeriod.end)
-      return false;
-    return true;
-  });
+  if (!filter?.start && !filter?.end && filter?.zid == null && filter?.eid == null) {
+    return all;
+  }
+  return all.filter((inst) => instanceMatchesCheckScope(inst, filter));
 }
 
 /** Latest instance per template (by updatedAt). */

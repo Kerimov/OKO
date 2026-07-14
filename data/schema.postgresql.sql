@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS periods (
     period_end   DATE,
     quarter     INTEGER,
     year        INTEGER,
+    package_status TEXT DEFAULT 'draft',
+    package_comment TEXT,
+    status_updated_at TIMESTAMPTZ,
+    status_updated_by TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -28,6 +32,12 @@ CREATE TABLE IF NOT EXISTS form_templates (
     saldo_yellow TEXT,
     saldo_red   TEXT,
     saldo_blue  TEXT,
+    saldo_green TEXT,
+    saldo_yellow_corr TEXT,
+    saldo_red_corr TEXT,
+    saldo_blue_corr TEXT,
+    reorg_update TEXT,
+    reorg_update_2 TEXT,
     sort_order  DOUBLE PRECISION,
     pdf_file    TEXT,
     allow_add_rows INTEGER DEFAULT 0,
@@ -97,6 +107,9 @@ CREATE INDEX IF NOT EXISTS idx_instances_template ON form_instances(template_id)
 CREATE INDEX IF NOT EXISTS idx_instances_period ON form_instances(period_start, period_end);
 CREATE INDEX IF NOT EXISTS idx_instances_zid_eid ON form_instances(zid, eid);
 CREATE INDEX IF NOT EXISTS idx_instances_package ON form_instances(zid, eid, template_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_form_instances_package_tpl
+  ON form_instances (zid, eid, template_id)
+  WHERE zid IS NOT NULL AND eid IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS check_rules (
     number          INTEGER PRIMARY KEY,
@@ -267,6 +280,20 @@ CREATE TABLE IF NOT EXISTS agg_list (
 CREATE INDEX IF NOT EXISTS idx_agg_parent ON agg_list(parent_zid);
 CREATE INDEX IF NOT EXISTS idx_agg_child ON agg_list(child_zid);
 
+-- Access CreateCorrectReorg / набор-зеркало (k_zid)
+CREATE TABLE IF NOT EXISTS agg_corr_sets (
+    id          SERIAL PRIMARY KEY,
+    parent_zid  INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    corr_zid    INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    source_eid  INTEGER NOT NULL REFERENCES periods(eid),
+    label       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(corr_zid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -298,10 +325,37 @@ CREATE TABLE IF NOT EXISTS kontragents (
     mandatory_rash INTEGER DEFAULT 0,
     country TEXT,
     city TEXT,
-    ogrn TEXT
+    ogrn TEXT,
+    old_name TEXT,
+    id_obdnsi TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_kontragents_name ON kontragents(name);
 CREATE INDEX IF NOT EXISTS idx_kontragents_org_type ON kontragents(org_type);
 
 CREATE INDEX IF NOT EXISTS idx_periods_zid ON periods(zid);
+
+CREATE TABLE IF NOT EXISTS package_inbox (
+    id TEXT PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL,
+    actor TEXT,
+    filename TEXT,
+    sha256 TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'received',
+    pkg_zid INTEGER,
+    pkg_eid INTEGER,
+    organization TEXT,
+    period_start TEXT,
+    period_end TEXT,
+    target_zid INTEGER,
+    target_eid INTEGER,
+    validation_errors TEXT NOT NULL DEFAULT '[]',
+    warnings TEXT NOT NULL DEFAULT '[]',
+    instance_count INTEGER NOT NULL DEFAULT 0,
+    accepted_at TIMESTAMPTZ,
+    rejected_reason TEXT,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_package_inbox_status ON package_inbox(status, received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_package_inbox_sha ON package_inbox(sha256);

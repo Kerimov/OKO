@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Put } from "@nestjs/common";
+import { Body, Controller, Get, Put, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { getDb } from "../../../server/src/db.js";
+import { AdminGuard } from "../auth/admin.guard.js";
 
 @ApiTags("settings")
 @ApiBearerAuth()
@@ -15,12 +16,19 @@ export class SettingsController {
       value: string;
     }>;
     const settings: Record<string, string> = {};
-    for (const r of rows) settings[r.key] = r.value;
+    for (const r of rows) {
+      // Work context is per-user via /api/work-context — do not expose global keys here.
+      if (r.key === "workZid" || r.key === "workEid" || r.key.startsWith("workZid:") || r.key.startsWith("workEid:")) {
+        continue;
+      }
+      settings[r.key] = r.value;
+    }
     return settings;
   }
 
   @Put()
-  @ApiOperation({ summary: "Обновить настройки" })
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Обновить глобальные настройки (admin)" })
   async putAll(@Body() body: Record<string, string>) {
     const db = await getDb();
     await db.transaction(async (tx) => {
@@ -28,6 +36,14 @@ export class SettingsController {
         "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
       );
       for (const [key, value] of Object.entries(body)) {
+        if (
+          key === "workZid" ||
+          key === "workEid" ||
+          key.startsWith("workZid:") ||
+          key.startsWith("workEid:")
+        ) {
+          continue;
+        }
         const stored = typeof value === "string" ? value : JSON.stringify(value);
         await upsert.run(key, stored);
       }

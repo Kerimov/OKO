@@ -36,6 +36,9 @@ import {
   seedAggFromJson,
   seedOrganizationsFromAggCodes,
 } from "./aggregation.js";
+import { migratePackageInbox } from "./packageInbox.js";
+import { migrateMethodologyHistory } from "./methodology.js";
+import { runNumberedMigrations } from "./migrations/runner.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
 import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
 import { refreshUserAccountsCache } from "./auth.js";
@@ -55,6 +58,9 @@ async function initSchema(database: OkoDb): Promise<void> {
   await migrateOrgTables(database);
   await migrateUserTables(database);
   await migrateAggTables(database);
+  await migratePackageInbox(database);
+  await migrateMethodologyHistory(database);
+  await runNumberedMigrations(database);
 
   const seededAggOrgs = await seedOrganizationsFromAggCodes(database);
   if (seededAggOrgs > 0) {

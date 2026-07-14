@@ -6,6 +6,7 @@ import { RashEditorModal } from "@portal/components/RashEditorModal";
 import { hasRashRules, isKontrForm } from "@portal/constants";
 import { failedCellsForForm, type CheckRunResult } from "@oko/engine";
 import { exportFormToExcel } from "@portal/engine/exportExcel";
+import { getFormPdfBlob } from "@portal/exportPdf";
 import {
   buildRashCellSlots,
   entriesForRash,
@@ -74,6 +75,7 @@ export function FormPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [recalcing, setRecalcing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
@@ -530,6 +532,42 @@ export function FormPage() {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!schema || !instance) return;
+    setExportingPdf(true);
+    setError("");
+    try {
+      await flushPersist();
+      const { filename, base64, blob } = await getFormPdfBlob({
+        schema,
+        displayName,
+        meta,
+        rows,
+        signatures,
+      });
+      let b64 = base64;
+      if (!b64) {
+        const buf = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        b64 = btoa(binary);
+      }
+      const ok = await window.oko.savePdfFile(filename, b64);
+      if (ok) {
+        setStatus("Файл PDF сохранён");
+        setTimeout(() => setStatus(""), 3000);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось сформировать PDF");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   const handleCheckRash = async () => {
     if (!schema || !rashMode) return;
     setCheckingRash(true);
@@ -569,6 +607,33 @@ export function FormPage() {
       setTimeout(() => setStatus(""), 5000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Не удалось выполнить проверку";
+      setError(msg);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleReorgCheck = async () => {
+    if (!schema || !instance) return;
+    setChecking(true);
+    setCheckResult(null);
+    setError("");
+    await new Promise<void>((r) => setTimeout(r, 0));
+    try {
+      await flushPersist();
+      const result = await window.oko.runReorgFormChecks(schema.id, {
+        instanceId: instance.instanceId,
+        rows,
+      });
+      setCheckResult(result);
+      setStatus(
+        result.failed === 0
+          ? `CheckItReorg: пройдено ${result.passed}/${result.total}`
+          : `CheckItReorg: ошибок ${result.failed} из ${result.total}`
+      );
+      setTimeout(() => setStatus(""), 6000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Не удалось выполнить CheckItReorg";
       setError(msg);
     } finally {
       setChecking(false);
@@ -656,10 +721,27 @@ export function FormPage() {
           <button
             type="button"
             className="btn btn-secondary"
+            onClick={() => void handleExportPdf()}
+            disabled={exportingPdf}
+          >
+            {exportingPdf ? "PDF…" : "Сохранить PDF"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={() => void handleCheck()}
             disabled={checking}
           >
             {checking ? "Проверка…" : "Проверить увязки"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void handleReorgCheck()}
+            disabled={checking}
+            title="Увязки реорганизации CheckItReorg2/3 (CELL_sv)"
+          >
+            CheckItReorg
           </button>
           {rashMode && (
             <button

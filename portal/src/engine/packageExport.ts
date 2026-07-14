@@ -1,5 +1,6 @@
 import type { OkoFormInstance } from "../types";
 import type { PackageRulesBundle } from "./packageRules";
+import { downloadBlob, zipStoreFiles } from "./zipStore";
 
 export interface ReportPackage {
   version: string;
@@ -42,25 +43,40 @@ export async function buildReportPackage(
   return pkg;
 }
 
-export async function downloadReportPackage(
-  instances: OkoFormInstance[],
-  filename?: string
-): Promise<void> {
-  const pkg = await buildReportPackage(instances);
-  const blob = new Blob([JSON.stringify(pkg, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
+function packageBaseName(pkg: ReportPackage, filename?: string): string {
+  if (filename) return filename.replace(/\.zip$/i, "").replace(/\.json$/i, "");
   const org = (pkg.organization || "oko")
     .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")
     .slice(0, 30);
-  const period = (pkg.periodEnd || pkg.periodStart || "report").replace(/\D/g, "").slice(0, 8);
-  a.download =
-    filename ?? `oko_package_${org}_${period || "report"}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const period = (pkg.periodEnd || pkg.periodStart || "report")
+    .replace(/\D/g, "")
+    .slice(0, 8);
+  return `oko_package_${org}_${period || "report"}`;
+}
+
+export async function downloadReportPackage(
+  instances: OkoFormInstance[],
+  filename?: string,
+  options?: { zip?: boolean }
+): Promise<void> {
+  const pkg = await buildReportPackage(instances);
+  const base = packageBaseName(pkg, filename);
+  const jsonName = `${base}.json`;
+  const jsonText = JSON.stringify(pkg, null, 2);
+
+  if (options?.zip) {
+    const zipped = zipStoreFiles([{ name: jsonName, data: jsonText }]);
+    downloadBlob(
+      new Blob([zipped], { type: "application/zip" }),
+      `${base}.zip`
+    );
+    return;
+  }
+
+  downloadBlob(
+    new Blob([jsonText], { type: "application/json" }),
+    filename?.endsWith(".json") ? filename : `${base}.json`
+  );
 }
 
 export function filterInstancesByPeriod(
@@ -112,6 +128,12 @@ export function parseReportPackageFile(text: string): ReportPackage {
 }
 
 export async function readReportPackageFile(file: File): Promise<ReportPackage> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".zip")) {
+    const { unzipFirstJson } = await import("./zipRead");
+    const text = await unzipFirstJson(await file.arrayBuffer());
+    return parseReportPackageFile(text);
+  }
   const text = await file.text();
   return parseReportPackageFile(text);
 }

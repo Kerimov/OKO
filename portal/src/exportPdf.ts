@@ -30,13 +30,18 @@ function columnWidths(columns: FormColumn[]): (string | number)[] {
   });
 }
 
-export function exportFormToPdf(options: {
+export type FormPdfInput = {
   schema: FormSchema;
   displayName: string;
   meta: FormMeta;
   rows: RowData[];
   signatures: Record<string, string>;
-}): void {
+};
+
+export function buildFormPdfDocument(options: FormPdfInput): {
+  doc: TDocumentDefinitions;
+  filename: string;
+} {
   const { schema, displayName, meta, rows, signatures } = options;
   const dataColumns = schema.columns;
   const colCount = dataColumns.length;
@@ -173,5 +178,46 @@ export function exportFormToPdf(options: {
   };
 
   const filename = `${sanitizeFilename(displayName || schema.id)}.pdf`;
+  return { doc, filename };
+}
+
+export function exportFormToPdf(options: FormPdfInput): void {
+  const { doc, filename } = buildFormPdfDocument(options);
   pdfMake.createPdf(doc).download(filename);
+}
+
+/** Blob / base64 for desktop save dialog (Tauri). */
+export async function getFormPdfBlob(
+  options: FormPdfInput
+): Promise<{ blob: Blob; filename: string; base64?: string }> {
+  const { doc, filename } = buildFormPdfDocument(options);
+  const created = pdfMake.createPdf(doc) as unknown as {
+    getBase64?: () => Promise<string>;
+    getBlob?: () => Promise<Blob>;
+    getBuffer?: () => Promise<ArrayBuffer | Uint8Array>;
+  };
+  if (typeof created.getBase64 === "function") {
+    const base64 = await created.getBase64();
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return {
+      blob: new Blob([bytes], { type: "application/pdf" }),
+      filename,
+      base64,
+    };
+  }
+  if (typeof created.getBlob === "function") {
+    const blob = await created.getBlob();
+    return { blob, filename };
+  }
+  if (typeof created.getBuffer === "function") {
+    const buf = await created.getBuffer();
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    return {
+      blob: new Blob([bytes], { type: "application/pdf" }),
+      filename,
+    };
+  }
+  throw new Error("pdfmake: нет getBase64/getBlob/getBuffer");
 }

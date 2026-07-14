@@ -5,7 +5,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  combineCheckExpression,
+  expressionUsesForm,
+  extractCellKRefs,
+  extractCellRefs,
+  extractCellSvRefs,
   formsUsedByFormChecks,
+  runChecksOnInstances,
   runFormChecksWithData,
   type CheckRule,
   type CheckRunResult,
@@ -18,6 +24,7 @@ import type {
 } from "@portal/types";
 import { buildInitialRows } from "@portal/utils";
 import type { OkoDesktopApi } from "./desktopApi";
+import { loadChecks, loadReorgChecks } from "./portalApiStub";
 import {
   getPackageFormRuleCounts,
   getPackageKontrAgents,
@@ -27,23 +34,52 @@ import {
   runPackageRecalc,
 } from "./formEngine";
 import type { AuthUser, OpenPackageResult, PublicUser, SessionInfo, UserRole } from "./types";
+import { zipStoreFiles } from "@portal/engine/zipStore";
+import { unzipFirstJson } from "@portal/engine/zipRead";
+
+async function readPackageFileText(path: string): Promise<string> {
+  if (path.toLowerCase().endsWith(".zip")) {
+    const bytes = await invoke<number[]>("read_bytes_file", { path });
+    return unzipFirstJson(new Uint8Array(bytes).buffer);
+  }
+  return invoke<string>("read_text_file", { path });
+}
+
+async function writeZipBesideJson(
+  jsonPath: string,
+  jsonText: string
+): Promise<{ zipPath: string; zipName: string }> {
+  const jsonName = jsonPath.split(/[/\\]/).pop() || "export.json";
+  const zipPath = jsonPath.replace(/\.json$/i, ".zip");
+  const zipName = zipPath.split(/[/\\]/).pop() || "export.zip";
+  const zipped = zipStoreFiles([{ name: jsonName, data: jsonText }]);
+  await invoke("write_bytes_file", {
+    path: zipPath,
+    bytes: Array.from(zipped),
+  });
+  return { zipPath, zipName };
+}
 
 type TauriOpen = {
   folderPath: string;
   meta: SessionInfo["meta"] & {
     enterpriseCode?: string;
-    settings?: { restrictExecutorsToAssignments?: boolean };
+    settings?: {
+      restrictExecutorsToAssignments?: boolean;
+      dailyBackup?: boolean;
+    };
     coordinatorPinHash?: string;
   };
   dbPath: string;
   instances: number;
   hasCoordinatorPin: boolean;
   restrictExecutorsToAssignments: boolean;
+  dailyBackupPath?: string | null;
 };
 
 let lastSession: SessionInfo | null = null;
 
-function toOpenResult(r: TauriOpen): OpenPackageResult {
+async function toOpenResult(r: TauriOpen): Promise<OpenPackageResult> {
   const meta = {
     formatVersion: r.meta.formatVersion,
     zid: r.meta.zid,
@@ -54,27 +90,90 @@ function toOpenResult(r: TauriOpen): OpenPackageResult {
     enterpriseCode: r.meta.enterpriseCode ?? "1@1",
     createdAt: r.meta.createdAt ?? new Date().toISOString(),
   };
+  let rulesSync: SessionInfo["rulesSync"];
+  try {
+    rulesSync = await invoke<{
+      exportedAt: string | null;
+      version?: string | null;
+      fromPackage: boolean;
+      hasChecks: boolean;
+      hasRash: boolean;
+      hasReorgChecks?: boolean;
+    }>("get_rules_sync");
+  } catch {
+    rulesSync = {
+      exportedAt: null,
+      fromPackage: false,
+      hasChecks: true,
+      hasRash: true,
+      hasReorgChecks: true,
+    };
+  }
   lastSession = {
     folderPath: r.folderPath,
     meta,
     instanceCount: r.instances,
     hasCoordinatorPin: r.hasCoordinatorPin,
     restrictExecutorsToAssignments: r.restrictExecutorsToAssignments,
-    rulesSync: {
-      exportedAt: null,
-      fromPackage: false,
-      hasChecks: true,
-      hasRash: true,
-    },
+    rulesSync,
   };
   rememberRecent(r.folderPath);
-  return { folderPath: r.folderPath, meta, instanceCount: r.instances };
+  return {
+    folderPath: r.folderPath,
+    meta,
+    instanceCount: r.instances,
+    dailyBackupPath: r.dailyBackupPath ?? null,
+  };
 }
 
 const AUTH_KEY = "oko-tauri-auth-users";
 const SESSION_KEY = "oko-tauri-auth-session";
 const RECENT_KEY = "oko-tauri-recent-packages";
 const MAX_RECENT = 8;
+
+function pwKey(login: string) {
+  return `oko-tauri-pw:${login}`;
+}
+
+async function hashPassword(password: string, saltB64?: string): Promise<string> {
+  const salt = saltB64
+    ? Uint8Array.from(atob(saltB64), (c) => c.charCodeAt(0))
+    : crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 120_000, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+  const hash = btoa(String.fromCharCode(...new Uint8Array(bits)));
+  const saltOut = btoa(String.fromCharCode(...salt));
+  return `pbkdf2$120000$${saltOut}$${hash}`;
+}
+
+async function verifyAndUpgradePassword(login: string, password: string): Promise<boolean> {
+  const stored = localStorage.getItem(pwKey(login));
+  if (stored == null) return false;
+  if (!stored.startsWith("pbkdf2$")) {
+    if (stored !== password) return false;
+    localStorage.setItem(pwKey(login), await hashPassword(password));
+    return true;
+  }
+  const parts = stored.split("$");
+  const saltB64 = parts[2];
+  if (!saltB64) return false;
+  const next = await hashPassword(password, saltB64);
+  return next === stored;
+}
+
+async function storePassword(login: string, password: string): Promise<void> {
+  localStorage.setItem(pwKey(login), await hashPassword(password));
+}
 
 function loadUsers(): PublicUser[] {
   try {
@@ -233,11 +332,12 @@ function createApi(): OkoDesktopApi {
     authGetSession: async () => getSessionUser(),
     authLogin: async (login, password) => {
       const users = loadUsers();
-      const u = users.find((x) => x.login === login && (x as PublicUser & { password?: string }).active !== false);
-      // passwords stored separately
-      const pwKey = `oko-tauri-pw:${login}`;
-      const stored = localStorage.getItem(pwKey);
-      if (!u || stored !== password) throw new Error("Неверный логин или пароль");
+      const u = users.find(
+        (x) => x.login === login && (x as PublicUser & { password?: string }).active !== false
+      );
+      if (!u || !(await verifyAndUpgradePassword(login, password))) {
+        throw new Error("Неверный логин или пароль");
+      }
       const session: AuthUser = {
         id: u.id,
         login: u.login,
@@ -260,7 +360,7 @@ function createApi(): OkoDesktopApi {
         updatedAt: now,
       };
       saveUsers([user]);
-      localStorage.setItem(`oko-tauri-pw:${login}`, password);
+      await storePassword(login, password);
       const session: AuthUser = {
         id: user.id,
         login: user.login,
@@ -294,7 +394,7 @@ function createApi(): OkoDesktopApi {
       };
       users.push(user);
       saveUsers(users);
-      localStorage.setItem(`oko-tauri-pw:${payload.login}`, payload.password);
+      await storePassword(payload.login, payload.password);
       return user;
     },
     authUpdateUser: async (payload) => {
@@ -315,7 +415,7 @@ function createApi(): OkoDesktopApi {
     authResetPassword: async (userId, password) => {
       const u = loadUsers().find((x) => x.id === userId);
       if (!u) throw new Error("Пользователь не найден");
-      localStorage.setItem(`oko-tauri-pw:${u.login}`, password);
+      await storePassword(u.login, password);
       return true;
     },
     authDeleteUser: async (userId) => {
@@ -338,15 +438,20 @@ function createApi(): OkoDesktopApi {
     pickJsonFile: async () => {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "JSON", extensions: ["json"] }],
-        title: "Файл комплекта JSON",
+        filters: [
+          { name: "Комплект OKO", extensions: ["json", "zip"] },
+          { name: "JSON", extensions: ["json"] },
+          { name: "ZIP", extensions: ["zip"] },
+        ],
+        title: "Файл комплекта (JSON или ZIP)",
       });
       if (Array.isArray(selected)) return selected[0] ?? null;
       return selected;
     },
+    readTextFile: async (path) => readPackageFileText(path),
     openPackage: async (folderPath) => {
       const r = await invoke<TauriOpen>("open_package", { folderPath });
-      return toOpenResult(r);
+      return await toOpenResult(r);
     },
     createPackage: async (payload) => {
       const r = await invoke<TauriOpen>("create_empty_package", {
@@ -358,7 +463,7 @@ function createApi(): OkoDesktopApi {
         periodEnd: payload.periodEnd,
         enterpriseCode: payload.enterpriseCode,
       });
-      return toOpenResult(r);
+      return await toOpenResult(r);
     },
     seedPackage: async () => {
       if (!lastSession) throw new Error("Комплект не открыт");
@@ -400,7 +505,7 @@ function createApi(): OkoDesktopApi {
       return { created };
     },
     importJson: async (folderPath, jsonPath, mode) => {
-      const raw = await invoke<string>("read_text_file", { path: jsonPath });
+      const raw = await readPackageFileText(jsonPath);
       const pkg = JSON.parse(raw) as {
         organization?: string;
         periodStart?: string;
@@ -409,9 +514,15 @@ function createApi(): OkoDesktopApi {
         eid?: number;
         instances?: Array<{ meta?: { enterpriseCode?: string } }>;
       };
+      const importJsonPath = jsonPath.toLowerCase().endsWith(".zip")
+        ? `${folderPath.replace(/[/\\]$/, "")}/.oko_import_tmp.json`
+        : jsonPath;
+      if (importJsonPath !== jsonPath) {
+        await invoke("write_text_file", { path: importJsonPath, content: raw });
+      }
       try {
         const opened = await invoke<TauriOpen>("open_package", { folderPath });
-        toOpenResult(opened);
+        await toOpenResult(opened);
       } catch {
         const r = await invoke<TauriOpen>("create_empty_package", {
           folderPath,
@@ -422,16 +533,16 @@ function createApi(): OkoDesktopApi {
           periodEnd: pkg.periodEnd || "",
           enterpriseCode: pkg.instances?.[0]?.meta?.enterpriseCode || "1@1",
         });
-        toOpenResult(r);
+        await toOpenResult(r);
       }
       await invoke("import_package_json", {
-        filePath: jsonPath,
+        filePath: importJsonPath,
         actor: getSessionUser()?.displayName || "Оператор",
         pin: null,
         mode: mode === "skip" ? "skip" : "overwrite",
       });
       const again = await invoke<TauriOpen>("open_package", { folderPath });
-      return toOpenResult(again);
+      return await toOpenResult(again);
     },
     closePackage: async () => {
       lastSession = null;
@@ -458,9 +569,9 @@ function createApi(): OkoDesktopApi {
       return res.json();
     },
     runFormChecks: async (formId, live) => {
-      const data = await fetch("/data/checks.json").then((r) => (r.ok ? r.json() : { checks: [] }));
+      const data = await loadChecks();
       const checks = (
-        Array.isArray(data.checks) ? data.checks : Array.isArray(data) ? data : []
+        Array.isArray(data.checks) ? data.checks : []
       ) as CheckRule[];
       const needed = formsUsedByFormChecks(checks, formId, "period");
       const summaries = await invoke<InstanceSummary[]>("list_summaries");
@@ -479,6 +590,52 @@ function createApi(): OkoDesktopApi {
         instances.push({ ...cur, rows: live.rows });
       }
       return runFormChecksWithData(checks, formId, instances, "period") as CheckRunResult;
+    },
+    runReorgFormChecks: async (formId, live) => {
+      const data = await loadReorgChecks();
+      const mapped: CheckRule[] = (data.checks ?? [])
+        .filter((c) => c.variant === 2 || c.variant === 3)
+        .map((c) => ({
+          number: Number(c.number),
+          expression: c.expression,
+          expressionAlt: c.expressionAlt ?? null,
+          message: c.message ?? null,
+          periodActive: true,
+          active: true,
+        }))
+        .filter((r) =>
+          expressionUsesForm(
+            combineCheckExpression(r.expression, r.expressionAlt),
+            formId
+          )
+        );
+      const needed = new Set<string>([formId]);
+      for (const rule of mapped) {
+        const full = combineCheckExpression(rule.expression, rule.expressionAlt);
+        for (const ref of extractCellRefs(full)) needed.add(ref.form);
+        for (const ref of extractCellSvRefs(full)) needed.add(ref.form);
+        for (const ref of extractCellKRefs(full)) needed.add(ref.form);
+      }
+      const summaries = await invoke<InstanceSummary[]>("list_summaries");
+      const instances: OkoFormInstance[] = [];
+      for (const s of summaries) {
+        if (!needed.has(s.templateId)) continue;
+        const inst = await invoke<OkoFormInstance>("load_instance", {
+          instanceId: s.instanceId,
+        });
+        if (live && inst.instanceId === live.instanceId) {
+          instances.push({ ...inst, rows: live.rows });
+        } else {
+          instances.push(inst);
+        }
+      }
+      if (live && !instances.some((i) => i.instanceId === live.instanceId)) {
+        const cur = await invoke<OkoFormInstance>("load_instance", {
+          instanceId: live.instanceId,
+        });
+        instances.push({ ...cur, rows: live.rows });
+      }
+      return runChecksOnInstances(mapped, instances) as CheckRunResult;
     },
     runRashChecks: async (formId, rows, rashEntries) =>
       runPackageRashChecks(formId, rows, rashEntries ?? []),
@@ -506,39 +663,80 @@ function createApi(): OkoDesktopApi {
       await invoke("write_bytes_file", { path, bytes });
       return true;
     },
+    savePdfFile: async (fileName, base64) => {
+      const path = await save({
+        defaultPath: fileName,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (!path) return false;
+      const binary = atob(base64);
+      const bytes = Array.from(binary, (c) => c.charCodeAt(0));
+      await invoke("write_bytes_file", { path, bytes });
+      return true;
+    },
     exportJson: async (opts) => {
       const warnings = await buildExportWarnings();
       const filePath = await invoke<string>("export_package_json", {
         actor: opts?.actor || getSessionUser()?.displayName || "Оператор",
         pin: opts?.pin ?? null,
       });
+      let jsonText = "";
       try {
         const raw = await invoke<string>("read_text_file", { path: filePath });
         const pkg = JSON.parse(raw) as Record<string, unknown>;
         pkg.version = "1.2";
         pkg.rules = await loadRulesBundle();
+        jsonText = `${JSON.stringify(pkg, null, 2)}\n`;
         await invoke("write_text_file", {
           path: filePath,
-          content: `${JSON.stringify(pkg, null, 2)}\n`,
+          content: jsonText,
         });
       } catch {
-        /* keep file without rules if enrichment fails */
+        jsonText = await invoke<string>("read_text_file", { path: filePath });
       }
-      const fileName = filePath.split(/[/\\]/).pop() || "export.json";
-      return { filePath, fileName, warnings };
+      try {
+        const { zipPath, zipName } = await writeZipBesideJson(filePath, jsonText);
+        return { filePath: zipPath, fileName: zipName, warnings };
+      } catch {
+        const fileName = filePath.split(/[/\\]/).pop() || "export.json";
+        return { filePath, fileName, warnings };
+      }
     },
     saveExportAs: async () => {
       const exported = await invoke<string>("export_package_json", {
         actor: getSessionUser()?.displayName || "Оператор",
         pin: null,
       });
+      let jsonText = await invoke<string>("read_text_file", { path: exported });
+      try {
+        const pkg = JSON.parse(jsonText) as Record<string, unknown>;
+        pkg.version = "1.2";
+        pkg.rules = await loadRulesBundle();
+        jsonText = `${JSON.stringify(pkg, null, 2)}\n`;
+        await invoke("write_text_file", { path: exported, content: jsonText });
+      } catch {
+        /* keep raw */
+      }
+      const baseName =
+        (exported.split(/[/\\]/).pop() || "oko_package.json").replace(/\.json$/i, "") ||
+        "oko_package";
       const dest = await save({
-        defaultPath: exported.split(/[/\\]/).pop() || "oko_package.json",
-        filters: [{ name: "JSON", extensions: ["json"] }],
+        defaultPath: `${baseName}.zip`,
+        filters: [
+          { name: "ZIP", extensions: ["zip"] },
+          { name: "JSON", extensions: ["json"] },
+        ],
       });
       if (!dest) return null;
-      if (dest !== exported) {
-        await invoke("copy_file", { from: exported, to: dest });
+      if (dest.toLowerCase().endsWith(".zip")) {
+        const jsonName = `${baseName}.json`;
+        const zipped = zipStoreFiles([{ name: jsonName, data: jsonText }]);
+        await invoke("write_bytes_file", {
+          path: dest,
+          bytes: Array.from(zipped),
+        });
+      } else if (dest !== exported) {
+        await invoke("write_text_file", { path: dest, content: jsonText });
       }
       return dest;
     },
@@ -596,6 +794,23 @@ function createApi(): OkoDesktopApi {
       });
       return { filePath };
     },
+    listBackups: async () =>
+      invoke<Array<{ name: string; path: string; sizeBytes: number; modifiedAt?: string | null }>>(
+        "list_backups"
+      ),
+    restoreDatabase: async (payload) => {
+      const message = await invoke<string>("restore_database", {
+        backupName: payload.backupName,
+        actor: payload.actor || getSessionUser()?.displayName || "Оператор",
+        pin: payload.pin ?? null,
+      });
+      return { message };
+    },
+    compactDatabase: async (payload) =>
+      invoke<{ beforeBytes: number; afterBytes: number }>("compact_database", {
+        actor: payload?.actor || getSessionUser()?.displayName || "Оператор",
+        pin: payload?.pin ?? null,
+      }),
   };
 }
 

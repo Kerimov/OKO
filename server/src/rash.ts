@@ -617,4 +617,275 @@ export async function exportRowRashIndex(db: OkoDb): Promise<RowRashIndexPayload
   };
 }
 
+export interface RashPlacementConflict {
+  formId: string;
+  rowNo: string;
+  columnKey: string;
+  existingKod: number;
+}
+
+export async function findPlacementConflicts(
+  db: OkoDb,
+  kod: number,
+  items: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>
+): Promise<RashPlacementConflict[]> {
+  const conflicts: RashPlacementConflict[] = [];
+  const q = db.prepare(
+    `SELECT form_id, row_no, column_key, kod FROM rash_placements
+     WHERE form_id = ? AND row_no = ? AND column_key = ? AND kod <> ?`
+  );
+  for (const item of items) {
+    if (!item.formId?.trim() || item.rowNo == null || String(item.rowNo).trim() === "") continue;
+    const row = (await q.get(
+      item.formId.trim(),
+      String(item.rowNo).trim(),
+      normalizeColumnKey(item.columnKey),
+      kod
+    )) as
+      | { form_id: string; row_no: string; column_key: string; kod: number }
+      | undefined;
+    if (row) {
+      conflicts.push({
+        formId: row.form_id,
+        rowNo: String(row.row_no),
+        columnKey: row.column_key ?? "",
+        existingKod: row.kod,
+      });
+    }
+  }
+  return conflicts;
+}
+
+export async function saveRashBundle(
+  db: OkoDb,
+  payload: {
+    rule: RashRuleDto;
+    addsum?: RashAddsumDto[];
+    placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
+    forceConflicts?: boolean;
+  }
+): Promise<{
+  rule: RashRuleDto;
+  addsum: RashAddsumDto[];
+  placements: RashPlacementDto[];
+  conflicts: RashPlacementConflict[];
+}> {
+  const { rule } = payload;
+  if (!rule?.kod || !rule.name?.trim()) {
+    throw new Error("kod and name required");
+  }
+  const placements = payload.placements ?? [];
+  const conflicts = await findPlacementConflicts(db, rule.kod, placements);
+  if (conflicts.length && !payload.forceConflicts) {
+    const err = new Error(
+      `Конфликт привязок: ${conflicts
+        .slice(0, 3)
+        .map((c) => `${c.formId}/${c.rowNo}/${c.columnKey || "*"}→${c.existingKod}`)
+        .join("; ")}`
+    );
+    (err as Error & { conflicts?: RashPlacementConflict[] }).conflicts = conflicts;
+    throw err;
+  }
+
+  return db.transaction(async (tx) => {
+    await upsertRashRule(tx, rule);
+
+    await tx.prepare("DELETE FROM rash_addsum WHERE kod = ?").run(rule.kod);
+    const insertAdd = tx.prepare(
+      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type) VALUES (?, ?, ?, ?)"
+    );
+    const sortedAdd = [...(payload.addsum ?? [])].sort((a, b) => a.sort - b.sort);
+    for (const [i, item] of sortedAdd.entries()) {
+      await insertAdd.run(rule.kod, item.sort ?? i, item.sumTitle, item.fldType || "Сумма");
+    }
+
+    if (payload.forceConflicts) {
+      for (const c of conflicts) {
+        await tx
+          .prepare(
+            `DELETE FROM rash_placements
+             WHERE form_id = ? AND row_no = ? AND column_key = ? AND kod = ?`
+          )
+          .run(c.formId, c.rowNo, normalizeColumnKey(c.columnKey), c.existingKod);
+      }
+    }
+
+    await tx.prepare("DELETE FROM rash_placements WHERE kod = ?").run(rule.kod);
+    await insertPlacements(
+      tx,
+      placements.map((item) => ({
+        formId: item.formId,
+        rowNo: String(item.rowNo),
+        columnKey: item.columnKey ?? "",
+        kod: rule.kod,
+      }))
+    );
+
+    return {
+      rule,
+      addsum: await listRashAddsum(tx, rule.kod),
+      placements: await listPlacementsByKod(tx, rule.kod),
+      conflicts,
+    };
+  });
+}
+
+export async function getRashRuleUsage(db: OkoDb, kod: number): Promise<{
+  kod: number;
+  placementCount: number;
+  forms: string[];
+  samplePlacements: RashPlacementDto[];
+  entryCount: number;
+  instanceCount: number;
+}> {
+  const placements = await listPlacementsByKod(db, kod);
+  const forms = [...new Set(placements.map((p) => p.formId))].sort();
+  let entryCount = 0;
+  let instanceCount = 0;
+  try {
+    const row = (await db
+      .prepare(
+        `SELECT COUNT(*) AS c, COUNT(DISTINCT instance_id) AS ic
+         FROM form_rash_entries WHERE rash_kod = ?`
+      )
+      .get(kod)) as { c: number; ic: number };
+    entryCount = Number(row?.c ?? 0);
+    instanceCount = Number(row?.ic ?? 0);
+  } catch {
+    /* table may be empty / missing in some boots */
+  }
+  return {
+    kod,
+    placementCount: placements.length,
+    forms,
+    samplePlacements: placements.slice(0, 40),
+    entryCount,
+    instanceCount,
+  };
+}
+
+export async function suggestNextRashKod(db: OkoDb): Promise<number> {
+  const row = (await db.prepare("SELECT COALESCE(MAX(kod), 90000) AS m FROM rash_rules").get()) as {
+    m: number;
+  };
+  let next = Math.max(90001, Number(row.m) + 1);
+  const reserved = new Set([0, 1, 2, 3, 4, 6]);
+  while (reserved.has(next)) next += 1;
+  return next;
+}
+
+function ruleFingerprint(r: RashRuleDto): string {
+  return JSON.stringify({
+    name: r.name ?? "",
+    note: r.note ?? null,
+    refRows: r.refRows ?? null,
+    totalFormula: r.totalFormula ?? null,
+    refA1Name: r.refA1Name ?? null,
+    refA1Title: r.refA1Title ?? null,
+    refA2Name: r.refA2Name ?? null,
+    refA2Title: r.refA2Title ?? null,
+    refA3Name: r.refA3Name ?? null,
+    refA3Title: r.refA3Title ?? null,
+    refA4Name: r.refA4Name ?? null,
+    refA4Title: r.refA4Title ?? null,
+  });
+}
+
+export async function previewRashRulesReimport(db: OkoDb): Promise<{
+  added: number[];
+  removed: number[];
+  changed: number[];
+  unchanged: number;
+  jsonTotal: number;
+  dbTotal: number;
+}> {
+  const data = loadJsonPayload();
+  if (!data) throw new Error("rash-rules.json not found");
+  const dbRules = (
+    (await db.prepare("SELECT * FROM rash_rules").all()) as RashRuleRow[]
+  ).map(rowToDto);
+  const dbMap = new Map(dbRules.map((r) => [r.kod, r]));
+  const jsonMap = new Map(data.rules.map((r) => [r.kod, r]));
+  const added: number[] = [];
+  const removed: number[] = [];
+  const changed: number[] = [];
+  let unchanged = 0;
+  for (const [kod, jr] of jsonMap) {
+    const dr = dbMap.get(kod);
+    if (!dr) added.push(kod);
+    else if (ruleFingerprint(jr) !== ruleFingerprint(dr)) changed.push(kod);
+    else unchanged += 1;
+  }
+  for (const kod of dbMap.keys()) {
+    if (!jsonMap.has(kod)) removed.push(kod);
+  }
+  return {
+    added: added.sort((a, b) => a - b),
+    removed: removed.sort((a, b) => a - b),
+    changed: changed.sort((a, b) => a - b),
+    unchanged,
+    jsonTotal: data.rules.length,
+    dbTotal: dbRules.length,
+  };
+}
+
+export async function previewPlacementsReimport(db: OkoDb): Promise<{
+  added: number;
+  removed: number;
+  changed: number;
+  unchanged: number;
+  jsonTotal: number;
+  dbTotal: number;
+  sampleConflicts: RashPlacementConflict[];
+}> {
+  if (!fs.existsSync(ROW_RASH_JSON)) throw new Error("row-rash-index.json not found");
+  const data = JSON.parse(fs.readFileSync(ROW_RASH_JSON, "utf-8")) as RowRashIndexPayload;
+  const jsonItems = flattenRowRashIndex(data);
+  const dbItems = (await db
+    .prepare(`SELECT form_id, row_no, column_key, kod FROM rash_placements`)
+    .all()) as Array<{ form_id: string; row_no: string; column_key: string; kod: number }>;
+
+  const keyOf = (formId: string, rowNo: string, col: string) =>
+    `${formId}\0${rowNo}\0${normalizeColumnKey(col)}`;
+  const dbMap = new Map(
+    dbItems.map((r) => [keyOf(r.form_id, String(r.row_no), r.column_key), r.kod])
+  );
+  const jsonMap = new Map(
+    jsonItems.map((r) => [keyOf(r.formId, String(r.rowNo), r.columnKey), r.kod])
+  );
+
+  let added = 0;
+  let removed = 0;
+  let changed = 0;
+  let unchanged = 0;
+  const sampleConflicts: RashPlacementConflict[] = [];
+  for (const [k, kod] of jsonMap) {
+    if (!dbMap.has(k)) added += 1;
+    else if (dbMap.get(k) !== kod) {
+      changed += 1;
+      if (sampleConflicts.length < 20) {
+        const [formId, rowNo, columnKey] = k.split("\0");
+        sampleConflicts.push({
+          formId,
+          rowNo,
+          columnKey,
+          existingKod: dbMap.get(k)!,
+        });
+      }
+    } else unchanged += 1;
+  }
+  for (const k of dbMap.keys()) {
+    if (!jsonMap.has(k)) removed += 1;
+  }
+  return {
+    added,
+    removed,
+    changed,
+    unchanged,
+    jsonTotal: jsonItems.length,
+    dbTotal: dbItems.length,
+    sampleConflicts,
+  };
+}
+
 export { rowToDto, dtoToRow };
