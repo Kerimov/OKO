@@ -5,6 +5,8 @@ export interface ImportPackageOptions {
   targetZid: number;
   targetEid: number;
   overwrite: boolean;
+  /** Access PartReceiveZID: only these templateIds (omit = all package forms). */
+  templateIds?: string[];
 }
 
 export interface ImportPackageResult {
@@ -41,8 +43,9 @@ export function mergePackageIntoInstances(
   existing: OkoFormInstance[],
   options: ImportPackageOptions
 ): { instances: OkoFormInstance[]; result: ImportPackageResult } {
-  const { targetZid, targetEid, overwrite } = options;
+  const { targetZid, targetEid, overwrite, templateIds } = options;
   const organization = pkg.organization || pkg.instances[0]?.meta?.organization || "";
+  const allow = templateIds?.length ? new Set(templateIds) : null;
   const byTemplate = new Map<string, OkoFormInstance>();
   for (const inst of existing) {
     if (inst.zid === targetZid && inst.eid === targetEid) {
@@ -57,13 +60,16 @@ export function mergePackageIntoInstances(
     errors: [],
   };
 
-  const output = existing.filter(
-    (i) => !(i.zid === targetZid && i.eid === targetEid)
-  );
-  const importedForPeriod: OkoFormInstance[] = [];
-
   for (const raw of pkg.instances) {
     try {
+      if (!raw.templateId) {
+        result.errors.push("Форма без templateId пропущена");
+        continue;
+      }
+      if (allow && !allow.has(raw.templateId)) {
+        result.skipped++;
+        continue;
+      }
       const normalized = normalizeImportedInstance(
         raw,
         targetZid,
@@ -73,19 +79,18 @@ export function mergePackageIntoInstances(
       const prev = byTemplate.get(normalized.templateId);
       if (prev) {
         if (!overwrite) {
-          importedForPeriod.push(prev);
           result.skipped++;
           continue;
         }
         normalized.instanceId = prev.instanceId;
         normalized.createdAt = prev.createdAt;
-        importedForPeriod.push(normalized);
+        byTemplate.set(normalized.templateId, normalized);
         result.updated++;
       } else {
         if (!normalized.instanceId) {
           normalized.instanceId = crypto.randomUUID();
         }
-        importedForPeriod.push(normalized);
+        byTemplate.set(normalized.templateId, normalized);
         result.created++;
       }
     } catch (e) {
@@ -95,8 +100,11 @@ export function mergePackageIntoInstances(
     }
   }
 
+  const output = existing.filter(
+    (i) => !(i.zid === targetZid && i.eid === targetEid)
+  );
   return {
-    instances: [...output, ...importedForPeriod],
+    instances: [...output, ...Array.from(byTemplate.values())],
     result,
   };
 }

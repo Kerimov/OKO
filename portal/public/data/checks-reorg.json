@@ -1,0 +1,5393 @@
+{
+  "version": "1.0",
+  "source": "z261 refs + OKO26-1.m_e Reorg tables",
+  "total": 538,
+  "byVariant": {
+    "2": 178,
+    "3": 166,
+    "1": 28,
+    "4": 166
+  },
+  "checks": [
+    {
+      "variant": 2,
+      "number": 2020,
+      "expression": "CELL_sv(\"N01_23\",\"B\",10)=Cell(\"N01_23\",\"P\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2045,
+      "expression": "CELL_sv(\"N01_23\",\"B\",100)=Cell(\"N01_23\",\"P\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2046,
+      "expression": "CELL_sv(\"N01_23\",\"B\",110)=Cell(\"N01_23\",\"N\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2047,
+      "expression": "CELL_sv(\"N01_23\",\"B\",120)=Cell(\"N01_23\",\"N\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2048,
+      "expression": "CELL_sv(\"N01_23\",\"B\",130)=Cell(\"N01_23\",\"N\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2049,
+      "expression": "CELL_sv(\"N01_23\",\"B\",140)=Cell(\"N01_23\",\"N\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2050,
+      "expression": "CELL_sv(\"N01_23\",\"B\",150)=Cell(\"N01_23\",\"N\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2051,
+      "expression": "CELL_sv(\"N01_23\",\"B\",160)=Cell(\"N01_23\",\"N\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2052,
+      "expression": "CELL_sv(\"N01_23\",\"B\",170)=Cell(\"N01_23\",\"N\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2053,
+      "expression": "CELL_sv(\"N01_23\",\"B\",180)=Cell(\"N01_23\",\"N\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2054,
+      "expression": "CELL_sv(\"N01_23\",\"B\",190)=Cell(\"N01_23\",\"N\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2021,
+      "expression": "CELL_sv(\"N01_23\",\"B\",20)=Cell(\"N01_23\",\"P\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2055,
+      "expression": "CELL_sv(\"N01_23\",\"B\",200)=Cell(\"N01_23\",\"N\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2056,
+      "expression": "CELL_sv(\"N01_23\",\"B\",210)=Cell(\"N01_23\",\"N\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2057,
+      "expression": "CELL_sv(\"N01_23\",\"B\",211)=Cell(\"N01_23\",\"N\",211)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2058,
+      "expression": "CELL_sv(\"N01_23\",\"B\",212)=Cell(\"N01_23\",\"N\",212)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2059,
+      "expression": "CELL_sv(\"N01_23\",\"B\",219)=Cell(\"N01_23\",\"N\",219)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2060,
+      "expression": "CELL_sv(\"N01_23\",\"B\",220)=Cell(\"N01_23\",\"N\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2061,
+      "expression": "CELL_sv(\"N01_23\",\"B\",230)=Cell(\"N01_23\",\"N\",230)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2062,
+      "expression": "CELL_sv(\"N01_23\",\"B\",240)=Cell(\"N01_23\",\"N\",240)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2022,
+      "expression": "CELL_sv(\"N01_23\",\"B\",30)=Cell(\"N01_23\",\"P\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2023,
+      "expression": "CELL_sv(\"N01_23\",\"B\",40)=Cell(\"N01_23\",\"P\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2024,
+      "expression": "CELL_sv(\"N01_23\",\"B\",41)=Cell(\"N01_23\",\"P\",41)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2025,
+      "expression": "CELL_sv(\"N01_23\",\"B\",42)=Cell(\"N01_23\",\"P\",42)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2026,
+      "expression": "CELL_sv(\"N01_23\",\"B\",43)=Cell(\"N01_23\",\"P\",43)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2027,
+      "expression": "CELL_sv(\"N01_23\",\"B\",49)=Cell(\"N01_23\",\"P\",49)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2028,
+      "expression": "CELL_sv(\"N01_23\",\"B\",50)=Cell(\"N01_23\",\"P\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2029,
+      "expression": "CELL_sv(\"N01_23\",\"B\",51)=Cell(\"N01_23\",\"P\",51)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2030,
+      "expression": "CELL_sv(\"N01_23\",\"B\",52)=Cell(\"N01_23\",\"P\",52)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2031,
+      "expression": "CELL_sv(\"N01_23\",\"B\",53)=Cell(\"N01_23\",\"P\",53)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2032,
+      "expression": "CELL_sv(\"N01_23\",\"B\",54)=Cell(\"N01_23\",\"P\",54)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2033,
+      "expression": "CELL_sv(\"N01_23\",\"B\",55)=Cell(\"N01_23\",\"P\",55)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2034,
+      "expression": "CELL_sv(\"N01_23\",\"B\",59)=Cell(\"N01_23\",\"P\",59)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2035,
+      "expression": "CELL_sv(\"N01_23\",\"B\",60)=Cell(\"N01_23\",\"P\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2036,
+      "expression": "CELL_sv(\"N01_23\",\"B\",61)=Cell(\"N01_23\",\"P\",61)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2037,
+      "expression": "CELL_sv(\"N01_23\",\"B\",62)=Cell(\"N01_23\",\"P\",62)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2038,
+      "expression": "CELL_sv(\"N01_23\",\"B\",64)=Cell(\"N01_23\",\"P\",64)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2039,
+      "expression": "CELL_sv(\"N01_23\",\"B\",65)=Cell(\"N01_23\",\"P\",65)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2040,
+      "expression": "CELL_sv(\"N01_23\",\"B\",66)=Cell(\"N01_23\",\"P\",66)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2041,
+      "expression": "CELL_sv(\"N01_23\",\"B\",69)=Cell(\"N01_23\",\"P\",69)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2042,
+      "expression": "CELL_sv(\"N01_23\",\"B\",70)=Cell(\"N01_23\",\"P\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2043,
+      "expression": "CELL_sv(\"N01_23\",\"B\",80)=Cell(\"N01_23\",\"P\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2070,
+      "expression": "CELL_sv(\"N01_4\",\"B\",4450)=Cell(\"N01_4\",\"B\",4199)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2001,
+      "expression": "CELL_sv(\"N02_1\",\"B\",40)=Cell(\"N02_1\",\"B\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2002,
+      "expression": "CELL_sv(\"N02_1\",\"C\",40)=Cell(\"N02_1\",\"C\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2003,
+      "expression": "CELL_sv(\"N02_1\",\"D\",40)=Cell(\"N02_1\",\"D\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2004,
+      "expression": "CELL_sv(\"N02_1\",\"E\",40)=Cell(\"N02_1\",\"E\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2005,
+      "expression": "CELL_sv(\"N02_1\",\"F\",40)=Cell(\"N02_1\",\"F\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2007,
+      "expression": "CELL_sv(\"N02_1\",\"G\",40)=Cell(\"N02_1\",\"G\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2008,
+      "expression": "CELL_sv(\"N02_1\",\"H\",40)=Cell(\"N02_1\",\"H\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2009,
+      "expression": "CELL_sv(\"N02_1\",\"I\",40)=Cell(\"N02_1\",\"I\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2010,
+      "expression": "CELL_sv(\"N02_1\",\"J\",40)=Cell(\"N02_1\",\"J\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2011,
+      "expression": "CELL_sv(\"N02_1\",\"K\",40)=Cell(\"N02_1\",\"K\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2012,
+      "expression": "CELL_sv(\"N02_1\",\"L\",40)=Cell(\"N02_1\",\"L\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2013,
+      "expression": "CELL_sv(\"N02_1\",\"M\",40)=Cell(\"N02_1\",\"M\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2014,
+      "expression": "CELL_sv(\"N02_1\",\"N\",40)=Cell(\"N02_1\",\"N\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2015,
+      "expression": "CELL_sv(\"N02_1\",\"O\",40)=Cell(\"N02_1\",\"O\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2006,
+      "expression": "CELL_sv(\"N02_1\",\"P\",40)=Cell(\"N02_1\",\"P\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2082,
+      "expression": "CELL_sv(\"N02_2\",\"C\",40)=Cell(\"N02_2\",\"C\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2083,
+      "expression": "CELL_sv(\"N02_2\",\"D\",40)=Cell(\"N02_2\",\"D\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2084,
+      "expression": "CELL_sv(\"N02_2\",\"E\",40)=Cell(\"N02_2\",\"E\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2085,
+      "expression": "CELL_sv(\"N02_2\",\"F\",40)=Cell(\"N02_2\",\"F\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2087,
+      "expression": "CELL_sv(\"N02_2\",\"G\",40)=Cell(\"N02_2\",\"G\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2088,
+      "expression": "CELL_sv(\"N02_2\",\"H\",40)=Cell(\"N02_2\",\"H\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2089,
+      "expression": "CELL_sv(\"N02_2\",\"I\",40)=Cell(\"N02_2\",\"I\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2090,
+      "expression": "CELL_sv(\"N02_2\",\"J\",40)=Cell(\"N02_2\",\"J\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2091,
+      "expression": "CELL_sv(\"N02_2\",\"K\",40)=Cell(\"N02_2\",\"K\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2092,
+      "expression": "CELL_sv(\"N02_2\",\"L\",40)=Cell(\"N02_2\",\"L\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2093,
+      "expression": "CELL_sv(\"N02_2\",\"M\",40)=Cell(\"N02_2\",\"M\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2094,
+      "expression": "CELL_sv(\"N02_2\",\"N\",40)=Cell(\"N02_2\",\"N\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2095,
+      "expression": "CELL_sv(\"N02_2\",\"O\",40)=Cell(\"N02_2\",\"O\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2086,
+      "expression": "CELL_sv(\"N02_2\",\"P\",40)=Cell(\"N02_2\",\"P\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2120,
+      "expression": "CELL_sv(\"N03_1\",\"B\",100)=Cell(\"N03_1\",\"N\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2160,
+      "expression": "CELL_sv(\"N05_1\",\"B\",10)=Cell(\"N05_1\",\"Q\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2166,
+      "expression": "CELL_sv(\"N05_1\",\"B\",100)=Cell(\"N05_1\",\"Q\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2167,
+      "expression": "CELL_sv(\"N05_1\",\"B\",120)=Cell(\"N05_1\",\"Q\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2168,
+      "expression": "CELL_sv(\"N05_1\",\"B\",140)=Cell(\"N05_1\",\"Q\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2169,
+      "expression": "CELL_sv(\"N05_1\",\"B\",160)=Cell(\"N05_1\",\"Q\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2170,
+      "expression": "CELL_sv(\"N05_1\",\"B\",170)=Cell(\"N05_1\",\"Q\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2171,
+      "expression": "CELL_sv(\"N05_1\",\"B\",180)=Cell(\"N05_1\",\"Q\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2183,
+      "expression": "CELL_sv(\"N05_1\",\"B\",280)=Cell(\"N05_1\",\"Q\",280)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2161,
+      "expression": "CELL_sv(\"N05_1\",\"B\",30)=Cell(\"N05_1\",\"Q\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2182,
+      "expression": "CELL_sv(\"N05_1\",\"B\",300)=Cell(\"N05_1\",\"Q\",300)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2181,
+      "expression": "CELL_sv(\"N05_1\",\"B\",320)=Cell(\"N05_1\",\"Q\",320)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2180,
+      "expression": "CELL_sv(\"N05_1\",\"B\",370)=Cell(\"N05_1\",\"Q\",370)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2179,
+      "expression": "CELL_sv(\"N05_1\",\"B\",430)=Cell(\"N05_1\",\"Q\",430)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2178,
+      "expression": "CELL_sv(\"N05_1\",\"B\",480)=Cell(\"N05_1\",\"Q\",480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2162,
+      "expression": "CELL_sv(\"N05_1\",\"B\",50)=Cell(\"N05_1\",\"Q\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2163,
+      "expression": "CELL_sv(\"N05_1\",\"B\",70)=Cell(\"N05_1\",\"Q\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2164,
+      "expression": "CELL_sv(\"N05_1\",\"B\",80)=Cell(\"N05_1\",\"Q\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2165,
+      "expression": "CELL_sv(\"N05_1\",\"B\",90)=Cell(\"N05_1\",\"Q\",90)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2200,
+      "expression": "CELL_sv(\"N05_2\",\"B\",10)=Cell(\"N05_2\",\"I\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2209,
+      "expression": "CELL_sv(\"N05_2\",\"B\",100)=Cell(\"N05_2\",\"I\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2210,
+      "expression": "CELL_sv(\"N05_2\",\"B\",110)=Cell(\"N05_2\",\"I\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2211,
+      "expression": "CELL_sv(\"N05_2\",\"B\",120)=Cell(\"N05_2\",\"I\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2212,
+      "expression": "CELL_sv(\"N05_2\",\"B\",130)=Cell(\"N05_2\",\"I\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2213,
+      "expression": "CELL_sv(\"N05_2\",\"B\",140)=Cell(\"N05_2\",\"I\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2214,
+      "expression": "CELL_sv(\"N05_2\",\"B\",150)=Cell(\"N05_2\",\"I\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2215,
+      "expression": "CELL_sv(\"N05_2\",\"B\",160)=Cell(\"N05_2\",\"I\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2216,
+      "expression": "CELL_sv(\"N05_2\",\"B\",170)=Cell(\"N05_2\",\"I\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2217,
+      "expression": "CELL_sv(\"N05_2\",\"B\",180)=Cell(\"N05_2\",\"I\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2218,
+      "expression": "CELL_sv(\"N05_2\",\"B\",190)=Cell(\"N05_2\",\"I\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2201,
+      "expression": "CELL_sv(\"N05_2\",\"B\",20)=Cell(\"N05_2\",\"I\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2219,
+      "expression": "CELL_sv(\"N05_2\",\"B\",200)=Cell(\"N05_2\",\"I\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2220,
+      "expression": "CELL_sv(\"N05_2\",\"B\",210)=Cell(\"N05_2\",\"I\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2221,
+      "expression": "CELL_sv(\"N05_2\",\"B\",220)=Cell(\"N05_2\",\"I\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2202,
+      "expression": "CELL_sv(\"N05_2\",\"B\",30)=Cell(\"N05_2\",\"I\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2203,
+      "expression": "CELL_sv(\"N05_2\",\"B\",40)=Cell(\"N05_2\",\"I\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2204,
+      "expression": "CELL_sv(\"N05_2\",\"B\",50)=Cell(\"N05_2\",\"I\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2205,
+      "expression": "CELL_sv(\"N05_2\",\"B\",60)=Cell(\"N05_2\",\"I\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2206,
+      "expression": "CELL_sv(\"N05_2\",\"B\",70)=Cell(\"N05_2\",\"I\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2207,
+      "expression": "CELL_sv(\"N05_2\",\"B\",80)=Cell(\"N05_2\",\"I\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2208,
+      "expression": "CELL_sv(\"N05_2\",\"B\",90)=Cell(\"N05_2\",\"I\",90)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2310,
+      "expression": "CELL_sv(\"N10_1\",\"B\",10)=Cell(\"N10_1\",\"B\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2311,
+      "expression": "CELL_sv(\"N10_1\",\"C\",10)=Cell(\"N10_1\",\"C\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2312,
+      "expression": "CELL_sv(\"N10_1\",\"D\",10)=Cell(\"N10_1\",\"D\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2313,
+      "expression": "CELL_sv(\"N10_1\",\"E\",10)=Cell(\"N10_1\",\"E\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2314,
+      "expression": "CELL_sv(\"N10_1\",\"F\",10)=Cell(\"N10_1\",\"F\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2315,
+      "expression": "CELL_sv(\"N10_1\",\"G\",10)=Cell(\"N10_1\",\"G\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2320,
+      "expression": "CELL_sv(\"N12_1\",\"B\",10)=Cell(\"N12_1\",\"J\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2329,
+      "expression": "CELL_sv(\"N12_1\",\"B\",100)=Cell(\"N12_1\",\"J\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2330,
+      "expression": "CELL_sv(\"N12_1\",\"B\",110)=Cell(\"N12_1\",\"J\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2331,
+      "expression": "CELL_sv(\"N12_1\",\"B\",120)=Cell(\"N12_1\",\"J\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2332,
+      "expression": "CELL_sv(\"N12_1\",\"B\",130)=Cell(\"N12_1\",\"J\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2333,
+      "expression": "CELL_sv(\"N12_1\",\"B\",140)=Cell(\"N12_1\",\"J\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2334,
+      "expression": "CELL_sv(\"N12_1\",\"B\",150)=Cell(\"N12_1\",\"J\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2321,
+      "expression": "CELL_sv(\"N12_1\",\"B\",20)=Cell(\"N12_1\",\"J\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2322,
+      "expression": "CELL_sv(\"N12_1\",\"B\",30)=Cell(\"N12_1\",\"J\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2323,
+      "expression": "CELL_sv(\"N12_1\",\"B\",40)=Cell(\"N12_1\",\"J\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2324,
+      "expression": "CELL_sv(\"N12_1\",\"B\",50)=Cell(\"N12_1\",\"J\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2325,
+      "expression": "CELL_sv(\"N12_1\",\"B\",60)=Cell(\"N12_1\",\"J\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2326,
+      "expression": "CELL_sv(\"N12_1\",\"B\",70)=Cell(\"N12_1\",\"J\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2327,
+      "expression": "CELL_sv(\"N12_1\",\"B\",80)=Cell(\"N12_1\",\"J\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2328,
+      "expression": "CELL_sv(\"N12_1\",\"B\",90)=Cell(\"N12_1\",\"J\",90)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2361,
+      "expression": "CELL_sv(\"N14_1\",\"C\",10000)=Cell(\"N14_1\",\"C\",19480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2362,
+      "expression": "CELL_sv(\"N14_1\",\"E\",10000)=Cell(\"N14_1\",\"E\",19480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2363,
+      "expression": "CELL_sv(\"N14_1\",\"F\",10000)=Cell(\"N14_1\",\"F\",19480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2364,
+      "expression": "CELL_sv(\"N14_1\",\"G\",10000)=Cell(\"N14_1\",\"G\",19480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2370,
+      "expression": "CELL_sv(\"N15_1\",\"C\",1)=Cell(\"N15_1\",\"E\",1)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2379,
+      "expression": "CELL_sv(\"N15_1\",\"C\",10)=Cell(\"N15_1\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2380,
+      "expression": "CELL_sv(\"N15_1\",\"C\",11)=Cell(\"N15_1\",\"E\",11)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2381,
+      "expression": "CELL_sv(\"N15_1\",\"C\",12)=Cell(\"N15_1\",\"E\",12)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2385,
+      "expression": "CELL_sv(\"N15_1\",\"C\",16)=Cell(\"N15_1\",\"E\",16)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2386,
+      "expression": "CELL_sv(\"N15_1\",\"C\",17)=Cell(\"N15_1\",\"E\",17)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2387,
+      "expression": "CELL_sv(\"N15_1\",\"C\",18)=Cell(\"N15_1\",\"E\",18)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2388,
+      "expression": "CELL_sv(\"N15_1\",\"C\",19)=Cell(\"N15_1\",\"E\",19)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2371,
+      "expression": "CELL_sv(\"N15_1\",\"C\",2)=Cell(\"N15_1\",\"E\",2)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2389,
+      "expression": "CELL_sv(\"N15_1\",\"C\",20)=Cell(\"N15_1\",\"E\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2390,
+      "expression": "CELL_sv(\"N15_1\",\"C\",21)=Cell(\"N15_1\",\"E\",21)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2391,
+      "expression": "CELL_sv(\"N15_1\",\"C\",22)=Cell(\"N15_1\",\"E\",22)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2392,
+      "expression": "CELL_sv(\"N15_1\",\"C\",23)=Cell(\"N15_1\",\"E\",23)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2393,
+      "expression": "CELL_sv(\"N15_1\",\"C\",24)=Cell(\"N15_1\",\"E\",24)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2394,
+      "expression": "CELL_sv(\"N15_1\",\"C\",25)=Cell(\"N15_1\",\"E\",25)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2395,
+      "expression": "CELL_sv(\"N15_1\",\"C\",26)=Cell(\"N15_1\",\"E\",26)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2396,
+      "expression": "CELL_sv(\"N15_1\",\"C\",27)=Cell(\"N15_1\",\"E\",27)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2397,
+      "expression": "CELL_sv(\"N15_1\",\"C\",28)=Cell(\"N15_1\",\"E\",28)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2398,
+      "expression": "CELL_sv(\"N15_1\",\"C\",29)=Cell(\"N15_1\",\"E\",29)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2372,
+      "expression": "CELL_sv(\"N15_1\",\"C\",3)=Cell(\"N15_1\",\"E\",3)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2399,
+      "expression": "CELL_sv(\"N15_1\",\"C\",30)=Cell(\"N15_1\",\"E\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2400,
+      "expression": "CELL_sv(\"N15_1\",\"C\",31)=Cell(\"N15_1\",\"E\",31)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2401,
+      "expression": "CELL_sv(\"N15_1\",\"C\",32)=Cell(\"N15_1\",\"E\",32)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2402,
+      "expression": "CELL_sv(\"N15_1\",\"C\",33)=Cell(\"N15_1\",\"E\",33)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2403,
+      "expression": "CELL_sv(\"N15_1\",\"C\",34)=Cell(\"N15_1\",\"E\",34)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2404,
+      "expression": "CELL_sv(\"N15_1\",\"C\",35)=Cell(\"N15_1\",\"E\",35)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2405,
+      "expression": "CELL_sv(\"N15_1\",\"C\",36)=Cell(\"N15_1\",\"E\",36)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2406,
+      "expression": "CELL_sv(\"N15_1\",\"C\",38)=Cell(\"N15_1\",\"E\",38)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2373,
+      "expression": "CELL_sv(\"N15_1\",\"C\",4)=Cell(\"N15_1\",\"E\",4)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2407,
+      "expression": "CELL_sv(\"N15_1\",\"C\",45)=Cell(\"N15_1\",\"E\",45)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2408,
+      "expression": "CELL_sv(\"N15_1\",\"C\",46)=Cell(\"N15_1\",\"E\",46)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2409,
+      "expression": "CELL_sv(\"N15_1\",\"C\",47)=Cell(\"N15_1\",\"E\",47)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2410,
+      "expression": "CELL_sv(\"N15_1\",\"C\",48)=Cell(\"N15_1\",\"E\",48)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2374,
+      "expression": "CELL_sv(\"N15_1\",\"C\",5)=Cell(\"N15_1\",\"E\",5)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2412,
+      "expression": "CELL_sv(\"N15_1\",\"C\",50)=Cell(\"N15_1\",\"E\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2413,
+      "expression": "CELL_sv(\"N15_1\",\"C\",51)=Cell(\"N15_1\",\"E\",51)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2375,
+      "expression": "CELL_sv(\"N15_1\",\"C\",6)=Cell(\"N15_1\",\"E\",6)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2376,
+      "expression": "CELL_sv(\"N15_1\",\"C\",7)=Cell(\"N15_1\",\"E\",7)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2377,
+      "expression": "CELL_sv(\"N15_1\",\"C\",8)=Cell(\"N15_1\",\"E\",8)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 2,
+      "number": 2378,
+      "expression": "CELL_sv(\"N15_1\",\"C\",9)=Cell(\"N15_1\",\"E\",9)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3020,
+      "expression": "CELL_sv(\"N01_23\",\"K\",10)=Cell(\"N01_23\",\"N\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3045,
+      "expression": "CELL_sv(\"N01_23\",\"K\",100)=Cell(\"N01_23\",\"N\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3046,
+      "expression": "CELL_sv(\"N01_23\",\"K\",110)=Cell(\"N01_23\",\"P\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3047,
+      "expression": "CELL_sv(\"N01_23\",\"K\",120)=Cell(\"N01_23\",\"P\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3048,
+      "expression": "CELL_sv(\"N01_23\",\"K\",130)=Cell(\"N01_23\",\"P\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3049,
+      "expression": "CELL_sv(\"N01_23\",\"K\",140)=Cell(\"N01_23\",\"P\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3050,
+      "expression": "CELL_sv(\"N01_23\",\"K\",150)=Cell(\"N01_23\",\"P\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3051,
+      "expression": "CELL_sv(\"N01_23\",\"K\",160)=Cell(\"N01_23\",\"P\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3052,
+      "expression": "CELL_sv(\"N01_23\",\"K\",170)=Cell(\"N01_23\",\"P\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3053,
+      "expression": "CELL_sv(\"N01_23\",\"K\",180)=Cell(\"N01_23\",\"P\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3054,
+      "expression": "CELL_sv(\"N01_23\",\"K\",190)=Cell(\"N01_23\",\"P\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3021,
+      "expression": "CELL_sv(\"N01_23\",\"K\",20)=Cell(\"N01_23\",\"N\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3055,
+      "expression": "CELL_sv(\"N01_23\",\"K\",200)=Cell(\"N01_23\",\"P\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3056,
+      "expression": "CELL_sv(\"N01_23\",\"K\",210)=Cell(\"N01_23\",\"P\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3057,
+      "expression": "CELL_sv(\"N01_23\",\"K\",211)=Cell(\"N01_23\",\"P\",211)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3058,
+      "expression": "CELL_sv(\"N01_23\",\"K\",212)=Cell(\"N01_23\",\"P\",212)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3059,
+      "expression": "CELL_sv(\"N01_23\",\"K\",219)=Cell(\"N01_23\",\"P\",219)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3060,
+      "expression": "CELL_sv(\"N01_23\",\"K\",220)=Cell(\"N01_23\",\"P\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3061,
+      "expression": "CELL_sv(\"N01_23\",\"K\",230)=Cell(\"N01_23\",\"P\",230)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3062,
+      "expression": "CELL_sv(\"N01_23\",\"K\",240)=Cell(\"N01_23\",\"P\",240)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3022,
+      "expression": "CELL_sv(\"N01_23\",\"K\",30)=Cell(\"N01_23\",\"N\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3023,
+      "expression": "CELL_sv(\"N01_23\",\"K\",40)=Cell(\"N01_23\",\"N\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3024,
+      "expression": "CELL_sv(\"N01_23\",\"K\",41)=Cell(\"N01_23\",\"N\",41)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3025,
+      "expression": "CELL_sv(\"N01_23\",\"K\",42)=Cell(\"N01_23\",\"N\",42)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3026,
+      "expression": "CELL_sv(\"N01_23\",\"K\",43)=Cell(\"N01_23\",\"N\",43)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3027,
+      "expression": "CELL_sv(\"N01_23\",\"K\",49)=Cell(\"N01_23\",\"N\",49)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3028,
+      "expression": "CELL_sv(\"N01_23\",\"K\",50)=Cell(\"N01_23\",\"N\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3029,
+      "expression": "CELL_sv(\"N01_23\",\"K\",51)=Cell(\"N01_23\",\"N\",51)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3030,
+      "expression": "CELL_sv(\"N01_23\",\"K\",52)=Cell(\"N01_23\",\"N\",52)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3031,
+      "expression": "CELL_sv(\"N01_23\",\"K\",53)=Cell(\"N01_23\",\"N\",53)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3032,
+      "expression": "CELL_sv(\"N01_23\",\"K\",54)=Cell(\"N01_23\",\"N\",54)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3033,
+      "expression": "CELL_sv(\"N01_23\",\"K\",55)=Cell(\"N01_23\",\"N\",55)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3034,
+      "expression": "CELL_sv(\"N01_23\",\"K\",59)=Cell(\"N01_23\",\"N\",59)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3035,
+      "expression": "CELL_sv(\"N01_23\",\"K\",60)=Cell(\"N01_23\",\"N\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3036,
+      "expression": "CELL_sv(\"N01_23\",\"K\",61)=Cell(\"N01_23\",\"N\",61)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3037,
+      "expression": "CELL_sv(\"N01_23\",\"K\",62)=Cell(\"N01_23\",\"N\",62)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3038,
+      "expression": "CELL_sv(\"N01_23\",\"K\",64)=Cell(\"N01_23\",\"N\",64)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3039,
+      "expression": "CELL_sv(\"N01_23\",\"K\",65)=Cell(\"N01_23\",\"N\",65)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3040,
+      "expression": "CELL_sv(\"N01_23\",\"K\",66)=Cell(\"N01_23\",\"N\",66)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3041,
+      "expression": "CELL_sv(\"N01_23\",\"K\",69)=Cell(\"N01_23\",\"N\",69)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3042,
+      "expression": "Cell_sv(\"N01_23\",\"K\",79)=Cell(\"N01_23\",\"N\",79)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3043,
+      "expression": "CELL_sv(\"N01_23\",\"K\",80)=Cell(\"N01_23\",\"N\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3070,
+      "expression": "CELL_sv(\"N01_4\",\"B\",4500)=Cell(\"N01_4\",\"B\",5159)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3001,
+      "expression": "CELL_sv(\"N02_1\",\"B\",230)=Cell(\"N02_1\",\"B\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3002,
+      "expression": "CELL_sv(\"N02_1\",\"C\",230)=Cell(\"N02_1\",\"C\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3003,
+      "expression": "CELL_sv(\"N02_1\",\"D\",230)=Cell(\"N02_1\",\"D\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3004,
+      "expression": "CELL_sv(\"N02_1\",\"E\",230)=Cell(\"N02_1\",\"E\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3005,
+      "expression": "CELL_sv(\"N02_1\",\"F\",230)=Cell(\"N02_1\",\"F\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3007,
+      "expression": "CELL_sv(\"N02_1\",\"G\",230)=Cell(\"N02_1\",\"G\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3008,
+      "expression": "CELL_sv(\"N02_1\",\"H\",230)=Cell(\"N02_1\",\"H\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3009,
+      "expression": "CELL_sv(\"N02_1\",\"I\",210)=Cell(\"N02_1\",\"I\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3010,
+      "expression": "CELL_sv(\"N02_1\",\"J\",230)=Cell(\"N02_1\",\"J\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3011,
+      "expression": "CELL_sv(\"N02_1\",\"K\",230)=Cell(\"N02_1\",\"K\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3012,
+      "expression": "CELL_sv(\"N02_1\",\"L\",230)=Cell(\"N02_1\",\"L\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3013,
+      "expression": "CELL_sv(\"N02_1\",\"M\",230)=Cell(\"N02_1\",\"M\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3014,
+      "expression": "CELL_sv(\"N02_1\",\"N\",230)=Cell(\"N02_1\",\"N\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3015,
+      "expression": "CELL_sv(\"N02_1\",\"O\",230)=Cell(\"N02_1\",\"O\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3006,
+      "expression": "CELL_sv(\"N02_1\",\"P\",230)=Cell(\"N02_1\",\"P\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3082,
+      "expression": "CELL_sv(\"N02_2\",\"C\",200)=Cell(\"N02_2\",\"C\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3083,
+      "expression": "CELL_sv(\"N02_2\",\"D\",200)=Cell(\"N02_2\",\"D\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3084,
+      "expression": "CELL_sv(\"N02_2\",\"E\",200)=Cell(\"N02_2\",\"E\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3085,
+      "expression": "CELL_sv(\"N02_2\",\"F\",200)=Cell(\"N02_2\",\"F\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3087,
+      "expression": "CELL_sv(\"N02_2\",\"G\",200)=Cell(\"N02_2\",\"G\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3088,
+      "expression": "CELL_sv(\"N02_2\",\"H\",200)=Cell(\"N02_2\",\"H\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3089,
+      "expression": "CELL_sv(\"N02_2\",\"I\",200)=Cell(\"N02_2\",\"I\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3090,
+      "expression": "CELL_sv(\"N02_2\",\"J\",200)=Cell(\"N02_2\",\"J\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3091,
+      "expression": "CELL_sv(\"N02_2\",\"K\",200)=Cell(\"N02_2\",\"K\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3092,
+      "expression": "CELL_sv(\"N02_2\",\"L\",200)=Cell(\"N02_2\",\"L\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3093,
+      "expression": "CELL_sv(\"N02_2\",\"M\",200)=Cell(\"N02_2\",\"M\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3094,
+      "expression": "CELL_sv(\"N02_2\",\"N\",200)=Cell(\"N02_2\",\"N\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3095,
+      "expression": "CELL_sv(\"N02_2\",\"O\",200)=Cell(\"N02_2\",\"O\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3086,
+      "expression": "CELL_sv(\"N02_2\",\"P\",200)=Cell(\"N02_2\",\"P\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3120,
+      "expression": "CELL_sv(\"N03_1\",\"P\",100)=Cell(\"N03_1\",\"I\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3160,
+      "expression": "CELL_sv(\"N05_1\",\"G\",10)=Cell(\"N05_1\",\"H\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3161,
+      "expression": "CELL_sv(\"N05_1\",\"G\",280)=Cell(\"N05_1\",\"H\",280)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3162,
+      "expression": "CELL_sv(\"N05_1\",\"G\",300)=Cell(\"N05_1\",\"H\",300)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3163,
+      "expression": "CELL_sv(\"N05_1\",\"G\",320)=Cell(\"N05_1\",\"H\",320)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3164,
+      "expression": "CELL_sv(\"N05_1\",\"G\",370)=Cell(\"N05_1\",\"H\",370)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3165,
+      "expression": "CELL_sv(\"N05_1\",\"G\",430)=Cell(\"N05_1\",\"H\",430)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3166,
+      "expression": "CELL_sv(\"N05_1\",\"G\",480)=Cell(\"N05_1\",\"H\",480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3200,
+      "expression": "CELL_sv(\"N05_2\",\"I\",10)=Cell(\"N05_2\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3209,
+      "expression": "CELL_sv(\"N05_2\",\"I\",100)=Cell(\"N05_2\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3210,
+      "expression": "CELL_sv(\"N05_2\",\"I\",110)=Cell(\"N05_2\",\"E\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3211,
+      "expression": "CELL_sv(\"N05_2\",\"I\",120)=Cell(\"N05_2\",\"E\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3212,
+      "expression": "CELL_sv(\"N05_2\",\"I\",130)=Cell(\"N05_2\",\"E\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3213,
+      "expression": "CELL_sv(\"N05_2\",\"I\",140)=Cell(\"N05_2\",\"E\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3214,
+      "expression": "CELL_sv(\"N05_2\",\"I\",150)=Cell(\"N05_2\",\"E\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3215,
+      "expression": "CELL_sv(\"N05_2\",\"I\",160)=Cell(\"N05_2\",\"E\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3216,
+      "expression": "CELL_sv(\"N05_2\",\"I\",170)=Cell(\"N05_2\",\"E\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3217,
+      "expression": "CELL_sv(\"N05_2\",\"I\",180)=Cell(\"N05_2\",\"E\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3218,
+      "expression": "CELL_sv(\"N05_2\",\"I\",190)=Cell(\"N05_2\",\"E\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3201,
+      "expression": "CELL_sv(\"N05_2\",\"I\",20)=Cell(\"N05_2\",\"E\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3219,
+      "expression": "CELL_sv(\"N05_2\",\"I\",200)=Cell(\"N05_2\",\"E\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3220,
+      "expression": "CELL_sv(\"N05_2\",\"I\",210)=Cell(\"N05_2\",\"E\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3221,
+      "expression": "CELL_sv(\"N05_2\",\"I\",220)=Cell(\"N05_2\",\"E\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3202,
+      "expression": "CELL_sv(\"N05_2\",\"I\",30)=Cell(\"N05_2\",\"E\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3203,
+      "expression": "CELL_sv(\"N05_2\",\"I\",40)=Cell(\"N05_2\",\"E\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3204,
+      "expression": "CELL_sv(\"N05_2\",\"I\",50)=Cell(\"N05_2\",\"E\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3205,
+      "expression": "CELL_sv(\"N05_2\",\"I\",60)=Cell(\"N05_2\",\"E\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3206,
+      "expression": "CELL_sv(\"N05_2\",\"I\",70)=Cell(\"N05_2\",\"E\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3207,
+      "expression": "CELL_sv(\"N05_2\",\"I\",80)=Cell(\"N05_2\",\"E\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3208,
+      "expression": "CELL_sv(\"N05_2\",\"I\",90)=Cell(\"N05_2\",\"E\",90)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3310,
+      "expression": "CELL_sv(\"N10_1\",\"B\",140)=Cell(\"N10_1\",\"B\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3311,
+      "expression": "CELL_sv(\"N10_1\",\"C\",140)=Cell(\"N10_1\",\"C\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3312,
+      "expression": "CELL_sv(\"N10_1\",\"D\",140)=Cell(\"N10_1\",\"D\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3313,
+      "expression": "CELL_sv(\"N10_1\",\"E\",140)=Cell(\"N10_1\",\"E\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3314,
+      "expression": "CELL_sv(\"N10_1\",\"F\",140)=Cell(\"N10_1\",\"F\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3315,
+      "expression": "CELL_sv(\"N10_1\",\"G\",140)=Cell(\"N10_1\",\"G\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3361,
+      "expression": "CELL_sv(\"N14_1\",\"C\",30200)=Cell(\"N14_1\",\"C\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3363,
+      "expression": "CELL_sv(\"N14_1\",\"F\",30200)=Cell(\"N14_1\",\"F\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3364,
+      "expression": "CELL_sv(\"N14_1\",\"G\",30200)=Cell(\"N14_1\",\"G\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3370,
+      "expression": "CELL_sv(\"N15_1\",\"J\",1)=Cell(\"N15_1\",\"E\",1)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3379,
+      "expression": "CELL_sv(\"N15_1\",\"J\",10)=Cell(\"N15_1\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3380,
+      "expression": "CELL_sv(\"N15_1\",\"J\",11)=Cell(\"N15_1\",\"E\",11)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3381,
+      "expression": "CELL_sv(\"N15_1\",\"J\",12)=Cell(\"N15_1\",\"E\",12)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3453,
+      "expression": "CELL_sv(\"N15_1\",\"J\",16)=Cell(\"N15_1\",\"E\",16)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3386,
+      "expression": "CELL_sv(\"N15_1\",\"J\",17)=Cell(\"N15_1\",\"E\",17)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3387,
+      "expression": "CELL_sv(\"N15_1\",\"J\",18)=Cell(\"N15_1\",\"E\",18)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3454,
+      "expression": "CELL_sv(\"N15_1\",\"J\",19)=Cell(\"N15_1\",\"E\",19)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3371,
+      "expression": "CELL_sv(\"N15_1\",\"J\",2)=Cell(\"N15_1\",\"E\",2)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3455,
+      "expression": "CELL_sv(\"N15_1\",\"J\",20)=Cell(\"N15_1\",\"E\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3390,
+      "expression": "CELL_sv(\"N15_1\",\"J\",21)=Cell(\"N15_1\",\"E\",21)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3394,
+      "expression": "CELL_sv(\"N15_1\",\"J\",25)=Cell(\"N15_1\",\"E\",25)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3476,
+      "expression": "CELL_sv(\"N15_1\",\"J\",26)=Cell(\"N15_1\",\"E\",26)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3396,
+      "expression": "CELL_sv(\"N15_1\",\"J\",27)=Cell(\"N15_1\",\"E\",27)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3397,
+      "expression": "CELL_sv(\"N15_1\",\"J\",28)=Cell(\"N15_1\",\"E\",28)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3477,
+      "expression": "CELL_sv(\"N15_1\",\"J\",29)=Cell(\"N15_1\",\"E\",29)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3372,
+      "expression": "CELL_sv(\"N15_1\",\"J\",3)=Cell(\"N15_1\",\"E\",3)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3478,
+      "expression": "CELL_sv(\"N15_1\",\"J\",30)=Cell(\"N15_1\",\"E\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3406,
+      "expression": "CELL_sv(\"N15_1\",\"J\",38)=Cell(\"N15_1\",\"E\",38)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3373,
+      "expression": "CELL_sv(\"N15_1\",\"J\",4)=Cell(\"N15_1\",\"E\",4)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3407,
+      "expression": "CELL_sv(\"N15_1\",\"J\",45)=Cell(\"N15_1\",\"E\",45)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3408,
+      "expression": "CELL_sv(\"N15_1\",\"J\",46)=Cell(\"N15_1\",\"E\",46)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3410,
+      "expression": "CELL_sv(\"N15_1\",\"J\",48)=Cell(\"N15_1\",\"E\",48)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3374,
+      "expression": "CELL_sv(\"N15_1\",\"J\",5)=Cell(\"N15_1\",\"E\",5)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3375,
+      "expression": "CELL_sv(\"N15_1\",\"J\",6)=Cell(\"N15_1\",\"E\",6)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3376,
+      "expression": "CELL_sv(\"N15_1\",\"J\",7)=Cell(\"N15_1\",\"E\",7)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3377,
+      "expression": "CELL_sv(\"N15_1\",\"J\",8)=Cell(\"N15_1\",\"E\",8)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3378,
+      "expression": "CELL_sv(\"N15_1\",\"J\",9)=Cell(\"N15_1\",\"E\",9)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3414,
+      "expression": "CELL_sv(\"N15_1\",\"K\",1)=Cell(\"N15_1\",\"D\",1)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3423,
+      "expression": "CELL_sv(\"N15_1\",\"K\",10)=Cell(\"N15_1\",\"D\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3424,
+      "expression": "CELL_sv(\"N15_1\",\"K\",11)=Cell(\"N15_1\",\"D\",11)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3425,
+      "expression": "CELL_sv(\"N15_1\",\"K\",12)=Cell(\"N15_1\",\"D\",12)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3427,
+      "expression": "CELL_sv(\"N15_1\",\"K\",17)=Cell(\"N15_1\",\"D\",17)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3428,
+      "expression": "CELL_sv(\"N15_1\",\"K\",18)=Cell(\"N15_1\",\"D\",18)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3415,
+      "expression": "CELL_sv(\"N15_1\",\"K\",2)=Cell(\"N15_1\",\"D\",2)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3431,
+      "expression": "CELL_sv(\"N15_1\",\"K\",21)=Cell(\"N15_1\",\"D\",21)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3435,
+      "expression": "CELL_sv(\"N15_1\",\"K\",25)=Cell(\"N15_1\",\"D\",25)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3437,
+      "expression": "CELL_sv(\"N15_1\",\"K\",27)=Cell(\"N15_1\",\"D\",27)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3438,
+      "expression": "CELL_sv(\"N15_1\",\"K\",28)=Cell(\"N15_1\",\"D\",28)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3416,
+      "expression": "CELL_sv(\"N15_1\",\"K\",3)=Cell(\"N15_1\",\"D\",3)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3441,
+      "expression": "CELL_sv(\"N15_1\",\"K\",31)=Cell(\"N15_1\",\"D\",31)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3442,
+      "expression": "CELL_sv(\"N15_1\",\"K\",32)=Cell(\"N15_1\",\"D\",32)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3443,
+      "expression": "CELL_sv(\"N15_1\",\"K\",33)=Cell(\"N15_1\",\"D\",33)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3444,
+      "expression": "CELL_sv(\"N15_1\",\"K\",34)=Cell(\"N15_1\",\"D\",34)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3445,
+      "expression": "CELL_sv(\"N15_1\",\"K\",35)=Cell(\"N15_1\",\"D\",35)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3447,
+      "expression": "CELL_sv(\"N15_1\",\"K\",38)=Cell(\"N15_1\",\"D\",38)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3417,
+      "expression": "CELL_sv(\"N15_1\",\"K\",4)=Cell(\"N15_1\",\"D\",4)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3448,
+      "expression": "CELL_sv(\"N15_1\",\"K\",45)=Cell(\"N15_1\",\"D\",45)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3449,
+      "expression": "CELL_sv(\"N15_1\",\"K\",46)=Cell(\"N15_1\",\"D\",46)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3451,
+      "expression": "CELL_sv(\"N15_1\",\"K\",48)=Cell(\"N15_1\",\"D\",48)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3418,
+      "expression": "CELL_sv(\"N15_1\",\"K\",5)=Cell(\"N15_1\",\"D\",5)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3419,
+      "expression": "CELL_sv(\"N15_1\",\"K\",6)=Cell(\"N15_1\",\"D\",6)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3420,
+      "expression": "CELL_sv(\"N15_1\",\"K\",7)=Cell(\"N15_1\",\"D\",7)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3421,
+      "expression": "CELL_sv(\"N15_1\",\"K\",8)=Cell(\"N15_1\",\"D\",8)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 3,
+      "number": 3422,
+      "expression": "CELL_sv(\"N15_1\",\"K\",9)=Cell(\"N15_1\",\"D\",9)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": null,
+      "fialkina": null,
+      "source": "refs"
+    },
+    {
+      "variant": 1,
+      "number": 1006,
+      "expression": "Cell(\"N01_111\",\"J\",1171)=Cell(\"N04_1\",\"B\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1007,
+      "expression": "Cell(\"N01_111\",\"J\",1172)=Cell(\"N04_1\",\"C\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1008,
+      "expression": "Cell(\"N01_111\",\"J\",1173)=Cell(\"N04_1\",\"D\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1009,
+      "expression": "Cell(\"N01_111\",\"J\",1174)=Cell(\"N04_1\",\"F\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1010,
+      "expression": "Cell(\"N01_111\",\"J\",1180)=Cell(\"N01_23\",\"P\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1011,
+      "expression": "Cell(\"N01_111\",\"J\",1192)=Cell(\"N03_1\",\"N\",140)+Cell(\"N03_1\",\"N\",150)-Cell(\"N03_1\",\"N\",160)-Cell(\"N03_1\",\"N\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1012,
+      "expression": "Cell(\"N01_111\",\"J\",1192)+Cell(\"N01_111\",\"J\",220)>=Cell(\"N03_1\",\"N\",140)+Cell(\"N03_1\",\"N\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1013,
+      "expression": "Cell(\"N01_111\",\"J\",1211)=Cell(\"N05_1\",\"P\",370)+Cell(\"N05_1\",\"P\",430)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1014,
+      "expression": "Cell(\"N01_111\",\"J\",1213)=Cell(\"N12_1\",\"J\",90)+Cell(\"N05_1\",\"P\",290)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1015,
+      "expression": "Cell(\"N01_111\",\"J\",1214)=Cell(\"N05_1\",\"P\",90)+Cell(\"N05_1\",\"P\",180)+Cell(\"N05_1\",\"P\",430)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1016,
+      "expression": "Cell(\"N01_111\",\"J\",1215)=Cell(\"N05_1\",\"P\",390)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1017,
+      "expression": "Cell(\"N01_111\",\"J\",1240)=Cell(\"N04_5\",\"L\",120)-Cell(\"N04_5\",\"B\",120)-Cell(\"N04_5\",\"C\",120)-Cell(\"N04_5\",\"D\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1018,
+      "expression": "Cell(\"N01_111\",\"J\",1241)=Cell(\"N04_5\",\"F\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1019,
+      "expression": "Cell(\"N01_111\",\"J\",1251)+Cell(\"N01_111\",\"J\",262)=Cell(\"N14_1\",\"B\",19480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1026,
+      "expression": "Cell(\"N01_111\",\"J\",1410)=Cell(\"N10_1\",\"G\",120)+Cell(\"N10_1\",\"E\",120)+Cell(\"N10_1\",\"F\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1027,
+      "expression": "Cell(\"N01_111\",\"J\",1411)=Cell(\"N10_1\",\"E\",120)+Cell(\"N10_1\",\"F\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1028,
+      "expression": "Cell(\"N01_111\",\"J\",1412)=Cell(\"N10_1\",\"G\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1029,
+      "expression": "Cell(\"N01_111\",\"J\",1420)=Cell(\"N01_23\",\"N\",240)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1030,
+      "expression": "Cell(\"N01_111\",\"J\",1510)=Cell(\"N10_1\",\"B\",120)+Cell(\"N10_1\",\"C\",120)+Cell(\"N10_1\",\"D\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1031,
+      "expression": "Cell(\"N01_111\",\"J\",1511)=Cell(\"N10_1\",\"B\",120)+Cell(\"N10_1\",\"C\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1032,
+      "expression": "Cell(\"N01_111\",\"J\",1512)=Cell(\"N10_1\",\"D\",120)",
+      "expressionAlt": null,
+      "message": "Расхождение объяснить",
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1033,
+      "expression": "Cell(\"N01_111\",\"J\",1530)=Cell(\"N09_4\",\"H\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1034,
+      "expression": "Cell(\"N01_111\",\"J\",1251)+Cell(\"N01_111\",\"J\",1252)=Cell(\"N01_4\",\"B\",4199)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1001,
+      "expression": "Cell(\"N01_111\",\"J\",1151)=Cell(\"N02_1\",\"P\",200)-Cell(\"N02_2\",\"P\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1002,
+      "expression": "Cell(\"N01_111\",\"J\",1152)=Cell(\"N02_1\",\"B\",200)-Cell(\"N02_2\",\"B\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1003,
+      "expression": "Cell(\"N01_111\",\"J\",1153)=Cell(\"N02_1\",\"C\",200)+Cell(\"N02_1\",\"D\",200)+Cell(\"N02_1\",\"E\",200)+Cell(\"N02_1\",\"F\",200)+Cell(\"N02_1\",\"P\",200)+Cell(\"N02_1\",\"G\",200)+Cell(\"N02_1\",\"H\",200)+Cell(\"N02_1\",\"I\",200)+Cell(\"N02_1\",\"J\",200)-",
+      "expressionAlt": "Cell(\"N02_2\",\"C\",170)-Cell(\"N02_2\",\"D\",170)-Cell(\"N02_2\",\"E\",170)-Cell(\"N02_2\",\"F\",170)-Cell(\"N02_2\",\"P\",170)-Cell(\"N02_2\",\"G\",170)-Cell(\"N02_2\",\"H\",170)-Cell(\"N02_2\",\"I\",170)-Cell(\"N02_2\",\"J\",170)",
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1004,
+      "expression": "Cell(\"N01_111\",\"J\",1154)=Cell(\"N03_1\",\"N\",70)+Cell(\"N03_1\",\"N\",80)+Cell(\"N03_1\",\"N\",90)-Cell(\"N02_3\",\"O\",79)+Cell(\"N05_1\",\"P\",430)+Cell(\"N05_1\",\"P\",490)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 1,
+      "number": 1005,
+      "expression": "Cell(\"N01_111\",\"J\",1170)=Cell(\"N04_1\",\"L\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Газпром регионремонт Нижний Новгород ООО",
+      "fialkina": "1",
+      "source": "a_tblchecks_Reorg"
+    },
+    {
+      "variant": 4,
+      "number": 3478,
+      "expression": "CELL_sv(\"N15_1\",\"J\",30)=Cell(\"N15_1\",\"E\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3001,
+      "expression": "CELL_sv(\"N02_1\",\"B\",230)=Cell(\"N02_1\",\"B\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3002,
+      "expression": "CELL_sv(\"N02_1\",\"C\",230)=Cell(\"N02_1\",\"C\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3003,
+      "expression": "CELL_sv(\"N02_1\",\"D\",230)=Cell(\"N02_1\",\"D\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3004,
+      "expression": "CELL_sv(\"N02_1\",\"E\",230)=Cell(\"N02_1\",\"E\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3005,
+      "expression": "CELL_sv(\"N02_1\",\"F\",230)=Cell(\"N02_1\",\"F\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3006,
+      "expression": "CELL_sv(\"N02_1\",\"P\",230)=Cell(\"N02_1\",\"P\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3007,
+      "expression": "CELL_sv(\"N02_1\",\"G\",230)=Cell(\"N02_1\",\"G\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3008,
+      "expression": "CELL_sv(\"N02_1\",\"H\",230)=Cell(\"N02_1\",\"H\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3009,
+      "expression": "CELL_sv(\"N02_1\",\"I\",210)=Cell(\"N02_1\",\"I\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3010,
+      "expression": "CELL_sv(\"N02_1\",\"J\",230)=Cell(\"N02_1\",\"J\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3011,
+      "expression": "CELL_sv(\"N02_1\",\"K\",230)=Cell(\"N02_1\",\"K\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3012,
+      "expression": "CELL_sv(\"N02_1\",\"L\",230)=Cell(\"N02_1\",\"L\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3013,
+      "expression": "CELL_sv(\"N02_1\",\"M\",230)=Cell(\"N02_1\",\"M\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3014,
+      "expression": "CELL_sv(\"N02_1\",\"N\",230)=Cell(\"N02_1\",\"N\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3015,
+      "expression": "CELL_sv(\"N02_1\",\"O\",230)=Cell(\"N02_1\",\"O\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3020,
+      "expression": "CELL_sv(\"N01_23\",\"K\",10)=Cell(\"N01_23\",\"N\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3021,
+      "expression": "CELL_sv(\"N01_23\",\"K\",20)=Cell(\"N01_23\",\"N\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3022,
+      "expression": "CELL_sv(\"N01_23\",\"K\",30)=Cell(\"N01_23\",\"N\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3023,
+      "expression": "CELL_sv(\"N01_23\",\"K\",40)=Cell(\"N01_23\",\"N\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3024,
+      "expression": "CELL_sv(\"N01_23\",\"K\",41)=Cell(\"N01_23\",\"N\",41)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3025,
+      "expression": "CELL_sv(\"N01_23\",\"K\",42)=Cell(\"N01_23\",\"N\",42)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3026,
+      "expression": "CELL_sv(\"N01_23\",\"K\",43)=Cell(\"N01_23\",\"N\",43)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3027,
+      "expression": "CELL_sv(\"N01_23\",\"K\",49)=Cell(\"N01_23\",\"N\",49)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3028,
+      "expression": "CELL_sv(\"N01_23\",\"K\",50)=Cell(\"N01_23\",\"N\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3029,
+      "expression": "CELL_sv(\"N01_23\",\"K\",51)=Cell(\"N01_23\",\"N\",51)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3030,
+      "expression": "CELL_sv(\"N01_23\",\"K\",52)=Cell(\"N01_23\",\"N\",52)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3031,
+      "expression": "CELL_sv(\"N01_23\",\"K\",53)=Cell(\"N01_23\",\"N\",53)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3032,
+      "expression": "CELL_sv(\"N01_23\",\"K\",54)=Cell(\"N01_23\",\"N\",54)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3033,
+      "expression": "CELL_sv(\"N01_23\",\"K\",55)=Cell(\"N01_23\",\"N\",55)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3034,
+      "expression": "CELL_sv(\"N01_23\",\"K\",59)=Cell(\"N01_23\",\"N\",59)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3035,
+      "expression": "CELL_sv(\"N01_23\",\"K\",60)=Cell(\"N01_23\",\"N\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3036,
+      "expression": "CELL_sv(\"N01_23\",\"K\",61)=Cell(\"N01_23\",\"N\",61)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3037,
+      "expression": "CELL_sv(\"N01_23\",\"K\",62)=Cell(\"N01_23\",\"N\",62)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3038,
+      "expression": "CELL_sv(\"N01_23\",\"K\",64)=Cell(\"N01_23\",\"N\",64)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3039,
+      "expression": "CELL_sv(\"N01_23\",\"K\",65)=Cell(\"N01_23\",\"N\",65)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3040,
+      "expression": "CELL_sv(\"N01_23\",\"K\",66)=Cell(\"N01_23\",\"N\",66)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3041,
+      "expression": "CELL_sv(\"N01_23\",\"K\",69)=Cell(\"N01_23\",\"N\",69)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3042,
+      "expression": "Cell_sv(\"N01_23\",\"K\",79)=Cell(\"N01_23\",\"N\",79)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3043,
+      "expression": "CELL_sv(\"N01_23\",\"K\",80)=Cell(\"N01_23\",\"N\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3045,
+      "expression": "CELL_sv(\"N01_23\",\"K\",100)=Cell(\"N01_23\",\"N\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3046,
+      "expression": "CELL_sv(\"N01_23\",\"K\",110)=Cell(\"N01_23\",\"P\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3047,
+      "expression": "CELL_sv(\"N01_23\",\"K\",120)=Cell(\"N01_23\",\"P\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3048,
+      "expression": "CELL_sv(\"N01_23\",\"K\",130)=Cell(\"N01_23\",\"P\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3049,
+      "expression": "CELL_sv(\"N01_23\",\"K\",140)=Cell(\"N01_23\",\"P\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3050,
+      "expression": "CELL_sv(\"N01_23\",\"K\",150)=Cell(\"N01_23\",\"P\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3051,
+      "expression": "CELL_sv(\"N01_23\",\"K\",160)=Cell(\"N01_23\",\"P\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3052,
+      "expression": "CELL_sv(\"N01_23\",\"K\",170)=Cell(\"N01_23\",\"P\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3053,
+      "expression": "CELL_sv(\"N01_23\",\"K\",180)=Cell(\"N01_23\",\"P\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3054,
+      "expression": "CELL_sv(\"N01_23\",\"K\",190)=Cell(\"N01_23\",\"P\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3055,
+      "expression": "CELL_sv(\"N01_23\",\"K\",200)=Cell(\"N01_23\",\"P\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3056,
+      "expression": "CELL_sv(\"N01_23\",\"K\",210)=Cell(\"N01_23\",\"P\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3057,
+      "expression": "CELL_sv(\"N01_23\",\"K\",211)=Cell(\"N01_23\",\"P\",211)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3058,
+      "expression": "CELL_sv(\"N01_23\",\"K\",212)=Cell(\"N01_23\",\"P\",212)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3059,
+      "expression": "CELL_sv(\"N01_23\",\"K\",219)=Cell(\"N01_23\",\"P\",219)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3060,
+      "expression": "CELL_sv(\"N01_23\",\"K\",220)=Cell(\"N01_23\",\"P\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3061,
+      "expression": "CELL_sv(\"N01_23\",\"K\",230)=Cell(\"N01_23\",\"P\",230)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3062,
+      "expression": "CELL_sv(\"N01_23\",\"K\",240)=Cell(\"N01_23\",\"P\",240)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3070,
+      "expression": "CELL_sv(\"N01_4\",\"B\",4500)=Cell(\"N01_4\",\"B\",5159)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3082,
+      "expression": "CELL_sv(\"N02_2\",\"C\",200)=Cell(\"N02_2\",\"C\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3083,
+      "expression": "CELL_sv(\"N02_2\",\"D\",200)=Cell(\"N02_2\",\"D\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3084,
+      "expression": "CELL_sv(\"N02_2\",\"E\",200)=Cell(\"N02_2\",\"E\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3085,
+      "expression": "CELL_sv(\"N02_2\",\"F\",200)=Cell(\"N02_2\",\"F\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3086,
+      "expression": "CELL_sv(\"N02_2\",\"P\",200)=Cell(\"N02_2\",\"P\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3087,
+      "expression": "CELL_sv(\"N02_2\",\"G\",200)=Cell(\"N02_2\",\"G\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3088,
+      "expression": "CELL_sv(\"N02_2\",\"H\",200)=Cell(\"N02_2\",\"H\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3089,
+      "expression": "CELL_sv(\"N02_2\",\"I\",200)=Cell(\"N02_2\",\"I\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3090,
+      "expression": "CELL_sv(\"N02_2\",\"J\",200)=Cell(\"N02_2\",\"J\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3091,
+      "expression": "CELL_sv(\"N02_2\",\"K\",200)=Cell(\"N02_2\",\"K\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3092,
+      "expression": "CELL_sv(\"N02_2\",\"L\",200)=Cell(\"N02_2\",\"L\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3093,
+      "expression": "CELL_sv(\"N02_2\",\"M\",200)=Cell(\"N02_2\",\"M\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3094,
+      "expression": "CELL_sv(\"N02_2\",\"N\",200)=Cell(\"N02_2\",\"N\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3095,
+      "expression": "CELL_sv(\"N02_2\",\"O\",200)=Cell(\"N02_2\",\"O\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3120,
+      "expression": "CELL_sv(\"N03_1\",\"P\",100)=Cell(\"N03_1\",\"I\",100)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3160,
+      "expression": "CELL_sv(\"N05_1\",\"G\",10)=Cell(\"N05_1\",\"H\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3161,
+      "expression": "CELL_sv(\"N05_1\",\"G\",280)=Cell(\"N05_1\",\"H\",280)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3162,
+      "expression": "CELL_sv(\"N05_1\",\"G\",300)=Cell(\"N05_1\",\"H\",300)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3163,
+      "expression": "CELL_sv(\"N05_1\",\"G\",320)=Cell(\"N05_1\",\"H\",320)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3164,
+      "expression": "CELL_sv(\"N05_1\",\"G\",370)=Cell(\"N05_1\",\"H\",370)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3165,
+      "expression": "CELL_sv(\"N05_1\",\"G\",430)=Cell(\"N05_1\",\"H\",430)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3166,
+      "expression": "CELL_sv(\"N05_1\",\"G\",480)=Cell(\"N05_1\",\"H\",480)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3200,
+      "expression": "CELL_sv(\"N05_2\",\"I\",10)=Cell(\"N05_2\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3201,
+      "expression": "CELL_sv(\"N05_2\",\"I\",20)=Cell(\"N05_2\",\"E\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3202,
+      "expression": "CELL_sv(\"N05_2\",\"I\",30)=Cell(\"N05_2\",\"E\",30)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3203,
+      "expression": "CELL_sv(\"N05_2\",\"I\",40)=Cell(\"N05_2\",\"E\",40)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3204,
+      "expression": "CELL_sv(\"N05_2\",\"I\",50)=Cell(\"N05_2\",\"E\",50)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3205,
+      "expression": "CELL_sv(\"N05_2\",\"I\",60)=Cell(\"N05_2\",\"E\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3206,
+      "expression": "CELL_sv(\"N05_2\",\"I\",70)=Cell(\"N05_2\",\"E\",70)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3207,
+      "expression": "CELL_sv(\"N05_2\",\"I\",80)=Cell(\"N05_2\",\"E\",80)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3208,
+      "expression": "CELL_sv(\"N05_2\",\"I\",90)=Cell(\"N05_2\",\"E\",90)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3209,
+      "expression": "CELL_sv(\"N05_2\",\"I\",100)=Cell(\"N05_2\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3210,
+      "expression": "CELL_sv(\"N05_2\",\"I\",110)=Cell(\"N05_2\",\"E\",110)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3211,
+      "expression": "CELL_sv(\"N05_2\",\"I\",120)=Cell(\"N05_2\",\"E\",120)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3212,
+      "expression": "CELL_sv(\"N05_2\",\"I\",130)=Cell(\"N05_2\",\"E\",130)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3213,
+      "expression": "CELL_sv(\"N05_2\",\"I\",140)=Cell(\"N05_2\",\"E\",140)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3214,
+      "expression": "CELL_sv(\"N05_2\",\"I\",150)=Cell(\"N05_2\",\"E\",150)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3215,
+      "expression": "CELL_sv(\"N05_2\",\"I\",160)=Cell(\"N05_2\",\"E\",160)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3216,
+      "expression": "CELL_sv(\"N05_2\",\"I\",170)=Cell(\"N05_2\",\"E\",170)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3217,
+      "expression": "CELL_sv(\"N05_2\",\"I\",180)=Cell(\"N05_2\",\"E\",180)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3218,
+      "expression": "CELL_sv(\"N05_2\",\"I\",190)=Cell(\"N05_2\",\"E\",190)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3219,
+      "expression": "CELL_sv(\"N05_2\",\"I\",200)=Cell(\"N05_2\",\"E\",200)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3220,
+      "expression": "CELL_sv(\"N05_2\",\"I\",210)=Cell(\"N05_2\",\"E\",210)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3221,
+      "expression": "CELL_sv(\"N05_2\",\"I\",220)=Cell(\"N05_2\",\"E\",220)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3310,
+      "expression": "CELL_sv(\"N10_1\",\"B\",140)=Cell(\"N10_1\",\"B\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3311,
+      "expression": "CELL_sv(\"N10_1\",\"C\",140)=Cell(\"N10_1\",\"C\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3312,
+      "expression": "CELL_sv(\"N10_1\",\"D\",140)=Cell(\"N10_1\",\"D\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3313,
+      "expression": "CELL_sv(\"N10_1\",\"E\",140)=Cell(\"N10_1\",\"E\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3314,
+      "expression": "CELL_sv(\"N10_1\",\"F\",140)=Cell(\"N10_1\",\"F\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3315,
+      "expression": "CELL_sv(\"N10_1\",\"G\",140)=Cell(\"N10_1\",\"G\",60)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3361,
+      "expression": "CELL_sv(\"N14_1\",\"C\",30200)=Cell(\"N14_1\",\"C\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3363,
+      "expression": "CELL_sv(\"N14_1\",\"F\",30200)=Cell(\"N14_1\",\"F\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3364,
+      "expression": "CELL_sv(\"N14_1\",\"G\",30200)=Cell(\"N14_1\",\"G\",11650)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3370,
+      "expression": "CELL_sv(\"N15_1\",\"J\",1)=Cell(\"N15_1\",\"E\",1)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3371,
+      "expression": "CELL_sv(\"N15_1\",\"J\",2)=Cell(\"N15_1\",\"E\",2)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3372,
+      "expression": "CELL_sv(\"N15_1\",\"J\",3)=Cell(\"N15_1\",\"E\",3)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3373,
+      "expression": "CELL_sv(\"N15_1\",\"J\",4)=Cell(\"N15_1\",\"E\",4)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3374,
+      "expression": "CELL_sv(\"N15_1\",\"J\",5)=Cell(\"N15_1\",\"E\",5)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3375,
+      "expression": "CELL_sv(\"N15_1\",\"J\",6)=Cell(\"N15_1\",\"E\",6)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3376,
+      "expression": "CELL_sv(\"N15_1\",\"J\",7)=Cell(\"N15_1\",\"E\",7)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3377,
+      "expression": "CELL_sv(\"N15_1\",\"J\",8)=Cell(\"N15_1\",\"E\",8)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3378,
+      "expression": "CELL_sv(\"N15_1\",\"J\",9)=Cell(\"N15_1\",\"E\",9)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3379,
+      "expression": "CELL_sv(\"N15_1\",\"J\",10)=Cell(\"N15_1\",\"E\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3380,
+      "expression": "CELL_sv(\"N15_1\",\"J\",11)=Cell(\"N15_1\",\"E\",11)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3381,
+      "expression": "CELL_sv(\"N15_1\",\"J\",12)=Cell(\"N15_1\",\"E\",12)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3386,
+      "expression": "CELL_sv(\"N15_1\",\"J\",17)=Cell(\"N15_1\",\"E\",17)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3387,
+      "expression": "CELL_sv(\"N15_1\",\"J\",18)=Cell(\"N15_1\",\"E\",18)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3390,
+      "expression": "CELL_sv(\"N15_1\",\"J\",21)=Cell(\"N15_1\",\"E\",21)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3394,
+      "expression": "CELL_sv(\"N15_1\",\"J\",25)=Cell(\"N15_1\",\"E\",25)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3396,
+      "expression": "CELL_sv(\"N15_1\",\"J\",27)=Cell(\"N15_1\",\"E\",27)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3397,
+      "expression": "CELL_sv(\"N15_1\",\"J\",28)=Cell(\"N15_1\",\"E\",28)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3406,
+      "expression": "CELL_sv(\"N15_1\",\"J\",38)=Cell(\"N15_1\",\"E\",38)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3407,
+      "expression": "CELL_sv(\"N15_1\",\"J\",45)=Cell(\"N15_1\",\"E\",45)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3408,
+      "expression": "CELL_sv(\"N15_1\",\"J\",46)=Cell(\"N15_1\",\"E\",46)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3410,
+      "expression": "CELL_sv(\"N15_1\",\"J\",48)=Cell(\"N15_1\",\"E\",48)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3414,
+      "expression": "CELL_sv(\"N15_1\",\"K\",1)=Cell(\"N15_1\",\"D\",1)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3415,
+      "expression": "CELL_sv(\"N15_1\",\"K\",2)=Cell(\"N15_1\",\"D\",2)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3416,
+      "expression": "CELL_sv(\"N15_1\",\"K\",3)=Cell(\"N15_1\",\"D\",3)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3417,
+      "expression": "CELL_sv(\"N15_1\",\"K\",4)=Cell(\"N15_1\",\"D\",4)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3418,
+      "expression": "CELL_sv(\"N15_1\",\"K\",5)=Cell(\"N15_1\",\"D\",5)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3419,
+      "expression": "CELL_sv(\"N15_1\",\"K\",6)=Cell(\"N15_1\",\"D\",6)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3420,
+      "expression": "CELL_sv(\"N15_1\",\"K\",7)=Cell(\"N15_1\",\"D\",7)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3421,
+      "expression": "CELL_sv(\"N15_1\",\"K\",8)=Cell(\"N15_1\",\"D\",8)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3422,
+      "expression": "CELL_sv(\"N15_1\",\"K\",9)=Cell(\"N15_1\",\"D\",9)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3423,
+      "expression": "CELL_sv(\"N15_1\",\"K\",10)=Cell(\"N15_1\",\"D\",10)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3424,
+      "expression": "CELL_sv(\"N15_1\",\"K\",11)=Cell(\"N15_1\",\"D\",11)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3425,
+      "expression": "CELL_sv(\"N15_1\",\"K\",12)=Cell(\"N15_1\",\"D\",12)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3427,
+      "expression": "CELL_sv(\"N15_1\",\"K\",17)=Cell(\"N15_1\",\"D\",17)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3428,
+      "expression": "CELL_sv(\"N15_1\",\"K\",18)=Cell(\"N15_1\",\"D\",18)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3431,
+      "expression": "CELL_sv(\"N15_1\",\"K\",21)=Cell(\"N15_1\",\"D\",21)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3435,
+      "expression": "CELL_sv(\"N15_1\",\"K\",25)=Cell(\"N15_1\",\"D\",25)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3437,
+      "expression": "CELL_sv(\"N15_1\",\"K\",27)=Cell(\"N15_1\",\"D\",27)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3438,
+      "expression": "CELL_sv(\"N15_1\",\"K\",28)=Cell(\"N15_1\",\"D\",28)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3441,
+      "expression": "CELL_sv(\"N15_1\",\"K\",31)=Cell(\"N15_1\",\"D\",31)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3442,
+      "expression": "CELL_sv(\"N15_1\",\"K\",32)=Cell(\"N15_1\",\"D\",32)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3443,
+      "expression": "CELL_sv(\"N15_1\",\"K\",33)=Cell(\"N15_1\",\"D\",33)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3444,
+      "expression": "CELL_sv(\"N15_1\",\"K\",34)=Cell(\"N15_1\",\"D\",34)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3445,
+      "expression": "CELL_sv(\"N15_1\",\"K\",35)=Cell(\"N15_1\",\"D\",35)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3447,
+      "expression": "CELL_sv(\"N15_1\",\"K\",38)=Cell(\"N15_1\",\"D\",38)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3448,
+      "expression": "CELL_sv(\"N15_1\",\"K\",45)=Cell(\"N15_1\",\"D\",45)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3449,
+      "expression": "CELL_sv(\"N15_1\",\"K\",46)=Cell(\"N15_1\",\"D\",46)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3451,
+      "expression": "CELL_sv(\"N15_1\",\"K\",48)=Cell(\"N15_1\",\"D\",48)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3453,
+      "expression": "CELL_sv(\"N15_1\",\"J\",16)=Cell(\"N15_1\",\"E\",16)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3454,
+      "expression": "CELL_sv(\"N15_1\",\"J\",19)=Cell(\"N15_1\",\"E\",19)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3455,
+      "expression": "CELL_sv(\"N15_1\",\"J\",20)=Cell(\"N15_1\",\"E\",20)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3476,
+      "expression": "CELL_sv(\"N15_1\",\"J\",26)=Cell(\"N15_1\",\"E\",26)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    },
+    {
+      "variant": 4,
+      "number": 3477,
+      "expression": "CELL_sv(\"N15_1\",\"J\",29)=Cell(\"N15_1\",\"E\",29)",
+      "expressionAlt": null,
+      "message": null,
+      "reorg": "Ачим сбыт АО",
+      "fialkina": "3",
+      "source": "a_tblchecks_Reorg4"
+    }
+  ]
+}

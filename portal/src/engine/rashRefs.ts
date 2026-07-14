@@ -4,6 +4,7 @@ export interface RashRefItem {
   kod: string;
   value: string;
   note?: string | null;
+  newkod?: string | null;
 }
 
 export interface RashRefsData {
@@ -18,16 +19,24 @@ let cached: RashRefsData | null = null;
 
 export async function loadRashRefs(): Promise<RashRefsData> {
   if (cached) return cached;
+  let base: RashRefsData = { version: "0", byName: {} };
   try {
     const res = await fetch("/data/rash-refs.json");
     if (res.ok) {
-      cached = (await res.json()) as RashRefsData;
-      return cached;
+      base = (await res.json()) as RashRefsData;
     }
   } catch {
     /* fallback */
   }
-  cached = { version: "0", byName: {} };
+  try {
+    const { loadEffectiveLoansNzs, applyLoansNzsToRashRefs } = await import(
+      "./refsPackage"
+    );
+    const loans = await loadEffectiveLoansNzs();
+    cached = applyLoansNzsToRashRefs(base, loans);
+  } catch {
+    cached = base;
+  }
   return cached;
 }
 

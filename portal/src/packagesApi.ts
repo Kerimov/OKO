@@ -8,6 +8,8 @@ import type {
   Organization,
   PackageCompleteness,
   PackageDashboardRow,
+  PackageWorkflow,
+  PackageWorkflowStatus,
   ReportingPeriod,
   WorkContext,
 } from "./types";
@@ -207,6 +209,18 @@ export async function fetchPackagesDashboard(): Promise<PackageDashboardRow[]> {
   return apiFetch<PackageDashboardRow[]>("/api/packages/dashboard");
 }
 
+export async function setPackageWorkflowStatus(
+  zid: number,
+  eid: number,
+  status: PackageWorkflowStatus,
+  comment?: string | null
+): Promise<PackageWorkflow> {
+  return apiFetch<PackageWorkflow>("/api/packages/workflow", {
+    method: "POST",
+    body: JSON.stringify({ zid, eid, status, comment: comment ?? null }),
+  });
+}
+
 export async function createReportPackage(
   zid: number,
   eid: number
@@ -313,7 +327,8 @@ export async function importReportPackage(
   zid: number,
   eid: number,
   pkg: ReportPackage,
-  overwrite: boolean
+  overwrite: boolean,
+  templateIds?: string[]
 ): Promise<ImportPackageResult> {
   if (isBackendMode()) {
     return apiFetch<ImportPackageResult>("/api/packages/import", {
@@ -322,6 +337,7 @@ export async function importReportPackage(
         zid,
         eid,
         overwrite,
+        templateIds: templateIds?.length ? templateIds : undefined,
         package: {
           organization: pkg.organization,
           periodStart: pkg.periodStart,
@@ -339,9 +355,111 @@ export async function importReportPackage(
     targetZid: zid,
     targetEid: eid,
     overwrite,
+    templateIds,
   });
   for (const inst of instances) {
     await saveInstance(inst);
   }
   return result;
+}
+
+export interface PackageInboxItem {
+  id: string;
+  receivedAt: string;
+  actor: string | null;
+  filename: string | null;
+  sha256: string;
+  status: string;
+  pkgZid: number | null;
+  pkgEid: number | null;
+  organization: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  targetZid: number | null;
+  targetEid: number | null;
+  validationErrors: string[];
+  warnings: string[];
+  instanceCount: number;
+  acceptedAt: string | null;
+  rejectedReason: string | null;
+}
+
+export async function listPackageInbox(status?: string): Promise<PackageInboxItem[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiFetch<PackageInboxItem[]>(`/api/packages/inbox${q}`);
+}
+
+export async function receivePackageInbox(input: {
+  rawJson: string;
+  filename?: string;
+  targetZid?: number | null;
+  targetEid?: number | null;
+}): Promise<PackageInboxItem> {
+  return apiFetch<PackageInboxItem>("/api/packages/inbox", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getPackageInboxDetail(id: string): Promise<
+  PackageInboxItem & {
+    packageJson: {
+      version?: string;
+      organization?: string;
+      periodStart?: string;
+      periodEnd?: string;
+      zid?: number | null;
+      eid?: number | null;
+      instances: import("./types").OkoFormInstance[];
+      rules?: unknown;
+    };
+  }
+> {
+  return apiFetch(`/api/packages/inbox/${encodeURIComponent(id)}`);
+}
+
+export async function previewPackageInbox(
+  id: string,
+  body: { zid: number; eid: number }
+): Promise<{
+  inbox: PackageInboxItem;
+  organization: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  diff: Array<{
+    templateId: string;
+    title: string;
+    verdict: "new" | "same" | "changed" | "only-local";
+    selectedDefault: boolean;
+  }>;
+  summary: {
+    new: number;
+    same: number;
+    changed: number;
+    onlyLocal: number;
+    selectedDefault: number;
+  };
+}> {
+  const q = `?zid=${encodeURIComponent(String(body.zid))}&eid=${encodeURIComponent(String(body.eid))}`;
+  return apiFetch(`/api/packages/inbox/${id}/preview${q}`);
+}
+
+export async function acceptPackageInbox(
+  id: string,
+  body: { zid: number; eid: number; overwrite?: boolean; templateIds?: string[] }
+): Promise<{ inbox: PackageInboxItem; result: ImportPackageResult }> {
+  return apiFetch(`/api/packages/inbox/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function rejectPackageInbox(
+  id: string,
+  reason?: string
+): Promise<PackageInboxItem> {
+  return apiFetch(`/api/packages/inbox/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }

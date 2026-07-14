@@ -1,4 +1,4 @@
-import { loadChecks } from "../api";
+import { loadChecks, loadReorgChecks, type ReorgCheckVariant } from "../api";
 import type { OkoFormInstance } from "../types";
 import {
   combineCheckExpression,
@@ -36,6 +36,8 @@ export interface CheckResultItem {
   failedOp?: string;
   error?: string;
   parseError?: boolean;
+  /** Access CheckItReorg variant when running reorg catalogue. */
+  reorgVariant?: ReorgCheckVariant;
 }
 
 export interface CheckRuleCounts {
@@ -89,7 +91,7 @@ export async function getCheckRuleCounts(): Promise<CheckRuleCounts> {
 }
 
 function runRules(
-  rules: CheckRule[],
+  rules: Array<CheckRule & { reorgVariant?: ReorgCheckVariant }>,
   ctx: import("./cellExpression").EvalContext
 ): CheckRunResult {
   const items: CheckResultItem[] = [];
@@ -115,6 +117,7 @@ function runRules(
         right,
         failedClause,
         failedOp,
+        reorgVariant: rule.reorgVariant,
       });
       if (ok) passed++;
       else failed++;
@@ -129,6 +132,7 @@ function runRules(
         right: 0,
         parseError: true,
         error: formatCheckErrorMessage(rule.number, rule.message, e),
+        reorgVariant: rule.reorgVariant,
       });
     }
   }
@@ -154,7 +158,12 @@ export async function runFormChecks(
 }
 
 export async function runAllChecks(
-  period?: { start: string; end: string },
+  scope?: {
+    start?: string;
+    end?: string;
+    zid?: number | null;
+    eid?: number | null;
+  },
   mode: CheckMode = "period"
 ): Promise<CheckRunResult> {
   const data = await loadChecks();
@@ -162,7 +171,7 @@ export async function runAllChecks(
     mode,
     excludeAggr: true,
   });
-  const ctx = await loadEvalContextForChecks(period);
+  const ctx = await loadEvalContextForChecks(scope);
   return runRules(rules, ctx);
 }
 
@@ -179,7 +188,7 @@ export async function runActiveChecks(
 export async function runAggregationChecks(
   formId?: string,
   instances?: OkoFormInstance[],
-  mode: CheckMode = "period"
+  mode: CheckMode = "all"
 ): Promise<CheckRunResult> {
   const data = await loadChecks();
   const rules = pickRules(data.checks, { formId, mode, excludeAggr: false }).filter(
@@ -188,4 +197,61 @@ export async function runAggregationChecks(
   const inst =
     instances ?? latestInstancePerTemplate(await loadInstancesForCheck());
   return runRules(rules, evalContextFromInstances(inst));
+}
+
+export interface RunReorgChecksOptions {
+  /** Access CheckItReorg / CheckItReorg2 / CheckItReorg3 (/ Reorg4 snapshot). Default 2+3. */
+  variants?: ReorgCheckVariant[];
+  formId?: string;
+  instances?: OkoFormInstance[];
+  /** Optional org name filter for variant 1/4 snapshots (`Reorg` column). */
+  reorgOrg?: string | null;
+}
+
+/**
+ * Access CheckItReorg* — separate catalogues with CELL_sv (not forAggrOnly).
+ * Call after AggrSetReorg* / colorMode свод.
+ */
+export async function runReorgChecks(
+  options: RunReorgChecksOptions = {}
+): Promise<CheckRunResult> {
+  const data = await loadReorgChecks();
+  const variants = new Set(options.variants ?? ([2, 3] as ReorgCheckVariant[]));
+  const orgFilter = options.reorgOrg?.trim().toLowerCase() || null;
+
+  const rules = data.checks
+    .filter((c) => variants.has(c.variant as ReorgCheckVariant))
+    .filter((c) => {
+      if (!orgFilter) return true;
+      if (c.variant !== 1 && c.variant !== 4) return true;
+      const name = (c.reorg ?? "").trim().toLowerCase();
+      return !name || name.includes(orgFilter) || orgFilter.includes(name);
+    })
+    .filter((c) => {
+      if (!options.formId) return true;
+      const full = combineCheckExpression(c.expression, c.expressionAlt);
+      return expressionUsesForm(full, options.formId);
+    })
+    .map((c) => ({
+      number: Number(c.number),
+      expression: c.expression,
+      expressionAlt: c.expressionAlt,
+      message: c.message,
+      reorgVariant: c.variant as ReorgCheckVariant,
+    }));
+
+  const inst =
+    options.instances ??
+    latestInstancePerTemplate(await loadInstancesForCheck());
+  return runRules(rules, evalContextFromInstances(inst));
+}
+
+/** Map Tools colorMode/reorg flags → CheckItReorg* variants to run. */
+export function reorgVariantsForRun(opts: {
+  colorMode: string;
+  reorg: boolean;
+}): ReorgCheckVariant[] | null {
+  if (opts.colorMode === "full" && !opts.reorg) return null;
+  if (opts.reorg) return [1, 2, 3, 4];
+  return [2, 3];
 }

@@ -17,6 +17,27 @@ export interface ChecksData {
   checks: CheckRule[];
 }
 
+export type ReorgCheckVariant = 1 | 2 | 3 | 4;
+
+export interface ReorgCheckRule {
+  variant: ReorgCheckVariant;
+  number: number;
+  expression: string;
+  expressionAlt?: string | null;
+  message?: string | null;
+  reorg?: string | null;
+  fialkina?: string | number | null;
+  source?: string | null;
+}
+
+export interface ReorgChecksData {
+  version: string;
+  source: string;
+  total: number;
+  byVariant?: Record<string, number>;
+  checks: ReorgCheckRule[];
+}
+
 export interface SaldoRule {
   number: number;
   targetForm: string;
@@ -46,6 +67,12 @@ export interface FormCorrespondenceItem {
   saldoYellow?: string | null;
   saldoRed?: string | null;
   saldoBlue?: string | null;
+  saldoGreen?: string | null;
+  saldoYellowCorr?: string | null;
+  saldoRedCorr?: string | null;
+  saldoBlueCorr?: string | null;
+  reorgUpdate?: string | null;
+  reorgUpdate2?: string | null;
   pages?: number | null;
 }
 
@@ -98,6 +125,61 @@ export async function reimportFormsFromJson(): Promise<{ reimported: number }> {
   return res.json();
 }
 
+export async function previewFormsImport() {
+  const res = await apiFetchRaw("/api/forms/import-preview", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    added: string[];
+    removed: string[];
+    changed: string[];
+    unchanged: number;
+    jsonTotal: number;
+    dbTotal: number;
+  }>;
+}
+
+export async function createForm(payload: {
+  id: string;
+  title?: string;
+  category?: string;
+  cloneFrom?: string;
+}) {
+  const res = await apiFetchRaw("/api/forms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<FormSchema>;
+}
+
+export async function archiveForm(formId: string, archived = true) {
+  const res = await apiFetchRaw(`/api/forms/${encodeURIComponent(formId)}/archive`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archived }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<FormSchema>;
+}
+
+export async function fetchFormDependencies(
+  formId: string,
+  opts?: { columnKey?: string; rowNo?: string }
+) {
+  const sp = new URLSearchParams();
+  if (opts?.columnKey) sp.set("columnKey", opts.columnKey);
+  if (opts?.rowNo) sp.set("rowNo", opts.rowNo);
+  const q = sp.toString() ? `?${sp}` : "";
+  const res = await apiFetchRaw(`/api/forms/${encodeURIComponent(formId)}/dependencies${q}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    formId: string;
+    totals: Record<string, number>;
+    hits: Array<{ kind: string; ref: string; detail: string }>;
+  }>;
+}
+
 export async function loadChecks(): Promise<ChecksData> {
   try {
     const res = await apiFetchRaw("/api/checks/export");
@@ -110,6 +192,13 @@ export async function loadChecks(): Promise<ChecksData> {
   }
   const res = await apiFetchRaw("/data/checks.json");
   if (!res.ok) throw new Error("Не удалось загрузить правила проверок");
+  return res.json();
+}
+
+/** Access CheckItReorg* catalogues (a_tblchecks_Reorg*). */
+export async function loadReorgChecks(): Promise<ReorgChecksData> {
+  const res = await apiFetchRaw("/data/checks-reorg.json");
+  if (!res.ok) throw new Error("Не удалось загрузить правила CheckItReorg");
   return res.json();
 }
 
@@ -638,4 +727,100 @@ export async function reimportRashPlacementsFromJson() {
   const res = await apiFetchRaw("/api/rash/placements/reimport", { method: "POST" });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<{ reimported: number }>;
+}
+
+export async function fetchNextRashKod() {
+  const res = await apiFetchRaw("/api/rash/next-kod");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ kod: number }>;
+}
+
+export async function saveRashBundle(payload: {
+  rule: RashRule;
+  addsum: RashAddsum[];
+  placements: Array<Omit<RashPlacement, "kod"> & { kod?: number }>;
+  forceConflicts?: boolean;
+}) {
+  const res = await apiFetchRaw("/api/rash/bundle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let parsed: { error?: string; conflicts?: RashPlacement[] } | null = null;
+    try {
+      parsed = JSON.parse(text) as { error?: string; conflicts?: RashPlacement[] };
+    } catch {
+      /* ignore */
+    }
+    const err = new Error(parsed?.error || text) as Error & {
+      conflicts?: Array<{
+        formId: string;
+        rowNo: string;
+        columnKey: string;
+        existingKod: number;
+      }>;
+    };
+    if (parsed && "conflicts" in (parsed as object)) {
+      err.conflicts = (parsed as { conflicts: typeof err.conflicts }).conflicts;
+    }
+    throw err;
+  }
+  return res.json() as Promise<{
+    rule: RashRule;
+    addsum: RashAddsum[];
+    placements: RashPlacement[];
+    conflicts: Array<{
+      formId: string;
+      rowNo: string;
+      columnKey: string;
+      existingKod: number;
+    }>;
+  }>;
+}
+
+export async function fetchRashUsage(kod: number) {
+  const res = await apiFetchRaw(`/api/rash/${kod}/usage`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    kod: number;
+    placementCount: number;
+    forms: string[];
+    samplePlacements: RashPlacement[];
+    entryCount: number;
+    instanceCount: number;
+  }>;
+}
+
+export async function previewRashRulesImport() {
+  const res = await apiFetchRaw("/api/rash/import-preview", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    added: number[];
+    removed: number[];
+    changed: number[];
+    unchanged: number;
+    jsonTotal: number;
+    dbTotal: number;
+  }>;
+}
+
+export async function previewRashPlacementsImport() {
+  const res = await apiFetchRaw("/api/rash/placements/import-preview", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    added: number;
+    removed: number;
+    changed: number;
+    unchanged: number;
+    jsonTotal: number;
+    dbTotal: number;
+    sampleConflicts: Array<{
+      formId: string;
+      rowNo: string;
+      columnKey: string;
+      existingKod: number;
+    }>;
+  }>;
 }

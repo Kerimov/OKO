@@ -12,10 +12,10 @@ import {
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
-import { useAdminAccess } from "../components/AdminAccessGate";
+import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 
 export function AggregationEditorPage() {
-  useAdminAccess();
+  const access = useAdminAccess();
   const backend = isBackendMode();
   const [stats, setStats] = useState<{ total: number; included: number; parents: number } | null>(
     null
@@ -113,6 +113,10 @@ export function AggregationEditorPage() {
     }
   };
 
+  if (!access.ok) {
+    return <AdminAccessGate title="Агрегация" />;
+  }
+
   if (!backend) {
     return (
       <div className="admin-page">
@@ -128,8 +132,9 @@ export function AggregationEditorPage() {
         <div>
           <h1>Конфигурация агрегации</h1>
           <p className="admin-desc">
-            Какие организации входят в свод головной. Код организации должен совпадать с кодом
-            комплекта (например 1@5222).
+            Аналог Access <code>frmAggrCfg</code> / таблица <code>a_tblAgg_List</code>: какие
+            организации входят в свод головной. Флаг «включено» = Include?. Запуск свода — в{" "}
+            <Link to="/tools">Сводка и импорт</Link>.
           </p>
         </div>
         <div className="toolbar-actions">
