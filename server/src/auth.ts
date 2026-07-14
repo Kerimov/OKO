@@ -6,6 +6,7 @@ import {
   deleteSession,
   getUserByUsername,
   resolveSessionUser,
+  revokeAllUserSessions,
   verifyPassword,
   type SessionUser,
 } from "./users.js";
@@ -46,22 +47,60 @@ export function isAuthDisabled(): boolean {
 
 export function isAuthEnabled(): boolean {
   if (isAuthDisabled()) return false;
-  return hasLegacyAuth() || hasUserAccounts();
+  return hasLegacyAuth() || hasUserAccounts() || getOidcConfig().enabled;
 }
 
 export function getAuthConfig() {
   const userAccounts = hasUserAccounts();
-  let authMode: "none" | "legacy" | "users" | "mixed" = "none";
+  let authMode: "none" | "legacy" | "users" | "mixed" | "oidc" = "none";
   if (hasLegacyAuth() && userAccounts) authMode = "mixed";
   else if (userAccounts) authMode = "users";
   else if (hasLegacyAuth()) authMode = "legacy";
+
+  const oidc = getOidcConfig();
+  if (oidc.enabled && authMode === "none") authMode = "oidc";
 
   return {
     authRequired: isAuthEnabled(),
     authMode,
     userAccounts,
     userTokenConfigured: USER_TOKEN.length > 0,
-    loginAvailable: userAccounts,
+    loginAvailable: userAccounts || oidc.enabled,
+    oidc: {
+      enabled: oidc.enabled,
+      issuer: oidc.issuer,
+      clientId: oidc.clientId,
+      authorizationUrl: oidc.authorizationUrl,
+      scopes: oidc.scopes,
+    },
+  };
+}
+
+export function getOidcConfig() {
+  // Lazy import-shaped wrapper kept sync via duplicated env read in oidc.ts;
+  // re-export shape for Nest/health without circular init issues.
+  const issuer = process.env.OKO_OIDC_ISSUER?.trim() || "";
+  const clientId = process.env.OKO_OIDC_CLIENT_ID?.trim() || "";
+  const base = issuer.replace(/\/$/, "");
+  const authorizationUrl =
+    process.env.OKO_OIDC_AUTHORIZATION_URL?.trim() ||
+    (base ? `${base}/protocol/openid-connect/auth` : "");
+  const scopes = (process.env.OKO_OIDC_SCOPES?.trim() || "openid profile email").split(/\s+/);
+  const enabledFlag =
+    process.env.OKO_OIDC_ENABLED?.trim().toLowerCase() === "1" ||
+    process.env.OKO_OIDC_ENABLED?.trim().toLowerCase() === "true";
+  const enabled =
+    (enabledFlag || (issuer.length > 0 && clientId.length > 0)) &&
+    issuer.length > 0 &&
+    clientId.length > 0;
+
+  return {
+    enabled,
+    issuer: issuer || null,
+    clientId: clientId || null,
+    authorizationUrl: authorizationUrl || null,
+    scopes,
+    callbackPath: "/api/auth/oidc/callback",
   };
 }
 
@@ -113,8 +152,13 @@ export async function resolveAuth(req: Request, token: string | null): Promise<b
 /** Public routes — no token required even when auth is enabled. */
 export const PUBLIC_API_PATHS = new Set([
   "/api/health",
+  "/api/ready",
   "/api/auth/login",
   "/api/auth/me",
+  "/api/auth/oidc/config",
+  "/api/auth/oidc/start",
+  "/api/auth/oidc/callback",
+  "/api/auth/session-policy",
   "/api/templates/minfin",
 ]);
 
@@ -230,10 +274,17 @@ export interface AuthMePayload {
   role: ApiRole | null;
   user: Record<string, unknown> | null;
   authRequired: boolean;
-  authMode: "none" | "legacy" | "users" | "mixed";
+  authMode: "none" | "legacy" | "users" | "mixed" | "oidc";
   userAccounts: boolean;
   userTokenConfigured: boolean;
   loginAvailable: boolean;
+  oidc?: {
+    enabled: boolean;
+    issuer: string | null;
+    clientId: string | null;
+    authorizationUrl: string | null;
+    scopes: string[];
+  };
 }
 
 export async function buildAuthMePayload(req: Request): Promise<AuthMePayload> {
@@ -310,4 +361,11 @@ export async function loginWithCredentials(
 export async function logoutSession(req: Request): Promise<void> {
   const token = req.sessionToken ?? extractToken(req);
   if (token) await deleteSession(await getDb(), token);
+}
+
+export async function logoutAllSessions(req: Request): Promise<{ revoked: number }> {
+  const userId = req.apiUser?.id;
+  if (userId == null) return { revoked: 0 };
+  const revoked = await revokeAllUserSessions(await getDb(), userId);
+  return { revoked };
 }

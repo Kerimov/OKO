@@ -35,7 +35,26 @@ export interface SessionUser {
   zid: number | null;
 }
 
-const SESSION_DAYS = 7;
+const DEFAULT_SESSION_DAYS = 7;
+const DEFAULT_MAX_SESSIONS = 10;
+
+export function sessionTtlMs(): number {
+  const hours = Number(process.env.OKO_SESSION_TTL_HOURS);
+  if (Number.isFinite(hours) && hours > 0) return Math.floor(hours * 3_600_000);
+  const days = Number(process.env.OKO_SESSION_DAYS);
+  if (Number.isFinite(days) && days > 0) return Math.floor(days * 86_400_000);
+  return DEFAULT_SESSION_DAYS * 86_400_000;
+}
+
+export function maxSessionsPerUser(): number {
+  const n = Number(process.env.OKO_SESSION_MAX_PER_USER);
+  if (Number.isFinite(n) && n > 0) return Math.min(100, Math.floor(n));
+  return DEFAULT_MAX_SESSIONS;
+}
+
+function expiresAtIso(from = new Date()): string {
+  return new Date(from.getTime() + sessionTtlMs()).toISOString();
+}
 
 export async function migrateUserTables(db: OkoDb): Promise<void> {
   if (db.dialect === "postgres") return;
@@ -221,23 +240,40 @@ export async function updateUser(
 
   values.push(id);
   await db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+
+  if (patch.active === false || patch.password) {
+    await revokeAllUserSessions(db, id);
+  }
+
   return getUserById(db, id);
 }
 
 export async function createSession(db: OkoDb, userId: number): Promise<string> {
+  await purgeExpiredSessions(db);
+  const existing = (await db
+    .prepare(
+      `SELECT token FROM sessions WHERE user_id = ? ORDER BY created_at DESC, token DESC`
+    )
+    .all(userId)) as Array<{ token: string }>;
+  const keep = Math.max(0, maxSessionsPerUser() - 1);
+  for (const row of existing.slice(keep)) {
+    await deleteSession(db, row.token);
+  }
+
   const token = randomBytes(32).toString("hex");
-  const expires = new Date();
-  expires.setDate(expires.getDate() + SESSION_DAYS);
-  await db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(
-    token,
-    userId,
-    expires.toISOString()
-  );
+  await db
+    .prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
+    .run(token, userId, expiresAtIso());
   return token;
 }
 
 export async function deleteSession(db: OkoDb, token: string): Promise<void> {
   await db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+}
+
+export async function revokeAllUserSessions(db: OkoDb, userId: number): Promise<number> {
+  const r = await db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+  return r.changes;
 }
 
 export async function purgeExpiredSessions(db: OkoDb): Promise<void> {
@@ -246,14 +282,15 @@ export async function purgeExpiredSessions(db: OkoDb): Promise<void> {
 
 export async function resolveSessionUser(db: OkoDb, token: string): Promise<SessionUser | null> {
   await purgeExpiredSessions(db);
+  const now = new Date();
   const row = (await db
     .prepare(
-      `SELECT u.id, u.username, u.display_name, u.role, u.zid, u.active
+      `SELECT u.id, u.username, u.display_name, u.role, u.zid, u.active, s.expires_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at >= ?`
     )
-    .get(token, new Date().toISOString())) as
+    .get(token, now.toISOString())) as
     | {
         id: number;
         username: string;
@@ -261,10 +298,21 @@ export async function resolveSessionUser(db: OkoDb, token: string): Promise<Sess
         role: string;
         zid: number | null;
         active: number;
+        expires_at: string;
       }
     | undefined;
 
   if (!row || !row.active) return null;
+
+  // Sliding TTL: renew when less than half the window remains.
+  const expiresMs = new Date(row.expires_at).getTime();
+  const remaining = expiresMs - now.getTime();
+  if (Number.isFinite(remaining) && remaining < sessionTtlMs() / 2) {
+    await db
+      .prepare(`UPDATE sessions SET expires_at = ? WHERE token = ?`)
+      .run(expiresAtIso(now), token);
+  }
+
   return {
     id: row.id,
     username: row.username,
