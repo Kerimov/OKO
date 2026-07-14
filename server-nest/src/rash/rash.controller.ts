@@ -20,17 +20,22 @@ import {
   exportRashPayload,
   exportRowRashIndex,
   getRashRule,
+  getRashRuleUsage,
   getRashStats,
   getRashThresholds,
   listPlacementsByKod,
   listRashAddsum,
   listRashRules,
+  previewPlacementsReimport,
+  previewRashRulesReimport,
   reimportPlacementsFromJson,
   reimportRashFromJson,
   replacePlacementsForKod,
   replaceRashAddsum,
+  saveRashBundle,
   seedPlacementsFromJson,
   setRashThresholds,
+  suggestNextRashKod,
   upsertRashRule,
   type RashAddsumDto,
   type RashPlacementDto,
@@ -48,6 +53,13 @@ export class RashController {
   @ApiOperation({ summary: "Статистика правил расшифровок" })
   async stats() {
     return getRashStats(await getDb());
+  }
+
+  @Get("next-kod")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Предложить свободный код расшифровки" })
+  async nextKod() {
+    return { kod: await suggestNextRashKod(await getDb()) };
   }
 
   @Get("thresholds")
@@ -73,6 +85,19 @@ export class RashController {
   @ApiOperation({ summary: "Экспорт карты привязок kod→ячейка (row-rash-index)" })
   async exportPlacements() {
     return exportRowRashIndex(await getDb());
+  }
+
+  @Post("placements/import-preview")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Предпросмотр импорта привязок (без записи)" })
+  async previewPlacementsImport() {
+    try {
+      return await previewPlacementsReimport(await getDb());
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "preview failed",
+      });
+    }
   }
 
   @Post("placements/reimport")
@@ -109,6 +134,19 @@ export class RashController {
     });
   }
 
+  @Post("import-preview")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Предпросмотр импорта правил (без записи)" })
+  async previewRulesImport() {
+    try {
+      return await previewRashRulesReimport(await getDb());
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "preview failed",
+      });
+    }
+  }
+
   @Post("reimport")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Перезагрузить правила из rash-rules.json" })
@@ -116,12 +154,40 @@ export class RashController {
     try {
       const db = await getDb();
       const count = await reimportRashFromJson(db);
-      // CASCADE clears placements with rules — restore from row-rash-index.json
       const placements = await seedPlacementsFromJson(db);
       return { reimported: count, placementsSeeded: placements };
     } catch (e) {
       throw new InternalServerErrorException({
         error: e instanceof Error ? e.message : "reimport failed",
+      });
+    }
+  }
+
+  @Post("bundle")
+  @UseGuards(AdminGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: "Сохранить правило + addsum + placements атомарно" })
+  async saveBundle(
+    @Body()
+    body: {
+      rule: RashRuleDto;
+      addsum?: RashAddsumDto[];
+      placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
+      forceConflicts?: boolean;
+    }
+  ) {
+    try {
+      return await saveRashBundle(await getDb(), body);
+    } catch (e) {
+      const conflicts = (e as { conflicts?: unknown }).conflicts;
+      if (conflicts) {
+        throw new ConflictException({
+          error: e instanceof Error ? e.message : "conflicts",
+          conflicts,
+        });
+      }
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "bundle save failed",
       });
     }
   }
@@ -139,7 +205,10 @@ export class RashController {
   @Put(":kod/addsum")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Заменить доп. графы правила" })
-  async putAddsum(@Param("kod") kodRaw: string, @Body() body: RashAddsumDto[] | { items: RashAddsumDto[] }) {
+  async putAddsum(
+    @Param("kod") kodRaw: string,
+    @Body() body: RashAddsumDto[] | { items: RashAddsumDto[] }
+  ) {
     const kod = Number(kodRaw);
     const items = Array.isArray(body) ? body : (body.items ?? []);
     try {
@@ -183,6 +252,16 @@ export class RashController {
         error: e instanceof Error ? e.message : "placements save failed",
       });
     }
+  }
+
+  @Get(":kod/usage")
+  @ApiOperation({ summary: "Использование правила: привязки и строки расшифровок" })
+  async usage(@Param("kod") kodRaw: string) {
+    const kod = Number(kodRaw);
+    if (!(await getRashRule(await getDb(), kod))) {
+      throw new NotFoundException({ error: "Not found" });
+    }
+    return getRashRuleUsage(await getDb(), kod);
   }
 
   @Get(":kod")

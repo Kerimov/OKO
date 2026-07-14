@@ -20,15 +20,18 @@ import {
   getPackageCompleteness,
   getPackagesDashboard,
   importReportPackage,
+  setPackageWorkflow,
+  type PackageWorkflowStatus,
 } from "../../../server/src/packages.js";
 import {
   assertOrgZidParam,
 } from "../../../server/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
-import { PackageImportDto, PackageZidEidDto } from "./dto/packages.dto.js";
+import { PackageImportDto, PackageWorkflowPutDto, PackageZidEidDto } from "./dto/packages.dto.js";
 import { assertPackageSubmittedChecks } from "../../../server/src/instance-submit.js";
 import type { OkoFormInstance } from "../../../server/src/types.js";
+import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 
 @ApiTags("packages")
 @ApiBearerAuth()
@@ -50,6 +53,30 @@ export class PackagesController {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "failed");
+    }
+  }
+
+  @Post("workflow")
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      "Сменить статус комплекта (draft→submitted→returned/accepted; corrected→submitted)",
+  })
+  async setWorkflow(@Req() req: OkoRequest, @Body() body: PackageWorkflowPutDto) {
+    if (!body.zid || !body.eid || !body.status) {
+      throw new BadRequestException({ error: "zid, eid and status required" });
+    }
+    try {
+      assertOrgZidParam(req, body.zid);
+      return setPackageWorkflow(await getDb(), body.zid, body.eid, {
+        status: body.status as PackageWorkflowStatus,
+        comment: body.comment ?? null,
+        actor: req.apiUser?.username ?? req.apiRole ?? null,
+        isAdmin: req.apiRole === "admin",
+      });
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "workflow update failed");
     }
   }
 
@@ -103,7 +130,14 @@ export class PackagesController {
       throw new BadRequestException({ error: "package.instances required" });
     }
     try {
-      const instances = body.package.instances as OkoFormInstance[];
+      let instances = body.package.instances as OkoFormInstance[];
+      if (body.templateIds?.length) {
+        const allow = new Set(body.templateIds);
+        instances = instances.filter((i) => i.templateId && allow.has(i.templateId));
+      }
+      if (!instances.length) {
+        throw new BadRequestException({ error: "no instances to import after templateIds filter" });
+      }
       await assertPackageSubmittedChecks(await getDb(), instances);
       return importReportPackage(
         await getDb(),
@@ -115,7 +149,8 @@ export class PackagesController {
           periodEnd: body.package.periodEnd,
           instances,
         },
-        body.overwrite === true
+        body.overwrite === true,
+        body.templateIds
       );
     } catch (e) {
       if (e instanceof HttpException) throw e;
