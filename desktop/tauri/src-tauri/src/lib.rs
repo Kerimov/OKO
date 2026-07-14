@@ -62,6 +62,9 @@ pub struct OpenPackageResult {
   pub instances: usize,
   pub has_coordinator_pin: bool,
   pub restrict_executors_to_assignments: bool,
+  /// Path of newly created daily backup, if any.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub daily_backup_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -151,6 +154,9 @@ pub struct MetaSettings {
   pub presence_stale_sec: Option<u32>,
   pub sync_poll_interval_sec: Option<u32>,
   pub restrict_executors_to_assignments: Option<bool>,
+  /// Access zDailyBackup: auto copy oko.db → backups/oko_daily_YYYY-MM-DD.db on open.
+  #[serde(default)]
+  pub daily_backup: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -413,6 +419,40 @@ fn runtime_info() -> serde_json::Value {
   })
 }
 
+fn ensure_daily_backup(pkg: &PackageState) -> Result<Option<String>, AppError> {
+  let enabled = pkg
+    .meta
+    .settings
+    .as_ref()
+    .and_then(|s| s.daily_backup)
+    .unwrap_or(true);
+  if !enabled {
+    return Ok(None);
+  }
+  let date = iso_now().chars().take(10).collect::<String>();
+  let backups = pkg.folder.join("backups");
+  fs::create_dir_all(&backups)
+    .map_err(|e| AppError::Message(format!("mkdir backups failed: {e}")))?;
+  let dest = backups.join(format!("oko_daily_{date}.db"));
+  if dest.exists() {
+    return Ok(None);
+  }
+  let _ = pkg.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+  fs::copy(&pkg.db_path, &dest)
+    .map_err(|e| AppError::Message(format!("daily backup copy failed: {e}")))?;
+  let dest_s = dest.display().to_string();
+  let _ = insert_audit(
+    &pkg.conn,
+    "daily_backup",
+    None,
+    None,
+    None,
+    "system",
+    Some(&dest_s),
+  );
+  Ok(Some(dest_s))
+}
+
 #[tauri::command]
 fn open_package(
   folder_path: String,
@@ -427,18 +467,12 @@ fn open_package(
   let conn = open_db(&db_path)?;
   let instances = count_instances(&conn)?;
   let _ = write_schema_version(&folder);
-  let result = OpenPackageResult {
-    folder_path: folder.display().to_string(),
-    meta: meta.clone(),
-    db_path: db_path.display().to_string(),
-    instances,
-    has_coordinator_pin: meta.coordinator_pin_hash.as_ref().is_some_and(|s| !s.is_empty()),
-    restrict_executors_to_assignments: meta
-      .settings
-      .as_ref()
-      .and_then(|s| s.restrict_executors_to_assignments)
-      .unwrap_or(false),
-  };
+  let has_coordinator_pin = meta.coordinator_pin_hash.as_ref().is_some_and(|s| !s.is_empty());
+  let restrict_executors_to_assignments = meta
+    .settings
+    .as_ref()
+    .and_then(|s| s.restrict_executors_to_assignments)
+    .unwrap_or(false);
 
   let mut guard = state
     .package
@@ -446,11 +480,28 @@ fn open_package(
     .map_err(|_| AppError::Message("state lock poisoned".into()))?;
   *guard = Some(PackageState {
     folder,
-    db_path,
-    meta,
+    db_path: db_path.clone(),
+    meta: meta.clone(),
     conn,
   });
-  Ok(result)
+
+  let daily_backup_path = match guard.as_ref() {
+    Some(pkg) => ensure_daily_backup(pkg).unwrap_or(None),
+    None => None,
+  };
+
+  Ok(OpenPackageResult {
+    folder_path: guard
+      .as_ref()
+      .map(|p| p.folder.display().to_string())
+      .unwrap_or(folder_path),
+    meta,
+    db_path: db_path.display().to_string(),
+    instances,
+    has_coordinator_pin,
+    restrict_executors_to_assignments,
+    daily_backup_path,
+  })
 }
 
 #[tauri::command]
@@ -907,6 +958,84 @@ fn machine_name() -> String {
         .ok_or(std::env::VarError::NotPresent)
     })
     .unwrap_or_else(|_| "pc".into())
+}
+
+#[tauri::command]
+fn get_app_meta(state: State<'_, AppState>, key: String) -> Result<Option<String>, AppError> {
+  with_package(&state, |pkg| {
+    let value: Option<String> = pkg
+      .conn
+      .query_row(
+        "SELECT value FROM app_meta WHERE key = ?1",
+        [&key],
+        |r| r.get(0),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?;
+    Ok(value)
+  })
+}
+
+#[tauri::command]
+fn get_rules_sync(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+  with_package(&state, |pkg| {
+    let exported: Option<String> = pkg
+      .conn
+      .query_row(
+        "SELECT value FROM app_meta WHERE key = 'rules_exported_at'",
+        [],
+        |r| r.get(0),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?;
+    let version: Option<String> = pkg
+      .conn
+      .query_row(
+        "SELECT value FROM app_meta WHERE key = 'methodology_version'",
+        [],
+        |r| r.get(0),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?;
+    let has_checks: bool = pkg
+      .conn
+      .query_row(
+        "SELECT 1 FROM app_meta WHERE key = 'rules_checks' LIMIT 1",
+        [],
+        |_| Ok(true),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?
+      .unwrap_or(false);
+    let has_rash: bool = pkg
+      .conn
+      .query_row(
+        "SELECT 1 FROM app_meta WHERE key = 'rules_rash' LIMIT 1",
+        [],
+        |_| Ok(true),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?
+      .unwrap_or(false);
+    let has_reorg: bool = pkg
+      .conn
+      .query_row(
+        "SELECT 1 FROM app_meta WHERE key = 'rules_checks_reorg' LIMIT 1",
+        [],
+        |_| Ok(true),
+      )
+      .optional()
+      .map_err(|e| AppError::Message(format!("app_meta read failed: {e}")))?
+      .unwrap_or(false);
+    Ok(serde_json::json!({
+      "exportedAt": exported,
+      "version": version,
+      "fromPackage": exported.is_some() || has_checks || has_rash || has_reorg,
+      "hasChecks": has_checks,
+      "hasRash": has_rash,
+      "hasReorgChecks": has_reorg,
+    }))
+  })
 }
 
 #[tauri::command]
@@ -1517,6 +1646,185 @@ fn backup_database(
   })
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+  pub name: String,
+  pub path: String,
+  pub size_bytes: u64,
+  pub modified_at: Option<String>,
+}
+
+fn backups_dir(pkg: &PackageState) -> PathBuf {
+  pkg.folder.join("backups")
+}
+
+fn sanitize_backup_name(name: &str) -> Result<String, AppError> {
+  let name = name.trim();
+  if name.is_empty()
+    || name.contains('/')
+    || name.contains('\\')
+    || name.contains("..")
+    || !name.ends_with(".db")
+  {
+    return Err(AppError::Message("Недопустимое имя файла резервной копии".into()));
+  }
+  Ok(name.to_string())
+}
+
+#[tauri::command]
+fn list_backups(state: State<'_, AppState>) -> Result<Vec<BackupInfo>, AppError> {
+  with_package(&state, |pkg| {
+    let dir = backups_dir(pkg);
+    if !dir.is_dir() {
+      return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for entry in fs::read_dir(&dir)
+      .map_err(|e| AppError::Message(format!("read backups failed: {e}")))?
+    {
+      let entry = entry.map_err(|e| AppError::Message(format!("read backup entry: {e}")))?;
+      let path = entry.path();
+      if !path.is_file() {
+        continue;
+      }
+      let name = match path.file_name().and_then(|s| s.to_str()) {
+        Some(n) if n.ends_with(".db") => n.to_string(),
+        _ => continue,
+      };
+      let meta = entry.metadata().ok();
+      let size_bytes = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+      let modified_at = meta
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| {
+          let dur = t.duration_since(std::time::UNIX_EPOCH).ok()?;
+          time::OffsetDateTime::from_unix_timestamp(dur.as_secs() as i64)
+            .ok()
+            .and_then(|dt| {
+              dt.format(&time::format_description::well_known::Rfc3339)
+                .ok()
+            })
+        });
+      out.push(BackupInfo {
+        name,
+        path: path.display().to_string(),
+        size_bytes,
+        modified_at,
+      });
+    }
+    out.sort_by(|a, b| b.name.cmp(&a.name));
+    Ok(out)
+  })
+}
+
+#[tauri::command]
+fn restore_database(
+  backup_name: String,
+  actor: String,
+  pin: Option<String>,
+  state: State<'_, AppState>,
+) -> Result<String, AppError> {
+  let name = sanitize_backup_name(&backup_name)?;
+  let mut guard = state
+    .package
+    .lock()
+    .map_err(|_| AppError::Message("state lock poisoned".into()))?;
+  let Some(mut pkg) = guard.take() else {
+    return Err(AppError::Message("Комплект не открыт".into()));
+  };
+  let restore_result = (|| -> Result<String, AppError> {
+    assert_coordinator_pin(&pkg, pin.as_deref())?;
+    let src = backups_dir(&pkg).join(&name);
+    if !src.is_file() {
+      return Err(AppError::Message(format!("Файл не найден: {name}")));
+    }
+    let backups = backups_dir(&pkg);
+    fs::create_dir_all(&backups)
+      .map_err(|e| AppError::Message(format!("mkdir backups failed: {e}")))?;
+    let stamp = iso_now().replace(':', "-").replace('.', "-");
+    let stamp = stamp.chars().take(19).collect::<String>();
+    let safety = backups.join(format!("oko_pre_restore_{stamp}.db"));
+
+    let _ = pkg.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    // Close connection before replacing file on disk.
+    drop(std::mem::replace(
+      &mut pkg.conn,
+      Connection::open_in_memory().map_err(|e| AppError::Message(format!("temp db: {e}")))?,
+    ));
+
+    fs::copy(&pkg.db_path, &safety)
+      .map_err(|e| AppError::Message(format!("safety backup failed: {e}")))?;
+    fs::copy(&src, &pkg.db_path)
+      .map_err(|e| AppError::Message(format!("restore copy failed: {e}")))?;
+
+    // Remove leftover WAL/SHM from previous connection if present.
+    let _ = fs::remove_file(format!("{}-wal", pkg.db_path.display()));
+    let _ = fs::remove_file(format!("{}-shm", pkg.db_path.display()));
+
+    pkg.conn = open_db(&pkg.db_path)?;
+    let dest_s = src.display().to_string();
+    insert_audit(
+      &pkg.conn,
+      "restore_db",
+      None,
+      None,
+      None,
+      &actor,
+      Some(&dest_s),
+    )?;
+    Ok(format!(
+      "Восстановлено из {name}. Текущая БД сохранена как {}",
+      safety.file_name().and_then(|s| s.to_str()).unwrap_or("oko_pre_restore.db")
+    ))
+  })();
+
+  match restore_result {
+    Ok(msg) => {
+      *guard = Some(pkg);
+      Ok(msg)
+    }
+    Err(e) => {
+      // Best-effort reopen if restore failed mid-way.
+      if let Ok(conn) = open_db(&pkg.db_path) {
+        pkg.conn = conn;
+      }
+      *guard = Some(pkg);
+      Err(e)
+    }
+  }
+}
+
+#[tauri::command]
+fn compact_database(
+  actor: String,
+  pin: Option<String>,
+  state: State<'_, AppState>,
+) -> Result<serde_json::Value, AppError> {
+  with_package(&state, |pkg| {
+    assert_coordinator_pin(pkg, pin.as_deref())?;
+    let before = fs::metadata(&pkg.db_path).map(|m| m.len()).unwrap_or(0);
+    let _ = pkg.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    pkg
+      .conn
+      .execute_batch("VACUUM;")
+      .map_err(|e| AppError::Message(format!("VACUUM failed: {e}")))?;
+    let after = fs::metadata(&pkg.db_path).map(|m| m.len()).unwrap_or(0);
+    insert_audit(
+      &pkg.conn,
+      "compact_db",
+      None,
+      None,
+      None,
+      &actor,
+      Some(&format!("before={before};after={after}")),
+    )?;
+    Ok(serde_json::json!({
+      "beforeBytes": before,
+      "afterBytes": after,
+    }))
+  })
+}
+
 #[tauri::command]
 fn force_unlock(
   instance_id: String,
@@ -1728,6 +2036,9 @@ fn import_package_json(
       if let Some(v) = rules_val.get("checks") {
         write_meta("rules_checks", v)?;
       }
+      if let Some(v) = rules_val.get("checksReorg").or_else(|| rules_val.get("reorgChecks")) {
+        write_meta("rules_checks_reorg", v)?;
+      }
       if let Some(v) = rules_val.get("rash") {
         write_meta("rules_rash", v)?;
       }
@@ -1739,6 +2050,22 @@ fn import_package_json(
       }
       if let Some(v) = rules_val.get("kontr") {
         write_meta("rules_kontr", v)?;
+      }
+      if let Some(v) = rules_val.get("saldo") {
+        write_meta("rules_saldo", v)?;
+      }
+      if let Some(v) = rules_val.get("correspondence") {
+        write_meta("rules_correspondence", v)?;
+      }
+      if let Some(v) = rules_val.get("version").and_then(|x| x.as_str()) {
+        pkg
+          .conn
+          .execute(
+            r#"INSERT INTO app_meta (key, value) VALUES ('methodology_version', ?1)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value"#,
+            params![v],
+          )
+          .map_err(|e| AppError::Message(format!("app_meta write failed: {e}")))?;
       }
       let exported = rules_val
         .get("exportedAt")
@@ -1841,6 +2168,7 @@ fn create_empty_package(
       presence_stale_sec: Some(30),
       sync_poll_interval_sec: Some(3),
       restrict_executors_to_assignments: Some(false),
+      daily_backup: Some(true),
     }),
     coordinator_pin_hash: None,
   };
@@ -1907,6 +2235,7 @@ fn create_empty_package(
     instances,
     has_coordinator_pin: false,
     restrict_executors_to_assignments: false,
+    daily_backup_path: None,
   };
   let mut guard = state
     .package
@@ -1921,12 +2250,85 @@ fn create_empty_package(
   Ok(result)
 }
 
+fn home_dir() -> Option<PathBuf> {
+  std::env::var_os("HOME")
+    .or_else(|| std::env::var_os("USERPROFILE"))
+    .map(PathBuf::from)
+}
+
+fn allowed_fs_roots(state: &AppState) -> Vec<PathBuf> {
+  let mut roots: Vec<PathBuf> = Vec::new();
+  if let Ok(guard) = state.package.lock() {
+    if let Some(pkg) = guard.as_ref() {
+      roots.push(pkg.folder.clone());
+    }
+  }
+  roots.push(logs_dir());
+  if let Some(home) = home_dir() {
+    for name in ["Documents", "Downloads", "Desktop", "tmp", "Temp"] {
+      roots.push(home.join(name));
+    }
+    roots.push(home.join("Library").join("Caches"));
+  }
+  if let Ok(tmp) = std::env::var("TMPDIR").or_else(|_| std::env::var("TEMP")) {
+    roots.push(PathBuf::from(tmp));
+  }
+  roots.push(std::env::temp_dir());
+  roots
+}
+
+fn canonicalize_for_check(path: &Path) -> Result<PathBuf, AppError> {
+  if path.exists() {
+    return fs::canonicalize(path)
+      .map_err(|e| AppError::Message(format!("canonicalize failed: {e}")));
+  }
+  if let Some(parent) = path.parent() {
+    if parent.as_os_str().is_empty() {
+      return Ok(path.to_path_buf());
+    }
+    let parent_c = if parent.exists() {
+      fs::canonicalize(parent)
+        .map_err(|e| AppError::Message(format!("canonicalize parent failed: {e}")))?
+    } else {
+      parent.to_path_buf()
+    };
+    let name = path
+      .file_name()
+      .ok_or_else(|| AppError::Message("invalid path".into()))?;
+    return Ok(parent_c.join(name));
+  }
+  Ok(path.to_path_buf())
+}
+
+fn assert_path_allowed(path: &Path, state: &AppState) -> Result<PathBuf, AppError> {
+  let canonical = canonicalize_for_check(path)?;
+  for root in allowed_fs_roots(state) {
+    let root_c = if root.exists() {
+      fs::canonicalize(&root).unwrap_or(root.clone())
+    } else {
+      root.clone()
+    };
+    if canonical.starts_with(&root_c) {
+      return Ok(canonical);
+    }
+  }
+  Err(AppError::Message(
+    "Доступ к файлу вне открытого комплекта, временной папки или Documents/Downloads запрещён"
+      .into(),
+  ))
+}
+
 #[tauri::command]
-fn write_text_file(path: String, content: String) -> Result<bool, AppError> {
-  if let Some(parent) = Path::new(&path).parent() {
+fn write_text_file(
+  path: String,
+  content: String,
+  state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+  let safe = assert_path_allowed(Path::new(&path), &state)?;
+  if let Some(parent) = safe.parent() {
     let _ = fs::create_dir_all(parent);
   }
-  fs::write(&path, content).map_err(|e| AppError::Message(format!("write failed: {e}")))?;
+  fs::write(&safe, content).map_err(|e| AppError::Message(format!("write failed: {e}")))?;
   Ok(true)
 }
 
@@ -1956,25 +2358,39 @@ fn append_app_log(level: String, message: String) -> Result<bool, AppError> {
 }
 
 #[tauri::command]
-fn read_text_file(path: String) -> Result<String, AppError> {
-  fs::read_to_string(&path).map_err(|e| AppError::Message(format!("read failed: {e}")))
+fn read_text_file(path: String, state: State<'_, AppState>) -> Result<String, AppError> {
+  let safe = assert_path_allowed(Path::new(&path), &state)?;
+  fs::read_to_string(&safe).map_err(|e| AppError::Message(format!("read failed: {e}")))
 }
 
 #[tauri::command]
-fn write_bytes_file(path: String, bytes: Vec<u8>) -> Result<bool, AppError> {
-  if let Some(parent) = Path::new(&path).parent() {
+fn read_bytes_file(path: String, state: State<'_, AppState>) -> Result<Vec<u8>, AppError> {
+  let safe = assert_path_allowed(Path::new(&path), &state)?;
+  fs::read(&safe).map_err(|e| AppError::Message(format!("read bytes failed: {e}")))
+}
+
+#[tauri::command]
+fn write_bytes_file(
+  path: String,
+  bytes: Vec<u8>,
+  state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+  let safe = assert_path_allowed(Path::new(&path), &state)?;
+  if let Some(parent) = safe.parent() {
     let _ = fs::create_dir_all(parent);
   }
-  fs::write(&path, bytes).map_err(|e| AppError::Message(format!("write failed: {e}")))?;
+  fs::write(&safe, bytes).map_err(|e| AppError::Message(format!("write failed: {e}")))?;
   Ok(true)
 }
 
 #[tauri::command]
-fn copy_file(from: String, to: String) -> Result<bool, AppError> {
-  if let Some(parent) = Path::new(&to).parent() {
+fn copy_file(from: String, to: String, state: State<'_, AppState>) -> Result<bool, AppError> {
+  let src = assert_path_allowed(Path::new(&from), &state)?;
+  let dest = assert_path_allowed(Path::new(&to), &state)?;
+  if let Some(parent) = dest.parent() {
     let _ = fs::create_dir_all(parent);
   }
-  fs::copy(&from, &to).map_err(|e| AppError::Message(format!("copy failed: {e}")))?;
+  fs::copy(&src, &dest).map_err(|e| AppError::Message(format!("copy failed: {e}")))?;
   Ok(true)
 }
 
@@ -1997,6 +2413,8 @@ pub fn run() {
       load_instance,
       save_instance,
       get_client_id,
+      get_rules_sync,
+      get_app_meta,
       get_collaboration_settings,
       claim_cell,
       release_presence,
@@ -2013,6 +2431,9 @@ pub fn run() {
       set_restrict_executors,
       set_instance_status,
       backup_database,
+      list_backups,
+      restore_database,
+      compact_database,
       force_unlock,
       export_package_json,
       import_package_json,
@@ -2020,6 +2441,7 @@ pub fn run() {
       create_empty_package,
       write_text_file,
       read_text_file,
+      read_bytes_file,
       write_bytes_file,
       copy_file,
       get_os_user_name,
@@ -2027,4 +2449,88 @@ pub fn run() {
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod path_allowlist_tests {
+  use super::*;
+  use std::sync::Mutex;
+
+  fn empty_state() -> AppState {
+    AppState {
+      package: Mutex::new(None),
+      client_id: "test-client".into(),
+      machine_name: "test-host".into(),
+    }
+  }
+
+  fn state_with_folder(folder: PathBuf) -> AppState {
+    let db_path = folder.join("oko.db");
+    let conn = Connection::open(&db_path).expect("open test db");
+    AppState {
+      package: Mutex::new(Some(PackageState {
+        folder: folder.clone(),
+        db_path,
+        meta: PackageMeta {
+          format_version: 1,
+          zid: 1,
+          eid: 1,
+          organization: "Test".into(),
+          period_start: "2026-01-01".into(),
+          period_end: "2026-03-31".into(),
+          enterprise_code: Some("1@1".into()),
+          created_at: None,
+          settings: None,
+          coordinator_pin_hash: None,
+        },
+        conn,
+      })),
+      client_id: "test-client".into(),
+      machine_name: "test-host".into(),
+    }
+  }
+
+  #[test]
+  fn temp_file_is_allowed() {
+    let state = empty_state();
+    let path = std::env::temp_dir().join(format!("oko_allow_{}.txt", std::process::id()));
+    fs::write(&path, b"ok").expect("write temp");
+    let res = assert_path_allowed(&path, &state);
+    let _ = fs::remove_file(&path);
+    assert!(res.is_ok(), "temp path should be allowed: {res:?}");
+  }
+
+  #[test]
+  fn package_nested_file_is_allowed() {
+    let folder = std::env::temp_dir().join(format!("oko_pkg_{}", std::process::id()));
+    fs::create_dir_all(&folder).expect("mkdir");
+    let state = state_with_folder(folder.clone());
+    let nested = folder.join("export").join("pack.json");
+    fs::create_dir_all(nested.parent().unwrap()).expect("mkdir export");
+    fs::write(&nested, b"{}").expect("write nested");
+    let res = assert_path_allowed(&nested, &state);
+    let _ = fs::remove_dir_all(&folder);
+    assert!(res.is_ok(), "package nested path should be allowed: {res:?}");
+  }
+
+  #[test]
+  fn path_outside_roots_is_denied() {
+    let state = empty_state();
+    #[cfg(unix)]
+    {
+      let outside = PathBuf::from("/etc/passwd");
+      if outside.exists() {
+        let res = assert_path_allowed(&outside, &state);
+        assert!(res.is_err(), " /etc/passwd must be denied");
+      }
+    }
+    #[cfg(windows)]
+    {
+      let outside = PathBuf::from(r"C:\Windows\System32\drivers\etc\hosts");
+      if outside.exists() {
+        let res = assert_path_allowed(&outside, &state);
+        assert!(res.is_err(), "system hosts must be denied");
+      }
+    }
+  }
 }
