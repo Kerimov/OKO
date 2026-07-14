@@ -227,7 +227,7 @@ export function SpreadsheetFormTable({
   };
 
   useEffect(() => {
-    if (editing) inputRef.current?.focus();
+    if (editing) inputRef.current?.focus({ preventScroll: true });
   }, [editing]);
 
   useEffect(() => {
@@ -433,7 +433,7 @@ export function SpreadsheetFormTable({
       setActive({ r, c });
       setAnchor({ r, c });
     }
-    wrapRef.current?.focus();
+    wrapRef.current?.focus({ preventScroll: true });
   };
 
   const addRow = () => {

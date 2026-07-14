@@ -970,6 +970,8 @@ input[type="checkbox"] {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  max-height: calc(100vh - 320px);
+  min-height: 0;
 }
 
 .form-table {
@@ -1003,12 +1005,89 @@ input[type="checkbox"] {
   background: transparent;
   width: 100%;
   min-width: 60px;
-  padding: 0.2rem;
+  padding: 0.35rem 0.4rem;
+  min-height: 1.4em;
+  box-sizing: border-box;
 }
 
 .form-table input:focus {
   outline: 2px solid var(--accent);
   background: #fff;
+}
+
+/* Spreadsheet grid selection (portal parity — desktop missed these rules) */
+.spreadsheet-formula-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.spreadsheet-a1 {
+  min-width: 3.5rem;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.spreadsheet-formula-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.spreadsheet-grid-focus {
+  outline: none;
+}
+
+.spreadsheet-table td.cell-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.spreadsheet-table td.cell-active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  position: relative;
+  z-index: 1;
+}
+
+.spreadsheet-table .ss-cell-value {
+  display: block;
+  min-height: 1.4em;
+  padding: 0.35rem 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.spreadsheet-hint {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.spreadsheet-table tr.row-kind-header td {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+}
+
+.spreadsheet-table tr.row-kind-section td {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.spreadsheet-table tr.row-kind-total td {
+  font-weight: 600;
+  border-top: 2px solid var(--border);
+}
+
+.spreadsheet-table tr.row-kind-hidden {
+  display: none;
 }
 
 .form-table td.frozen {
