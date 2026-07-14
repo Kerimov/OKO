@@ -172,6 +172,23 @@ export async function logout(): Promise<void> {
   emit();
 }
 
+export async function logoutAllDevices(): Promise<number> {
+  let revoked = 0;
+  try {
+    const res = await apiFetch<{ revoked?: number }>("/api/auth/logout-all", {
+      method: "POST",
+    });
+    revoked = res.revoked ?? 0;
+  } catch {
+    /* ignore */
+  }
+  clearApiToken();
+  currentRole = authRequired ? null : "admin";
+  currentUser = null;
+  emit();
+  return revoked;
+}
+
 export function saveApiToken(token: string): void {
   setApiToken(token);
   emit();

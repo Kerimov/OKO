@@ -39,6 +39,7 @@ export function WelcomePage() {
     folderPath: string;
     meta: import("../types").PackageMeta;
     instanceCount: number;
+    dailyBackupPath?: string | null;
   }) => {
     const info = await window.oko.getSessionInfo();
     if (info) setSession(info);
@@ -48,6 +49,9 @@ export function WelcomePage() {
         meta: result.meta,
         instanceCount: result.instanceCount || (await window.oko.listInstances()).length,
       });
+    if (result.dailyBackupPath) {
+      sessionStorage.setItem("oko.dailyBackupNotice", result.dailyBackupPath);
+    }
     navigate("/package");
   };
 
@@ -137,6 +141,8 @@ export function WelcomePage() {
               <Link to="/admin">Управление пользователями</Link>
             </>
           )}
+          {" · "}
+          <Link to="/help">Справка</Link>
           {" · "}
           <button
             type="button"

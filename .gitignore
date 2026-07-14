@@ -34,3 +34,7 @@ reference/*.mde
 *.pfx
 *.pem
 *.key
+
+# Playwright
+portal/test-results/
+portal/playwright-report/

@@ -29,6 +29,7 @@ import {
   migratePortalPayloadsToCells,
   setInstanceStatus,
   upsertInstance,
+  upsertInstancesBatch,
 } from "../../../server/src/instances.js";
 import { submitInstanceWithChecks, runInstancePeriodChecks } from "../../../server/src/instance-submit.js";
 import {
@@ -114,7 +115,7 @@ export class InstancesController {
     }
     let count = 0;
     const db = await getDb();
-    for (const inst of (body.instances ?? []) as OkoFormInstance[]) {
+    for (const inst of (body.instances ?? []) as unknown as OkoFormInstance[]) {
       await upsertInstance(db, inst);
       count++;
     }
@@ -136,14 +137,51 @@ export class InstancesController {
     return inst;
   }
 
+  @Post("batch")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Сохранить несколько экземпляров атомарно (одна транзакция)",
+  })
+  async batch(
+    @Req() req: OkoRequest,
+    @Body() body: { instances?: OkoFormInstance[] }
+  ) {
+    if (!Array.isArray(body?.instances) || body.instances.length === 0) {
+      throw new BadRequestException({ error: "instances required" });
+    }
+    try {
+      const scoped = body.instances.map((inst) => {
+        const next = enforceOrgInstanceWrite(req, inst);
+        if (!next.status) next.status = "draft";
+        return next;
+      });
+      return await upsertInstancesBatch(
+        await getDb(),
+        scoped,
+        req.apiRole === "admin"
+      );
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "batch save failed");
+    }
+  }
+
   @Post()
   @HttpCode(201)
   @ApiOperation({ summary: "Создать / сохранить экземпляр" })
-  async create(@Req() req: Request, @Body() body: OkoFormInstance) {
+  async create(@Req() req: OkoRequest, @Body() body: OkoFormInstance) {
     try {
+      const db = await getDb();
+      if (body.instanceId) {
+        const existing = await loadInstance(db, body.instanceId);
+        if (existing) {
+          assertOrgInstanceAccess(req, existing);
+          assertInstanceEditable(existing, req.apiRole === "admin");
+        }
+      }
       const inst = enforceOrgInstanceWrite(req, body);
       if (!inst.status) inst.status = "draft";
-      await upsertInstance(await getDb(), inst);
+      await upsertInstance(db, inst);
       return inst;
     } catch (e) {
       rethrowAsHttp(e, "save failed");
@@ -295,7 +333,7 @@ export class InstancesController {
       db,
       id,
       formId,
-      (body.entries ?? []) as RashEntryDto[]
+      (body.entries ?? []) as unknown as RashEntryDto[]
     );
     return { entries };
   }

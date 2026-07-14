@@ -20,11 +20,65 @@ export interface PeriodDto {
   periodEnd: string | null;
   quarter: number | null;
   year: number | null;
+  packageStatus?: PackageWorkflowStatus;
+  packageComment?: string | null;
 }
 
 export interface WorkContextDto {
   zid: number | null;
   eid: number | null;
+}
+
+export type PackageWorkflowStatus =
+  | "draft"
+  | "submitted"
+  | "returned"
+  | "corrected"
+  | "accepted";
+
+export interface PackageWorkflowDto {
+  status: PackageWorkflowStatus;
+  comment: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+const WORKFLOW_TRANSITIONS: Record<PackageWorkflowStatus, PackageWorkflowStatus[]> = {
+  draft: ["submitted"],
+  submitted: ["returned", "accepted"],
+  returned: ["corrected", "draft"],
+  corrected: ["submitted"],
+  accepted: ["returned"],
+};
+
+const ORG_TRANSITIONS = new Set<string>([
+  "draft:submitted",
+  "returned:corrected",
+  "corrected:submitted",
+]);
+
+export function normalizePackageWorkflowStatus(
+  raw: string | null | undefined
+): PackageWorkflowStatus {
+  if (
+    raw === "submitted" ||
+    raw === "returned" ||
+    raw === "corrected" ||
+    raw === "accepted"
+  ) {
+    return raw;
+  }
+  return "draft";
+}
+
+export function canTransitionPackageStatus(
+  from: PackageWorkflowStatus,
+  to: PackageWorkflowStatus,
+  isAdmin: boolean
+): boolean {
+  if (!WORKFLOW_TRANSITIONS[from]?.includes(to)) return false;
+  if (isAdmin) return true;
+  return ORG_TRANSITIONS.has(`${from}:${to}`);
 }
 
 export interface PackageCompletenessItem {
@@ -45,6 +99,7 @@ export interface PackageCompletenessDto {
   draft: number;
   submitted: number;
   items: PackageCompletenessItem[];
+  workflow?: PackageWorkflowDto;
 }
 
 export interface PackageDashboardRow {
@@ -60,6 +115,8 @@ export interface PackageDashboardRow {
   draft: number;
   submitted: number;
   percent: number;
+  packageStatus: PackageWorkflowStatus;
+  packageComment: string | null;
 }
 
 export interface CreatePackageResult {
@@ -91,6 +148,17 @@ export async function migrateOrgTables(db: OkoDb): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_instances_package ON form_instances(zid, eid, template_id);
     CREATE INDEX IF NOT EXISTS idx_periods_zid ON periods(zid);
   `);
+  const workflowCols: Array<[string, string]> = [
+    ["package_status", "TEXT DEFAULT 'draft'"],
+    ["package_comment", "TEXT"],
+    ["status_updated_at", "TEXT"],
+    ["status_updated_by", "TEXT"],
+  ];
+  for (const [name, ddl] of workflowCols) {
+    if (!(await db.columnExists("periods", name))) {
+      await db.exec(`ALTER TABLE periods ADD COLUMN ${name} ${ddl}`);
+    }
+  }
 }
 
 export async function seedOrganizationsFromSettings(db: OkoDb): Promise<number> {
@@ -168,6 +236,8 @@ function rowToPeriod(row: {
   period_end: string | null;
   quarter: number | null;
   year: number | null;
+  package_status?: string | null;
+  package_comment?: string | null;
 }): PeriodDto {
   return {
     eid: row.eid,
@@ -177,6 +247,70 @@ function rowToPeriod(row: {
     periodEnd: dateOrNull(row.period_end),
     quarter: row.quarter,
     year: row.year,
+    packageStatus: normalizePackageWorkflowStatus(row.package_status),
+    packageComment: row.package_comment ?? null,
+  };
+}
+
+async function loadPackageWorkflow(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<PackageWorkflowDto> {
+  const row = (await db
+    .prepare(
+      `SELECT package_status, package_comment, status_updated_at, status_updated_by
+       FROM periods WHERE zid = ? AND eid = ?`
+    )
+    .get(zid, eid)) as {
+    package_status: string | null;
+    package_comment: string | null;
+    status_updated_at: string | null;
+    status_updated_by: string | null;
+  } | undefined;
+  if (!row) {
+    throw new Error("Период не найден");
+  }
+  return {
+    status: normalizePackageWorkflowStatus(row.package_status),
+    comment: row.package_comment ?? null,
+    updatedAt: row.status_updated_at ?? null,
+    updatedBy: row.status_updated_by ?? null,
+  };
+}
+
+export async function setPackageWorkflow(
+  db: OkoDb,
+  zid: number,
+  eid: number,
+  input: {
+    status: PackageWorkflowStatus;
+    comment?: string | null;
+    actor?: string | null;
+    isAdmin?: boolean;
+  }
+): Promise<PackageWorkflowDto> {
+  const current = await loadPackageWorkflow(db, zid, eid);
+  if (
+    !canTransitionPackageStatus(current.status, input.status, input.isAdmin === true)
+  ) {
+    throw new Error(`Недопустимый переход статуса: ${current.status} → ${input.status}`);
+  }
+  const now = new Date().toISOString();
+  const comment =
+    input.comment !== undefined ? input.comment : current.comment;
+  await db
+    .prepare(
+      `UPDATE periods
+       SET package_status = ?, package_comment = ?, status_updated_at = ?, status_updated_by = ?
+       WHERE zid = ? AND eid = ?`
+    )
+    .run(input.status, comment, now, input.actor ?? null, zid, eid);
+  return {
+    status: input.status,
+    comment: comment ?? null,
+    updatedAt: now,
+    updatedBy: input.actor ?? null,
   };
 }
 
@@ -215,7 +349,8 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
   if (zid) {
     const rows = (await db
       .prepare(
-        `SELECT eid, zid, name, period_start, period_end, quarter, year
+        `SELECT eid, zid, name, period_start, period_end, quarter, year,
+                package_status, package_comment
          FROM periods WHERE zid = ? ORDER BY period_start DESC, eid DESC`
       )
       .all(zid)) as Array<{
@@ -226,12 +361,15 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
       period_end: string | null;
       quarter: number | null;
       year: number | null;
+      package_status: string | null;
+      package_comment: string | null;
     }>;
     return rows.map(rowToPeriod);
   }
   const rows = (await db
     .prepare(
-      `SELECT eid, zid, name, period_start, period_end, quarter, year
+      `SELECT eid, zid, name, period_start, period_end, quarter, year,
+              package_status, package_comment
        FROM periods ORDER BY zid, period_start DESC, eid DESC`
     )
     .all()) as Array<{
@@ -242,6 +380,8 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
     period_end: string | null;
     quarter: number | null;
     year: number | null;
+    package_status: string | null;
+    package_comment: string | null;
   }>;
   return rows.map(rowToPeriod);
 }
@@ -289,29 +429,45 @@ export async function createPeriod(
   };
 }
 
-export async function getWorkContext(db: OkoDb): Promise<WorkContextDto> {
+export async function getWorkContext(
+  db: OkoDb,
+  userId?: number | null
+): Promise<WorkContextDto> {
   const rows = (await db.prepare("SELECT key, value FROM app_settings").all()) as Array<{
     key: string;
     value: string;
   }>;
-  let zid: number | null = null;
-  let eid: number | null = null;
-  for (const r of rows) {
-    if (r.key === "workZid" && r.value) zid = Number(r.value) || null;
-    if (r.key === "workEid" && r.value) eid = Number(r.value) || null;
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const readPair = (zidKey: string, eidKey: string): WorkContextDto => {
+    const zRaw = byKey.get(zidKey);
+    const eRaw = byKey.get(eidKey);
+    return {
+      zid: zRaw ? Number(zRaw) || null : null,
+      eid: eRaw ? Number(eRaw) || null : null,
+    };
+  };
+  if (userId != null) {
+    const scoped = readPair(`workZid:u${userId}`, `workEid:u${userId}`);
+    if (scoped.zid != null || scoped.eid != null) return scoped;
   }
-  return { zid, eid };
+  return readPair("workZid", "workEid");
 }
 
-export async function setWorkContext(db: OkoDb, ctx: WorkContextDto): Promise<WorkContextDto> {
+export async function setWorkContext(
+  db: OkoDb,
+  ctx: WorkContextDto,
+  userId?: number | null
+): Promise<WorkContextDto> {
+  const zidKey = userId != null ? `workZid:u${userId}` : "workZid";
+  const eidKey = userId != null ? `workEid:u${userId}` : "workEid";
   const upsert = db.prepare(
     "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   );
-  if (ctx.zid != null) await upsert.run("workZid", String(ctx.zid));
-  else await db.prepare("DELETE FROM app_settings WHERE key = 'workZid'").run();
-  if (ctx.eid != null) await upsert.run("workEid", String(ctx.eid));
-  else await db.prepare("DELETE FROM app_settings WHERE key = 'workEid'").run();
-  return getWorkContext(db);
+  if (ctx.zid != null) await upsert.run(zidKey, String(ctx.zid));
+  else await db.prepare("DELETE FROM app_settings WHERE key = ?").run(zidKey);
+  if (ctx.eid != null) await upsert.run(eidKey, String(ctx.eid));
+  else await db.prepare("DELETE FROM app_settings WHERE key = ?").run(eidKey);
+  return getWorkContext(db, userId);
 }
 
 function buildInitialRows(schema: FormSchemaDto): Record<string, string | number>[] {
@@ -410,7 +566,8 @@ export async function getPackageCompleteness(
   });
 
   const filled = items.filter((i) => i.filled).length;
-  return { zid, eid, total: items.length, filled, draft, submitted, items };
+  const workflow = await loadPackageWorkflow(db, zid, eid);
+  return { zid, eid, total: items.length, filled, draft, submitted, items, workflow };
 }
 
 export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardRow[]> {
@@ -420,6 +577,7 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
   const periods = (await db
     .prepare(
       `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end,
+              p.package_status, p.package_comment,
               o.name AS org_name, o.code AS org_code
        FROM periods p
        JOIN organizations o ON o.zid = p.zid
@@ -431,6 +589,8 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
     name: string;
     period_start: string | null;
     period_end: string | null;
+    package_status: string | null;
+    package_comment: string | null;
     org_name: string;
     org_code: string | null;
   }>;
@@ -451,6 +611,8 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
       draft: completeness.draft,
       submitted: completeness.submitted,
       percent: totalForms > 0 ? Math.round((completeness.filled / totalForms) * 100) : 0,
+      packageStatus: normalizePackageWorkflowStatus(p.package_status),
+      packageComment: p.package_comment ?? null,
     });
   }
   return rows;
@@ -631,7 +793,8 @@ export async function importReportPackage(
   targetZid: number,
   targetEid: number,
   pkg: ReportPackageInput,
-  overwrite: boolean
+  overwrite: boolean,
+  templateIds?: string[]
 ): Promise<ImportPackageResult> {
   const org = (await db
     .prepare("SELECT name FROM organizations WHERE zid = ?")
@@ -649,6 +812,7 @@ export async function importReportPackage(
     pkg.organization?.trim() || org.name;
   const periodStart = pkg.periodStart || dateToString(period.period_start);
   const periodEnd = pkg.periodEnd || dateToString(period.period_end);
+  const allow = templateIds?.length ? new Set(templateIds) : null;
 
   const result: ImportPackageResult = {
     created: 0,
@@ -666,6 +830,10 @@ export async function importReportPackage(
       try {
         if (!raw.templateId) {
           result.errors.push("Форма без templateId пропущена");
+          continue;
+        }
+        if (allow && !allow.has(raw.templateId)) {
+          result.skipped++;
           continue;
         }
         const existingId = await findInstanceByTemplate(

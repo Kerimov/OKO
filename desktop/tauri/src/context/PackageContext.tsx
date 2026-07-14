@@ -17,9 +17,11 @@ interface SessionInfo {
   instanceCount: number;
   rulesSync?: {
     exportedAt: string | null;
+    version?: string | null;
     fromPackage: boolean;
     hasChecks: boolean;
     hasRash?: boolean;
+    hasReorgChecks?: boolean;
   };
   hasCoordinatorPin?: boolean;
   restrictExecutorsToAssignments?: boolean;

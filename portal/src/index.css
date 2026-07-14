@@ -1548,7 +1548,54 @@ a:hover {
 
 .tools-intro {
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.tools-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.tools-context-link {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.tools-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.tools-tabs button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tools-tabs button.active {
+  border-color: var(--accent, #2563eb);
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, var(--surface));
+  font-weight: 600;
+}
+
+.tools-tab-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
 }
 
 .tools-hint {
@@ -2295,3 +2342,88 @@ a:hover {
 .instructions-list li {
   margin-bottom: 0.35rem;
 }
+
+/* Конструктор расшифровок */
+.rash-constructor-layout {
+  align-items: start;
+}
+
+.rash-tab-row,
+.rash-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.rash-validation {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.rash-validation li {
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.rash-validation li.err {
+  background: #fde8e8;
+  color: #8a1f1f;
+}
+
+.rash-validation li.warn {
+  background: #fff4d6;
+  color: #6a4b00;
+}
+
+.warn-bar {
+  background: #fff4d6;
+  border: 1px solid #e6c35c;
+}
+
+.rash-ref-card {
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.rash-ref-card h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.rash-type-flags,
+.rash-check {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.rash-formula-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.rash-formula-term {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.rash-preview {
+  background: var(--surface-2, #f7f7f5);
+}
+
+.rash-placement-editor select[multiple] {
+  min-height: 8rem;
+  width: 100%;
+}
+

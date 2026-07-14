@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { deleteReportPackage, fetchPackagesDashboard } from "../packagesApi";
 import type { PackageDashboardRow } from "../types";
-import { formatPeriod } from "../utils";
+import { formatPeriod, packageWorkflowLabel } from "../utils";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
 
@@ -147,6 +147,7 @@ export function PackagesDashboardPage() {
             <tr>
               <th>Организация</th>
               <th>Период</th>
+              <th>Статус</th>
               <th>Заведено</th>
               <th>Черновики</th>
               <th>Сдано</th>
@@ -167,6 +168,11 @@ export function PackagesDashboardPage() {
                   <div className="table-sub">
                     {formatPeriod(r.periodStart ?? "", r.periodEnd ?? "")}
                   </div>
+                </td>
+                <td>
+                  <span className={`status-badge ${r.packageStatus ?? "draft"}`}>
+                    {packageWorkflowLabel(r.packageStatus)}
+                  </span>
                 </td>
                 <td>
                   <div className="completeness-inline" title="Доля заведённых форм из каталога">

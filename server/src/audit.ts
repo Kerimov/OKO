@@ -14,7 +14,6 @@ export interface AuditEntry {
 }
 
 export async function migrateAuditTable(db: OkoDb): Promise<void> {
-
   if (!(await db.columnExists("report_log", "entity_type"))) {
     await db.exec("ALTER TABLE report_log ADD COLUMN entity_type TEXT");
   }
@@ -24,6 +23,43 @@ export async function migrateAuditTable(db: OkoDb): Promise<void> {
   if (!(await db.columnExists("report_log", "actor"))) {
     await db.exec("ALTER TABLE report_log ADD COLUMN actor TEXT");
   }
+}
+
+function actorFromRequest(req: Request): string | null {
+  return req.apiUser?.username ?? req.apiRole ?? null;
+}
+
+export async function logDomainAudit(
+  db: OkoDb,
+  input: {
+    actor?: string | null;
+    action: string;
+    instanceId?: string | null;
+    entityType?: string | null;
+    entityId?: string | null;
+    details?: unknown;
+  }
+): Promise<void> {
+  const details =
+    input.details === undefined
+      ? null
+      : typeof input.details === "string"
+        ? input.details.slice(0, 4000)
+        : JSON.stringify(input.details).slice(0, 4000);
+
+  await db
+    .prepare(
+      `INSERT INTO report_log (action, instance_id, entity_type, entity_id, actor, details)
+     VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.action,
+      input.instanceId ?? null,
+      input.entityType ?? null,
+      input.entityId ?? null,
+      input.actor ?? null,
+      details
+    );
 }
 
 export async function logAudit(
@@ -37,26 +73,14 @@ export async function logAudit(
     details?: unknown;
   }
 ): Promise<void> {
-  const details =
-    options?.details === undefined
-      ? null
-      : typeof options.details === "string"
-        ? options.details.slice(0, 4000)
-        : JSON.stringify(options.details).slice(0, 4000);
-
-  await db
-    .prepare(
-      `INSERT INTO report_log (action, instance_id, entity_type, entity_id, actor, details)
-     VALUES (?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      action,
-      options?.instanceId ?? null,
-      options?.entityType ?? null,
-      options?.entityId ?? null,
-      req.apiRole ?? null,
-      details
-    );
+  await logDomainAudit(db, {
+    actor: actorFromRequest(req),
+    action,
+    instanceId: options?.instanceId,
+    entityType: options?.entityType,
+    entityId: options?.entityId,
+    details: options?.details,
+  });
 }
 
 export async function listAuditLog(
@@ -95,12 +119,27 @@ export async function listAuditLog(
   return { total, limit, offset, items: rows };
 }
 
+const DOMAIN_AUDIT_PREFIXES = [
+  "/api/packages",
+  "/api/aggregation",
+  "/api/methodology",
+  "/api/users",
+  "/api/kontr",
+  "/api/work-context",
+  "/api/checks",
+  "/api/forms",
+  "/api/saldo",
+  "/api/correspondence",
+  "/api/excel",
+  "/api/rash",
+];
+
 export function auditMiddleware(req: Request, res: Response, next: () => void): void {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
     next();
     return;
   }
-  if (req.apiRole !== "admin") {
+  if (!req.apiRole) {
     next();
     return;
   }
@@ -110,14 +149,11 @@ export function auditMiddleware(req: Request, res: Response, next: () => void): 
     if (res.statusCode >= 400) return;
     const path = req.path;
     if (!path.startsWith("/api/")) return;
+    // High-frequency cell writes stay out of the HTTP audit stream.
     if (path.startsWith("/api/instances") && !path.includes("/normalize")) return;
 
     const metaRoutes =
-      path.startsWith("/api/checks") ||
-      path.startsWith("/api/forms") ||
-      path.startsWith("/api/saldo") ||
-      path.startsWith("/api/correspondence") ||
-      path.startsWith("/api/excel") ||
+      DOMAIN_AUDIT_PREFIXES.some((p) => path === p || path.startsWith(p + "/")) ||
       path === "/api/instances/normalize";
 
     if (!metaRoutes) return;
@@ -133,6 +169,7 @@ export function auditMiddleware(req: Request, res: Response, next: () => void): 
         details: {
           durationMs: Date.now() - started,
           bodyKeys: Object.keys((req.body as object) ?? {}),
+          statusCode: res.statusCode,
         },
       })
     );

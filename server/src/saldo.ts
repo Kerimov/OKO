@@ -44,6 +44,12 @@ export interface FormCorrespondenceDto {
   saldoYellow?: string | null;
   saldoRed?: string | null;
   saldoBlue?: string | null;
+  saldoGreen?: string | null;
+  saldoYellowCorr?: string | null;
+  saldoRedCorr?: string | null;
+  saldoBlueCorr?: string | null;
+  reorgUpdate?: string | null;
+  reorgUpdate2?: string | null;
   pages?: number | null;
 }
 
@@ -82,6 +88,24 @@ export async function migrateSaldoTables(db: OkoDb): Promise<void> {
   }
   if (!(await db.columnExists("form_templates", "saldo_blue"))) {
     await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "saldo_green"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_green TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "reorg_update"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN reorg_update TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "reorg_update_2"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN reorg_update_2 TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "saldo_yellow_corr"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_yellow_corr TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "saldo_red_corr"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_red_corr TEXT");
+  }
+  if (!(await db.columnExists("form_templates", "saldo_blue_corr"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue_corr TEXT");
   }
 }
 
@@ -174,22 +198,41 @@ export async function reimportSaldoRulesFromJson(db: OkoDb): Promise<number> {
 export async function getSaldoStats(db: OkoDb) {
   const total = ((await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules").get()) as { c: number })
     .c;
+  const flagged = (
+    (await db
+      .prepare(
+        "SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_t = 1 OR saldo_s = 1 OR saldo_g = 1"
+      )
+      .get()) as { c: number }
+  ).c;
   const typeT = (
-    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_t = 1").get()) as {
-      c: number;
-    }
+    (await db
+      .prepare(
+        flagged > 0
+          ? "SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_t = 1"
+          : "SELECT COUNT(*) AS c FROM saldo_rules WHERE source_column IS NOT NULL AND source_row IS NOT NULL"
+      )
+      .get()) as { c: number }
   ).c;
   const typeS = (
-    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_s = 1").get()) as {
-      c: number;
-    }
+    (await db
+      .prepare(
+        flagged > 0
+          ? "SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_s = 1"
+          : "SELECT COUNT(*) AS c FROM saldo_rules WHERE source_column IS NOT NULL AND source_row IS NOT NULL"
+      )
+      .get()) as { c: number }
   ).c;
   const typeG = (
-    (await db.prepare("SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_g = 1").get()) as {
-      c: number;
-    }
+    (await db
+      .prepare(
+        flagged > 0
+          ? "SELECT COUNT(*) AS c FROM saldo_rules WHERE saldo_g = 1"
+          : "SELECT COUNT(*) AS c FROM saldo_rules WHERE end_column IS NOT NULL AND end_row IS NOT NULL"
+      )
+      .get()) as { c: number }
   ).c;
-  return { total, typeT, typeS, typeG };
+  return { total, typeT, typeS, typeG, flagged };
 }
 
 export async function exportSaldoPayload(db: OkoDb) {
@@ -220,12 +263,56 @@ export async function seedFormCorrespondenceFromJson(db: OkoDb): Promise<number>
       c: number;
     }
   ).c;
-  if (seeded > 0) return 0;
+  if (seeded > 0) {
+    return backfillColorFieldsFromJson(db);
+  }
 
   const data = JSON.parse(fs.readFileSync(CORRESPONDENCE_JSON, "utf-8")) as {
     forms: FormCorrespondenceDto[];
   };
   return applyCorrespondenceList(db, data.forms);
+}
+
+/** Fill saldo_green / reorg_* when older DBs only had yellow/red/blue. */
+async function backfillColorFieldsFromJson(db: OkoDb): Promise<number> {
+  if (!fs.existsSync(CORRESPONDENCE_JSON)) return 0;
+  const data = JSON.parse(fs.readFileSync(CORRESPONDENCE_JSON, "utf-8")) as {
+    forms: FormCorrespondenceDto[];
+  };
+  const update = db.prepare(
+    `UPDATE form_templates SET
+      saldo_green = COALESCE(saldo_green, ?),
+      reorg_update = COALESCE(reorg_update, ?),
+      reorg_update_2 = COALESCE(reorg_update_2, ?),
+      saldo_yellow_corr = COALESCE(saldo_yellow_corr, ?),
+      saldo_red_corr = COALESCE(saldo_red_corr, ?),
+      saldo_blue_corr = COALESCE(saldo_blue_corr, ?)
+     WHERE form_id = ?`
+  );
+  let n = 0;
+  for (const f of data.forms) {
+    if (
+      !f.saldoGreen &&
+      !f.reorgUpdate &&
+      !f.reorgUpdate2 &&
+      !f.saldoYellowCorr &&
+      !f.saldoRedCorr &&
+      !f.saldoBlueCorr
+    ) {
+      continue;
+    }
+    const r = await update.run(
+      f.saldoGreen ?? null,
+      f.reorgUpdate ?? null,
+      f.reorgUpdate2 ?? null,
+      f.saldoYellowCorr ?? null,
+      f.saldoRedCorr ?? null,
+      f.saldoBlueCorr ?? null,
+      f.formId
+    );
+    if (r.changes > 0) n++;
+  }
+  return n;
 }
 
 export async function reimportFormCorrespondenceFromJson(db: OkoDb): Promise<number> {
@@ -240,7 +327,9 @@ async function applyCorrespondenceList(db: OkoDb, forms: FormCorrespondenceDto[]
   return db.transaction(async (tx) => {
     const update = tx.prepare(
       `UPDATE form_templates SET
-      saldo_yellow = ?, saldo_red = ?, saldo_blue = ?,
+      saldo_yellow = ?, saldo_red = ?, saldo_blue = ?, saldo_green = ?,
+      saldo_yellow_corr = ?, saldo_red_corr = ?, saldo_blue_corr = ?,
+      reorg_update = ?, reorg_update_2 = ?,
       pages = COALESCE(?, pages)
      WHERE form_id = ?`
     );
@@ -250,6 +339,12 @@ async function applyCorrespondenceList(db: OkoDb, forms: FormCorrespondenceDto[]
         f.saldoYellow ?? null,
         f.saldoRed ?? null,
         f.saldoBlue ?? null,
+        f.saldoGreen ?? null,
+        f.saldoYellowCorr ?? null,
+        f.saldoRedCorr ?? null,
+        f.saldoBlueCorr ?? null,
+        f.reorgUpdate ?? null,
+        f.reorgUpdate2 ?? null,
         f.pages ?? null,
         f.formId
       );
@@ -259,27 +354,45 @@ async function applyCorrespondenceList(db: OkoDb, forms: FormCorrespondenceDto[]
   });
 }
 
+type CorrRow = {
+  form_id: string;
+  pages: number;
+  saldo_yellow: string | null;
+  saldo_red: string | null;
+  saldo_blue: string | null;
+  saldo_green: string | null;
+  saldo_yellow_corr: string | null;
+  saldo_red_corr: string | null;
+  saldo_blue_corr: string | null;
+  reorg_update: string | null;
+  reorg_update_2: string | null;
+};
+
+function corrRowToDto(row: CorrRow): FormCorrespondenceDto {
+  return {
+    formId: row.form_id,
+    pages: row.pages,
+    saldoYellow: row.saldo_yellow,
+    saldoRed: row.saldo_red,
+    saldoBlue: row.saldo_blue,
+    saldoGreen: row.saldo_green,
+    saldoYellowCorr: row.saldo_yellow_corr,
+    saldoRedCorr: row.saldo_red_corr,
+    saldoBlueCorr: row.saldo_blue_corr,
+    reorgUpdate: row.reorg_update,
+    reorgUpdate2: row.reorg_update_2,
+  };
+}
+
+const CORR_SELECT = `form_id, pages, saldo_yellow, saldo_red, saldo_blue, saldo_green,
+  saldo_yellow_corr, saldo_red_corr, saldo_blue_corr, reorg_update, reorg_update_2`;
+
 export async function exportFormCorrespondencePayload(db: OkoDb) {
   const rows = (await db
-    .prepare(
-      `SELECT form_id, pages, saldo_yellow, saldo_red, saldo_blue
-       FROM form_templates ORDER BY sort_order, form_id`
-    )
-    .all()) as Array<{
-    form_id: string;
-    pages: number;
-    saldo_yellow: string | null;
-    saldo_red: string | null;
-    saldo_blue: string | null;
-  }>;
+    .prepare(`SELECT ${CORR_SELECT} FROM form_templates ORDER BY sort_order, form_id`)
+    .all()) as CorrRow[];
 
-  const forms: FormCorrespondenceDto[] = rows.map((r) => ({
-    formId: r.form_id,
-    pages: r.pages,
-    saldoYellow: r.saldo_yellow,
-    saldoRed: r.saldo_red,
-    saldoBlue: r.saldo_blue,
-  }));
+  const forms: FormCorrespondenceDto[] = rows.map(corrRowToDto);
 
   return {
     version: "2.0",
@@ -294,27 +407,10 @@ export async function getFormCorrespondence(
   formId: string
 ): Promise<FormCorrespondenceDto | null> {
   const row = (await db
-    .prepare(
-      `SELECT form_id, pages, saldo_yellow, saldo_red, saldo_blue
-       FROM form_templates WHERE form_id = ?`
-    )
-    .get(formId)) as
-    | {
-        form_id: string;
-        pages: number;
-        saldo_yellow: string | null;
-        saldo_red: string | null;
-        saldo_blue: string | null;
-      }
-    | undefined;
+    .prepare(`SELECT ${CORR_SELECT} FROM form_templates WHERE form_id = ?`)
+    .get(formId)) as CorrRow | undefined;
   if (!row) return null;
-  return {
-    formId: row.form_id,
-    pages: row.pages,
-    saldoYellow: row.saldo_yellow,
-    saldoRed: row.saldo_red,
-    saldoBlue: row.saldo_blue,
-  };
+  return corrRowToDto(row);
 }
 
 export async function updateFormCorrespondence(
@@ -328,10 +424,23 @@ export async function updateFormCorrespondence(
   await db
     .prepare(
       `UPDATE form_templates SET
-      saldo_yellow = ?, saldo_red = ?, saldo_blue = ?
+      saldo_yellow = ?, saldo_red = ?, saldo_blue = ?, saldo_green = ?,
+      saldo_yellow_corr = ?, saldo_red_corr = ?, saldo_blue_corr = ?,
+      reorg_update = ?, reorg_update_2 = ?
      WHERE form_id = ?`
     )
-    .run(patch.saldoYellow ?? null, patch.saldoRed ?? null, patch.saldoBlue ?? null, formId);
+    .run(
+      patch.saldoYellow ?? null,
+      patch.saldoRed ?? null,
+      patch.saldoBlue ?? null,
+      patch.saldoGreen ?? null,
+      patch.saldoYellowCorr ?? null,
+      patch.saldoRedCorr ?? null,
+      patch.saldoBlueCorr ?? null,
+      patch.reorgUpdate ?? null,
+      patch.reorgUpdate2 ?? null,
+      formId
+    );
 
   return getFormCorrespondence(db, formId);
 }

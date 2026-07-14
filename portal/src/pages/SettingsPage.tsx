@@ -4,6 +4,7 @@ import { loadGlobalMeta, saveGlobalMeta } from "../storage";
 import type { GlobalMeta } from "../storage";
 import {
   logout,
+  logoutAllDevices,
   removeApiToken,
   refreshAuthRole,
   saveApiToken,
@@ -37,7 +38,10 @@ export function SettingsPage() {
     });
   }, []);
 
+  const canEditGlobalMeta = !auth.authRequired || auth.role === "admin";
+
   const handleSave = async () => {
+    if (!canEditGlobalMeta) return;
     await saveGlobalMeta(meta);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -45,6 +49,10 @@ export function SettingsPage() {
 
   const handleLogout = async () => {
     await logout();
+    window.location.href = "/";
+  };
+  const handleLogoutAll = async () => {
+    await logoutAllDevices();
     window.location.href = "/";
   };
   const handleClearToken = () => {
@@ -110,10 +118,21 @@ export function SettingsPage() {
             onChange={(e) => setMeta({ ...meta, unit: e.target.value })}
           />
         </label>
-        <button type="button" className="btn btn-primary" onClick={handleSave}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleSave}
+          disabled={!canEditGlobalMeta}
+        >
           Сохранить настройки
         </button>
         {saved && <span className="saved-msg">Сохранено</span>}
+        {!canEditGlobalMeta && (
+          <p className="settings-desc">
+            Глобальные реквизиты меняет только администратор. Рабочий комплект — в разделе
+            «Комплект».
+          </p>
+        )}
       </div>
 
       {loginMode && user ? (
@@ -124,9 +143,19 @@ export function SettingsPage() {
             {user.organizationName ? ` (${user.organizationName})` : ""}. Роль:{" "}
             <strong>{roleLabel(auth.role)}</strong>.
           </p>
-          <button type="button" className="btn btn-secondary" onClick={handleLogout}>
-            Выйти
-          </button>
+          <div className="toolbar-actions" style={{ gap: "0.5rem" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => void handleLogout()}>
+              Выйти
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleLogoutAll()}
+              title="Инвалидирует все сессии пользователя на сервере"
+            >
+              Выйти везде
+            </button>
+          </div>
         </>
       ) : (
         <>
