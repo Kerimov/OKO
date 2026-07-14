@@ -119,6 +119,10 @@ export function FormsEditorPage() {
     () => (schema ? buildInitialRows(schema) : []),
     [schema]
   );
+  const gridColumns = useMemo(
+    () => (schema ? schema.columns.filter((c) => !c.hidden) : []),
+    [schema]
+  );
 
   const loadCatalogList = useCallback(async () => {
     try {
@@ -1126,7 +1130,7 @@ export function FormsEditorPage() {
                   <div className="forms-workbench">
                     <div className="forms-workbench-grid">
                       <FormTable
-                        columns={schema.columns.filter((c) => !c.hidden)}
+                        columns={gridColumns}
                         rows={previewRows}
                         formId={schema.id}
                         onChange={() => undefined}
@@ -1272,7 +1276,7 @@ export function FormsEditorPage() {
                     )}
                   </p>
                   <FormTable
-                    columns={schema.columns.filter((c) => !c.hidden)}
+                    columns={gridColumns}
                     rows={previewRows}
                     onChange={() => undefined}
                     formId={schema.id}

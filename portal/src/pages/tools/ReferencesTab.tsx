@@ -145,6 +145,11 @@ export function ReferencesTab({
       )}
       <section className="tools-section">
         <h2>Справочники займов / НЗС</h2>
+        <p className="hint-text">
+          Полный список классификаторов расшифровок (Страна, Валюта, Вид движения…) с
+          редактированием:{" "}
+          <Link to="/admin/refs">Редакторы → Справочники</Link>.
+        </p>
         <p>
           Аналог Access «Администрирование → Принять-Сохранить справочники»: головная
           выгружает каталоги «{KZS_GROUP}» и «{NZS_GROUP}», филиалы пополняют свой
@@ -239,7 +244,7 @@ export function ReferencesTab({
         <p>
           Список добавленных/изменённых данных в справочнике (Access форма N99). Поле
           «Другое наименование» (`oldName`) — прежнее имя при переименовании. Редактор
-          справочника: <Link to="/admin/kontr">/admin/kontr</Link>. Если изменений нет —
+          справочника: <Link to="/admin/refs?kind=Контрагент">Справочники → Контрагент</Link>. Если изменений нет —
           лист в головную не направляют.
         </p>
         <div
@@ -296,7 +301,7 @@ export function ReferencesTab({
         {n99.rows.length === 0 ? (
           <p className="hint-text">
             Изменений нет — CSV не формируется. Для полного списка и GUID —{" "}
-            <Link to="/admin/kontr">админка контрагентов</Link>.
+            <Link to="/admin/refs?kind=Контрагент">справочнике контрагентов</Link>.
           </p>
         ) : (
           <div className="table-wrap">

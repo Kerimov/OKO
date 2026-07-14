@@ -370,6 +370,75 @@ describe("rash P0/P1 fixes", () => {
     } as never)).toBe("M=B+C+D");
   });
 
+  it("does not invent slots on unbound rows when form has placements", () => {
+    const rule = {
+      kod: 151103,
+      name: "N01_01",
+      totalFormula: "C=D+F",
+      refRows: null,
+    } as never;
+    const index: RowRashIndexData = {
+      version: "test",
+      forms: {
+        N01_01: {
+          "100": { columns: { D: 151103 } },
+          "5030": { columns: { C: 151103 } },
+        },
+      },
+    };
+    const cols = [
+      { key: "num", label: "№", type: "text" as const },
+      { key: "C", label: "Дебет", type: "number" as const },
+      { key: "D", label: "Кредит", type: "number" as const },
+      { key: "F", label: "Дебет", type: "number" as const },
+    ];
+    const rows: RowData[] = [
+      { num: "100", name: "ОС", D: "10" },
+      { num: "101", name: "Права", C: "10", D: "10", F: "10" },
+      { num: "5030", name: "X", C: "5" },
+    ];
+    const slots = buildRashCellSlots("N01_01", rows, cols, [rule], thresholds, index);
+    expect(slots.every((s) => s.rowNum === "100" || s.rowNum === "5030")).toBe(true);
+    expect(slots.some((s) => s.rowNum === "101")).toBe(false);
+    expect(slots.filter((s) => s.rowNum === "100").length).toBeGreaterThan(0);
+    expect(slots.filter((s) => s.rowNum === "5030").length).toBeGreaterThan(0);
+  });
+
+  it("corpus: forms with placements never get invented unbound-row slots", () => {
+    const catalog = loadJson<{ forms: Array<{ id: string }> }>("../schemas/catalog.json");
+    let checked = 0;
+    let violations = 0;
+    for (const f of catalog.forms) {
+      const formId = f.id;
+      const formMeta = rowIndex.forms?.[formId];
+      if (!formMeta || !Object.keys(formMeta).length) continue;
+      let schema: { rows?: Array<{ num?: string; name?: string }>; columns?: Array<{ key: string; label: string; type: string }> };
+      try {
+        schema = loadJson(`../schemas/${formId}.json`);
+      } catch {
+        continue;
+      }
+      const rows: RowData[] = (schema.rows ?? []).map((r) => ({
+        num: String(r.num ?? ""),
+        name: r.name ?? "",
+      }));
+      const slots = buildRashCellSlots(
+        formId,
+        rows,
+        (schema.columns ?? []) as never,
+        rashData.rules,
+        thresholds,
+        rowIndex
+      );
+      checked++;
+      for (const s of slots) {
+        if (!formMeta[s.rowNum]) violations++;
+      }
+    }
+    expect(checked).toBeGreaterThan(40);
+    expect(violations).toBe(0);
+  });
+
   it("inserts kontr row after parent group, not at end of form", () => {
     const rows: RowData[] = [
       { num: "1", name: "Parent A" },

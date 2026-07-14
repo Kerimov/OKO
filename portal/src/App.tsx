@@ -17,7 +17,7 @@ import { RashEditorPage } from "./pages/RashEditorPage";
 import { AggregationEditorPage } from "./pages/AggregationEditorPage";
 import { PackagesDashboardPage } from "./pages/PackagesDashboardPage";
 import { UsersAdminPage } from "./pages/UsersAdminPage";
-import { KontrAdminPage } from "./pages/KontrAdminPage";
+import { RefsAdminPage } from "./pages/RefsAdminPage";
 import { InstructionsPage } from "./pages/InstructionsPage";
 
 export default function App() {
@@ -38,7 +38,8 @@ export default function App() {
             <Route path="admin/saldo" element={<SaldoEditorPage />} />
             <Route path="admin/excel" element={<ExcelEditorPage />} />
             <Route path="admin/rash" element={<RashEditorPage />} />
-            <Route path="admin/kontr" element={<KontrAdminPage />} />
+            <Route path="admin/refs" element={<RefsAdminPage />} />
+            <Route path="admin/kontr" element={<Navigate to="/admin/refs?kind=Контрагент" replace />} />
             <Route path="admin/aggregation" element={<AggregationEditorPage />} />
             <Route path="admin/packages" element={<PackagesDashboardPage />} />
             <Route path="admin/audit" element={<AuditLogPage />} />

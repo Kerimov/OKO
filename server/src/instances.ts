@@ -64,6 +64,7 @@ export function normalizeInstanceStatus(status: string | null | undefined): "dra
 export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promise<void> {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
+  const rows = Array.isArray(inst.rows) ? inst.rows : [];
 
   await db
     .prepare(
@@ -94,11 +95,11 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       inst.eid ?? null,
       inst.templateTitle,
       inst.displayName,
-      inst.meta.organization ?? "",
-      dateOrNull(inst.meta.periodStart),
-      dateOrNull(inst.meta.periodEnd),
-      inst.meta.unit ?? "тыс.руб.",
-      inst.meta.enterpriseCode ?? "1@1",
+      inst.meta?.organization ?? "",
+      dateOrNull(inst.meta?.periodStart),
+      dateOrNull(inst.meta?.periodEnd),
+      inst.meta?.unit ?? "тыс.руб.",
+      inst.meta?.enterpriseCode ?? "1@1",
       signaturesJson,
       status,
       inst.createdAt,
@@ -112,8 +113,8 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
      VALUES (?, ?, ?, ?, ?, ?)`
   );
 
-  for (let index = 0; index < inst.rows.length; index++) {
-    const row = inst.rows[index];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
     const rowNo = resolveRowNo(row, index);
     const rowName = String(row.name ?? "");
     for (const [key, val] of Object.entries(row)) {
@@ -261,6 +262,22 @@ export async function loadInstanceFromPayload(
     .get(instanceId)) as { payload: string } | undefined;
   if (!row) return null;
   return JSON.parse(row.payload) as OkoFormInstance;
+}
+
+export async function findInstanceIdByPackageTemplate(
+  db: OkoDb,
+  zid: number,
+  eid: number,
+  templateId: string
+): Promise<string | null> {
+  const row = (await db
+    .prepare(
+      `SELECT instance_id FROM form_instances
+       WHERE zid = ? AND eid = ? AND template_id = ?
+       LIMIT 1`
+    )
+    .get(zid, eid, templateId)) as { instance_id: string } | undefined;
+  return row?.instance_id ?? null;
 }
 
 export async function listInstanceSummaries(
@@ -468,6 +485,15 @@ export async function patchInstanceCells(
 }
 
 export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<void> {
+  if (!inst.meta) {
+    inst.meta = {
+      organization: "",
+      enterpriseCode: "1@1",
+      periodStart: "",
+      periodEnd: "",
+      unit: "тыс.руб.",
+    };
+  }
   await saveInstanceCells(db, inst);
   // Persist t_ras detail when present on the payload (packages / local saves).
   // Dedicated PUT /rash remains the primary editor path; undefined means leave as-is.
@@ -502,9 +528,9 @@ export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<
       inst.templateId,
       inst.templateTitle,
       inst.displayName,
-      inst.meta.organization ?? "",
-      dateOrNull(inst.meta.periodStart),
-      dateOrNull(inst.meta.periodEnd),
+      inst.meta?.organization ?? "",
+      dateOrNull(inst.meta?.periodStart),
+      dateOrNull(inst.meta?.periodEnd),
       JSON.stringify(inst),
       inst.createdAt,
       inst.updatedAt

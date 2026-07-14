@@ -1170,8 +1170,8 @@ export function FormPage() {
         <section className="signatures">
           <h3>Подписи</h3>
           <div className="sig-grid">
-            {schema.signatures.map((name) => (
-              <label key={name}>
+            {schema.signatures.map((name, sigIdx) => (
+              <label key={`${sigIdx}:${name}`}>
                 {name}
                 <input
                   value={signatures[name] ?? ""}
