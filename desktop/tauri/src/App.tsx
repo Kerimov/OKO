@@ -10,6 +10,8 @@ import { PackagePage } from "./pages/PackagePage";
 import { FormPage } from "./pages/FormPage";
 import { AssignmentsPage } from "./pages/AssignmentsPage";
 import { AdminPage } from "./pages/AdminPage";
+import { HelpPage } from "./pages/HelpPage";
+import { SaldoRulesPage } from "./pages/SaldoRulesPage";
 
 export function App() {
   return (
@@ -24,6 +26,22 @@ export function App() {
                 element={
                   <RequireAuth>
                     <WelcomePage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/help"
+                element={
+                  <RequireAuth>
+                    <HelpPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/saldo-rules"
+                element={
+                  <RequireAuth>
+                    <SaldoRulesPage />
                   </RequireAuth>
                 }
               />

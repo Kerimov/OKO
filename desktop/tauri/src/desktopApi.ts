@@ -39,6 +39,7 @@ export interface OkoDesktopApi {
   }>;
   pickFolder: () => Promise<string | null>;
   pickJsonFile: () => Promise<string | null>;
+  readTextFile: (path: string) => Promise<string>;
   openPackage: (folderPath: string) => Promise<OpenPackageResult>;
   createPackage: (payload: {
     folderPath: string;
@@ -71,6 +72,11 @@ export interface OkoDesktopApi {
     formId: string,
     live?: { instanceId: string; rows: RowData[] }
   ) => Promise<CheckRunResult>;
+  /** Access CheckItReorg2/3 for the current form (CELL_sv rules). */
+  runReorgFormChecks: (
+    formId: string,
+    live?: { instanceId: string; rows: RowData[] }
+  ) => Promise<CheckRunResult>;
   runRashChecks: (
     formId: string,
     rows: RowData[],
@@ -82,6 +88,7 @@ export interface OkoDesktopApi {
   saveInstance: (inst: OkoFormInstance, userName?: string) => Promise<OkoFormInstance>;
   saveInstanceJson: (fileName: string, content: string) => Promise<boolean>;
   saveExcelFile: (fileName: string, base64: string) => Promise<boolean>;
+  savePdfFile: (fileName: string, base64: string) => Promise<boolean>;
   exportJson: (opts?: {
     pin?: string;
     actor?: string;
@@ -153,4 +160,16 @@ export interface OkoDesktopApi {
   ) => Promise<{ updatedAt: string; items: Array<{ templateId: string; assignee: string; status: string }> }>;
   listKnownAssignees: () => Promise<string[]>;
   backupDatabase: (payload?: { pin?: string; actor?: string }) => Promise<{ filePath: string }>;
+  listBackups: () => Promise<
+    Array<{ name: string; path: string; sizeBytes: number; modifiedAt?: string | null }>
+  >;
+  restoreDatabase: (payload: {
+    backupName: string;
+    pin?: string;
+    actor?: string;
+  }) => Promise<{ message: string }>;
+  compactDatabase: (payload?: {
+    pin?: string;
+    actor?: string;
+  }) => Promise<{ beforeBytes: number; afterBytes: number }>;
 }
