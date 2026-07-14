@@ -13,6 +13,10 @@ packages/**/dist
 desktop/tauri/node_modules
 desktop/tauri/dist
 desktop/tauri/src-tauri/target
+desktop/tauri/release/
+
+# Legacy Electron filler (not in repo; local leftovers must not flood SCM)
+desktop/filler/
 
 # Accidental tsc emit next to TypeScript sources
 server/src/**/*.js
