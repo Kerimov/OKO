@@ -1,0 +1,112 @@
+{
+  "description": "Minimal Access-derived golden cases for engine parity (not full MDB dump)",
+  "source": "synthetic from Access CELL/CELL_sv + saldo T/S/G semantics",
+  "checks": [
+    {
+      "id": "cell-eq-same",
+      "expression": "Cell(\"N01_1\",\"B\",10)=Cell(\"N01_1\",\"B\",10)",
+      "cells": {
+        "N01_1|B|10": 100
+      },
+      "expectOk": true
+    },
+    {
+      "id": "cell-eq-mismatch",
+      "expression": "Cell(\"N01_1\",\"B\",10)=Cell(\"N01_1\",\"B\",20)",
+      "cells": {
+        "N01_1|B|10": 100,
+        "N01_1|B|20": 50
+      },
+      "expectOk": false
+    },
+    {
+      "id": "cell-sv-parity",
+      "expression": "CELL_sv(\"N02_1\",\"B\",40)=Cell(\"N02_1\",\"B\",200)",
+      "cells": {
+        "N02_1|B|40": 12,
+        "N02_1|B|200": 12
+      },
+      "expectOk": true
+    },
+    {
+      "id": "cell-sv-fail",
+      "expression": "CELL_sv(\"N02_1\",\"B\",40)=Cell(\"N02_1\",\"P\",40)",
+      "cells": {
+        "N02_1|B|40": 1,
+        "N02_1|P|40": 2
+      },
+      "expectOk": false
+    },
+    {
+      "id": "and-chain",
+      "expression": "Cell(\"N01_1\",\"B\",1)>=0 And Cell(\"N01_1\",\"B\",2)>=0",
+      "cells": {
+        "N01_1|B|1": 0,
+        "N01_1|B|2": 5
+      },
+      "expectOk": true
+    }
+  ],
+  "saldo": [
+    {
+      "id": "t-from-source-when-flags-false",
+      "saldoType": "t",
+      "sourceRow": { "num": "1110", "B": 42, "J": 9 },
+      "targetRow": { "num": "1110", "B": "", "J": "" },
+      "rule": {
+        "sourceRow": 1110,
+        "sourceColumn": "B",
+        "targetRow": 1110,
+        "targetColumn": "B",
+        "endRow": 1110,
+        "endColumn": "J",
+        "saldoT": false,
+        "saldoS": false,
+        "saldoG": false,
+        "targetForm": "N01_1"
+      },
+      "expectTargetB": 42,
+      "expectApplied": 1
+    },
+    {
+      "id": "g-from-end-when-flags-false",
+      "saldoType": "g",
+      "sourceRow": { "num": "1110", "B": 42, "J": 99 },
+      "targetRow": { "num": "1110", "B": "", "J": "" },
+      "rule": {
+        "sourceRow": 1110,
+        "sourceColumn": "B",
+        "targetRow": 1110,
+        "targetColumn": "B",
+        "endRow": 1110,
+        "endColumn": "J",
+        "saldoT": false,
+        "saldoS": false,
+        "saldoG": false,
+        "targetForm": "N01_1"
+      },
+      "expectTargetB": 99,
+      "expectApplied": 1
+    },
+    {
+      "id": "explicit-t-flag-only",
+      "saldoType": "t",
+      "sourceRow": { "num": "200", "B": 7, "J": 8 },
+      "targetRow": { "num": "200", "B": "", "J": "" },
+      "rule": {
+        "sourceRow": 200,
+        "sourceColumn": "B",
+        "targetRow": 200,
+        "targetColumn": "B",
+        "endRow": 200,
+        "endColumn": "J",
+        "saldoT": true,
+        "saldoS": false,
+        "saldoG": false,
+        "targetForm": "N01_1"
+      },
+      "expectTargetB": 7,
+      "expectApplied": 1
+    }
+  ]
+}

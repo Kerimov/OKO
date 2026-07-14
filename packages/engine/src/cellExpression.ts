@@ -14,6 +14,7 @@ export interface CellKRef {
 
 export type Expr =
   | { kind: "cell"; ref: CellRef }
+  | { kind: "cellsv"; ref: CellRef }
   | { kind: "cellk"; ref: CellKRef }
   | { kind: "total"; form: string; column: string }
   | { kind: "number"; value: number }
@@ -24,12 +25,17 @@ export type CellGetter = (form: string, column: string, row: number) => number;
 
 export interface EvalContext {
   getCell: CellGetter;
+  /**
+   * Access CELL_sv — свод-side cell. After package aggregate, defaults to getCell
+   * (parent instances are the свод).
+   */
+  getCellSv?: CellGetter;
   getCellK: (form: string, column: string, condition: string, rowKey: string) => number;
   getTotal: (form: string, column: string) => number;
 }
 
 export function cellGetterToContext(get: CellGetter): EvalContext {
-  return { getCell: get, getCellK: () => 0, getTotal: () => 0 };
+  return { getCell: get, getCellSv: get, getCellK: () => 0, getTotal: () => 0 };
 }
 
 export class CheckParseError extends Error {
@@ -42,13 +48,24 @@ export class CheckParseError extends Error {
 }
 
 const CELL_RE =
-  /Cell\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)/g;
-const CELLK_RE = /CellK\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g;
+  /Cell\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)/gi;
+const CELLSV_RE =
+  /CELL_sv\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)/gi;
+const CELLK_RE = /CellK\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/gi;
 
 export function parseCellCall(raw: string): CellRef | null {
-  const m = /^Cell\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)$/.exec(
+  const m = /^Cell\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)$/i.exec(
     raw.trim()
   );
+  if (!m) return null;
+  return { form: m[1], column: m[2], row: parseInt(m[4], 10) };
+}
+
+export function parseCellSvCall(raw: string): CellRef | null {
+  const m =
+    /^CELL_sv\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*("?)(\d+)\3\s*\)$/i.exec(
+      raw.trim()
+    );
   if (!m) return null;
   return { form: m[1], column: m[2], row: parseInt(m[4], 10) };
 }
@@ -83,6 +100,7 @@ export function normalizeCheckExpression(expr: string): string {
 
 type Tok =
   | { t: "cell"; ref: CellRef }
+  | { t: "cellsv"; ref: CellRef }
   | { t: "cellk"; ref: CellKRef }
   | { t: "total"; form: string; column: string }
   | { t: "num"; v: number }
@@ -143,7 +161,20 @@ function tokenizeArithmetic(expr: string): Tok[] {
       i += chunk.length;
       continue;
     }
-    if (s.startsWith("CellK(", i)) {
+    if (/^CELL_sv\s*\(/i.test(s.slice(i))) {
+      const chunk = sliceBalancedCall(s, i);
+      const ref = parseCellSvCall(chunk);
+      if (!ref) {
+        throw new CheckParseError(
+          "Некорректный вызов CELL_sv",
+          `Invalid CELL_sv: ${chunk}`
+        );
+      }
+      tokens.push({ t: "cellsv", ref });
+      i += chunk.length;
+      continue;
+    }
+    if (/^CellK\s*\(/i.test(s.slice(i))) {
       const chunk = sliceBalancedCall(s, i);
       const ref = parseCellKCall(chunk);
       if (!ref) {
@@ -156,7 +187,7 @@ function tokenizeArithmetic(expr: string): Tok[] {
       i += chunk.length;
       continue;
     }
-    if (s.startsWith("Cell(", i)) {
+    if (/^Cell\s*\(/i.test(s.slice(i))) {
       const chunk = sliceBalancedCall(s, i);
       const ref = parseCellCall(chunk);
       if (!ref) {
@@ -244,6 +275,7 @@ function parsePrimary(tokens: Tok[], pos: number): [Expr, number] {
   }
   const tok = tokens[pos];
   if (tok.t === "cell") return [{ kind: "cell", ref: tok.ref }, pos + 1];
+  if (tok.t === "cellsv") return [{ kind: "cellsv", ref: tok.ref }, pos + 1];
   if (tok.t === "cellk") return [{ kind: "cellk", ref: tok.ref }, pos + 1];
   if (tok.t === "total")
     return [{ kind: "total", form: tok.form, column: tok.column }, pos + 1];
@@ -261,7 +293,7 @@ function parsePrimary(tokens: Tok[], pos: number): [Expr, number] {
   );
 }
 
-/** Parse arithmetic; supports Clng(...), *, +, -, Cell(), CellK(), numbers. */
+/** Parse arithmetic; supports Clng(...), *, +, -, Cell(), CELL_sv(), CellK(), numbers. */
 export function parseArithmetic(expr: string): Expr {
   const trimmed = expr.trim();
   const clngM = /^Clng\s*\((.*)\)$/is.exec(trimmed);
@@ -277,6 +309,10 @@ export function evaluateExpr(expr: Expr, ctx: EvalContext): number {
       return expr.value;
     case "cell":
       return ctx.getCell(expr.ref.form, expr.ref.column, expr.ref.row);
+    case "cellsv": {
+      const get = ctx.getCellSv ?? ctx.getCell;
+      return get(expr.ref.form, expr.ref.column, expr.ref.row);
+    }
     case "cellk":
       return ctx.getCellK(
         expr.ref.form,
@@ -511,6 +547,16 @@ export function extractCellRefs(expression: string): CellRef[] {
   return refs;
 }
 
+export function extractCellSvRefs(expression: string): CellRef[] {
+  const refs: CellRef[] = [];
+  CELLSV_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CELLSV_RE.exec(expression)) !== null) {
+    refs.push({ form: m[1], column: m[2], row: parseInt(m[4], 10) });
+  }
+  return refs;
+}
+
 export function extractCellKRefs(expression: string): CellKRef[] {
   const refs: CellKRef[] = [];
   CELLK_RE.lastIndex = 0;
@@ -523,6 +569,7 @@ export function extractCellKRefs(expression: string): CellKRef[] {
 
 export function expressionUsesForm(expression: string, formId: string): boolean {
   if (extractCellRefs(expression).some((r) => r.form === formId)) return true;
+  if (extractCellSvRefs(expression).some((r) => r.form === formId)) return true;
   return extractCellKRefs(expression).some((r) => r.form === formId);
 }
 
@@ -535,7 +582,7 @@ export function combineCheckExpression(
   if (!expressionAlt?.trim()) return base;
   const alt = expressionAlt.replace(/\r\n/g, " ").replace(/\s+/g, " ").trim();
   const isContinuation =
-    /Cell\s*\(|CellK\s*\(/i.test(alt) ||
+    /Cell\s*\(|CellK\s*\(|CELL_sv\s*\(/i.test(alt) ||
     /^[+(\-]/i.test(alt) ||
     /^(and|or)\b/i.test(alt) ||
     /\b(and|or)\s*$/i.test(base) ||

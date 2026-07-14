@@ -1,4 +1,5 @@
 import type { OkoFormInstance, RowData } from "./types.js";
+import { columnsFromCorrespondenceSpec } from "./correspondenceSpec.js";
 
 export type SaldoPhase = "previous_period" | "analog_period";
 
@@ -8,19 +9,35 @@ export interface SaldoTransferResult {
   rows: RowData[];
 }
 
-/** Parse rule like `B,C,G-*;` -> column keys (without -* suffix). */
+export interface SaldoCellDiff {
+  rowNum: string;
+  column: string;
+  sourceValue: string | number | null;
+  targetValue: string | number | null;
+}
+
+export interface SaldoCompareResult {
+  columns: string[];
+  wouldUpdateRows: number;
+  diffs: SaldoCellDiff[];
+}
+
+/** Parse rule like `B,C,G-*;` or `B,C,D-10,30;` → column keys. */
 export function parseSaldoColumnRule(rule: string | null | undefined): string[] {
-  if (!rule) return [];
-  return rule
-    .split(";")
-    .map((part) => part.trim().replace(/-\*$/, "").trim())
-    .filter(Boolean)
-    .flatMap((part) => part.split(",").map((c) => c.trim()))
-    .filter(Boolean);
+  return columnsFromCorrespondenceSpec(rule);
 }
 
 function rowKey(row: RowData): string {
   return String(row.num ?? "").trim();
+}
+
+function cellEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === undefined || a === null || a === "") {
+    return b === undefined || b === null || b === "";
+  }
+  if (b === undefined || b === null || b === "") return false;
+  return String(a).trim() === String(b).trim();
 }
 
 export function copySaldoColumns(
@@ -54,6 +71,49 @@ export function copySaldoColumns(
   return { rows: next, updated };
 }
 
+/** Access «Только проверить данные»: diff source vs target without writing. */
+export function compareSaldoColumns(
+  sourceRows: RowData[],
+  targetRows: RowData[],
+  columns: string[]
+): SaldoCompareResult {
+  const srcMap = new Map<string, RowData>();
+  for (const r of sourceRows) {
+    const k = rowKey(r);
+    if (k) srcMap.set(k, r);
+  }
+
+  const diffs: SaldoCellDiff[] = [];
+  const changedRows = new Set<string>();
+
+  for (const tgt of targetRows) {
+    const num = rowKey(tgt);
+    if (!num) continue;
+    const src = srcMap.get(num);
+    if (!src) continue;
+    for (const col of columns) {
+      const sv = src[col];
+      if (sv === undefined || sv === "") continue;
+      const tv = tgt[col];
+      if (cellEquals(sv, tv)) continue;
+      changedRows.add(num);
+      diffs.push({
+        rowNum: num,
+        column: col,
+        sourceValue: sv as string | number,
+        targetValue:
+          tv === undefined || tv === "" ? null : (tv as string | number),
+      });
+    }
+  }
+
+  return {
+    columns,
+    wouldUpdateRows: changedRows.size,
+    diffs,
+  };
+}
+
 export function transferSaldoWithColumns(
   source: OkoFormInstance,
   target: OkoFormInstance,
@@ -71,22 +131,78 @@ export function transferSaldoWithColumns(
   return { rowsUpdated: updated, columnsCopied: columns, rows };
 }
 
+export function compareSaldoWithColumns(
+  source: OkoFormInstance,
+  target: OkoFormInstance,
+  columns: string[]
+): SaldoCompareResult {
+  if (source.templateId !== target.templateId) {
+    throw new Error(
+      `Формы должны совпадать: ${source.templateId} ≠ ${target.templateId}`
+    );
+  }
+  if (columns.length === 0) {
+    throw new Error(`Нет правил переноса сальдо для ${target.templateId}`);
+  }
+  return compareSaldoColumns(source.rows, target.rows, columns);
+}
+
 export type SaldoDetailedRule = {
   sourceRow: number | string | null;
   targetRow: number | string | null;
   sourceColumn: string | null;
   targetColumn: string | null;
+  endRow?: number | string | null;
+  endColumn?: string | null;
+  endForm?: string | null;
   saldoT?: boolean;
   saldoS?: boolean;
   saldoG?: boolean;
   targetForm?: string;
+  sourceForm?: string | null;
 };
+
+export type SaldoDetailedType = "t" | "s" | "g";
+
+/**
+ * Match a_tblsaldo rule to T/S/G.
+ * When MDB flags are all false (common in exports), fall back to triplet presence:
+ * T/S → source→target; G → end→target.
+ */
+export function ruleMatchesSaldoType(
+  rule: SaldoDetailedRule,
+  saldoType: SaldoDetailedType
+): boolean {
+  const flagged = !!(rule.saldoT || rule.saldoS || rule.saldoG);
+  if (flagged) {
+    if (saldoType === "t") return !!rule.saldoT;
+    if (saldoType === "s") return !!rule.saldoS;
+    return !!rule.saldoG;
+  }
+  if (saldoType === "g") {
+    return rule.endColumn != null && rule.endColumn !== "" && rule.endRow != null;
+  }
+  return rule.sourceColumn != null && rule.sourceColumn !== "" && rule.sourceRow != null;
+}
+
+function resolveDetailedSource(
+  rule: SaldoDetailedRule,
+  saldoType: SaldoDetailedType
+): { row: string; column: string } | null {
+  if (saldoType === "g") {
+    if (rule.endColumn == null || rule.endColumn === "" || rule.endRow == null) return null;
+    return { row: String(rule.endRow), column: rule.endColumn };
+  }
+  if (rule.sourceColumn == null || rule.sourceColumn === "" || rule.sourceRow == null) return null;
+  return { row: String(rule.sourceRow), column: rule.sourceColumn };
+}
 
 /** Apply a_tblsaldo-style row/column rules (pure). */
 export function applySaldoDetailedRules(
   source: OkoFormInstance,
   target: OkoFormInstance,
-  rules: SaldoDetailedRule[]
+  rules: SaldoDetailedRule[],
+  saldoType: SaldoDetailedType = "t"
 ): { rows: RowData[]; applied: number } {
   const srcIndex = new Map<string, RowData>();
   for (const r of source.rows) {
@@ -103,10 +219,13 @@ export function applySaldoDetailedRules(
 
   let applied = 0;
   for (const rule of rules) {
-    const srcRow = srcIndex.get(String(rule.sourceRow));
+    if (!ruleMatchesSaldoType(rule, saldoType)) continue;
+    const srcRef = resolveDetailedSource(rule, saldoType);
+    if (!srcRef || !rule.targetColumn || rule.targetRow == null) continue;
+    const srcRow = srcIndex.get(srcRef.row);
     const tgtIdx = rowIndex.get(String(rule.targetRow));
-    if (!srcRow || tgtIdx === undefined || !rule.sourceColumn || !rule.targetColumn) continue;
-    const val = srcRow[rule.sourceColumn];
+    if (!srcRow || tgtIdx === undefined) continue;
+    const val = srcRow[srcRef.column];
     if (val === undefined || val === "") continue;
     if (rows[tgtIdx][rule.targetColumn] !== val) {
       rows[tgtIdx][rule.targetColumn] = val;

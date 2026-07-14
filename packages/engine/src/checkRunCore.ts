@@ -5,6 +5,7 @@ import {
   expressionUsesForm,
   extractCellKRefs,
   extractCellRefs,
+  extractCellSvRefs,
   formatCheckErrorMessage,
   type EvalContext,
 } from "./cellExpression.js";
@@ -134,6 +135,7 @@ export function evalContextFromInstances(instances: OkoFormInstance[]): EvalCont
   }
   return {
     getCell: cellGetterFromIndex(index),
+    getCellSv: cellGetterFromIndex(index),
     getCellK(form, column, condition, rowKey) {
       const rows = rowsByForm.get(form) ?? [];
       return getCellKValue(rows, column, condition, rowKey);
@@ -195,6 +197,7 @@ export function formsUsedByFormChecks(
   for (const rule of rules) {
     const full = combineCheckExpression(rule.expression, rule.expressionAlt);
     for (const ref of extractCellRefs(full)) forms.add(ref.form);
+    for (const ref of extractCellSvRefs(full)) forms.add(ref.form);
     for (const ref of extractCellKRefs(full)) forms.add(ref.form);
     TOTAL_FORM_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -249,6 +252,15 @@ function runRules(rules: CheckRule[], ctx: EvalContext): CheckRunResult {
   return { total: rules.length, passed, failed, skipped, items };
 }
 
+/** Run an explicit rule list against latest-per-template instances (e.g. CheckItReorg*). */
+export function runChecksOnInstances(
+  rules: CheckRule[],
+  instances: OkoFormInstance[]
+): CheckRunResult {
+  const inst = latestInstancePerTemplate(instances);
+  return runRules(rules, evalContextFromInstances(inst));
+}
+
 export function runFormChecksWithData(
   checks: CheckRule[],
   formId: string,
@@ -256,6 +268,5 @@ export function runFormChecksWithData(
   mode: CheckMode = "period"
 ): CheckRunResult {
   const rules = pickRules(checks, { formId, mode, excludeAggr: true });
-  const inst = latestInstancePerTemplate(instances);
-  return runRules(rules, evalContextFromInstances(inst));
+  return runChecksOnInstances(rules, instances);
 }
