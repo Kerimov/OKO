@@ -3,13 +3,16 @@ import type { OkoFormInstance, RowData } from "../types";
 import {
   applySaldoDetailedRules,
   applySaldoToTarget,
+  compareSaldoWithColumns,
   parseSaldoColumnRule,
+  ruleMatchesSaldoType,
   transferSaldoWithColumns,
+  type SaldoCompareResult,
   type SaldoPhase,
   type SaldoTransferResult,
 } from "@oko/engine";
 
-export type { SaldoPhase, SaldoTransferResult };
+export type { SaldoPhase, SaldoTransferResult, SaldoCompareResult };
 export { parseSaldoColumnRule, applySaldoToTarget };
 
 export interface SaldoTransferOptions {
@@ -40,6 +43,15 @@ export async function transferSaldoByColumns(
   return transferSaldoWithColumns(source, target, columns);
 }
 
+/** Dry-run: compare cells that would change (Access «Только проверить»). */
+export async function compareSaldoByColumns(
+  options: SaldoTransferOptions
+): Promise<SaldoCompareResult> {
+  const { source, target, phase } = options;
+  const columns = await getSaldoColumnsForForm(target.templateId, phase);
+  return compareSaldoWithColumns(source, target, columns);
+}
+
 /** Detailed saldo using a_tblsaldo rules for a form pair. */
 export async function transferSaldoDetailed(
   source: OkoFormInstance,
@@ -48,13 +60,9 @@ export async function transferSaldoDetailed(
 ): Promise<{ rows: RowData[]; applied: number }> {
   const data = await loadSaldoRules();
   const rules = data.rules.filter(
-    (r) =>
-      r.targetForm === target.templateId &&
-      ((saldoType === "t" && r.saldoT) ||
-        (saldoType === "s" && r.saldoS) ||
-        (saldoType === "g" && r.saldoG))
+    (r) => r.targetForm === target.templateId && ruleMatchesSaldoType(r, saldoType)
   );
-  return applySaldoDetailedRules(source, target, rules);
+  return applySaldoDetailedRules(source, target, rules, saldoType);
 }
 
 /** Count active a_tblsaldo rules for a form and saldo type. */
@@ -64,11 +72,7 @@ export async function countSaldoRulesForForm(
 ): Promise<number> {
   const data = await loadSaldoRules();
   return data.rules.filter(
-    (r) =>
-      r.targetForm === formId &&
-      ((saldoType === "t" && r.saldoT) ||
-        (saldoType === "s" && r.saldoS) ||
-        (saldoType === "g" && r.saldoG))
+    (r) => r.targetForm === formId && ruleMatchesSaldoType(r, saldoType)
   ).length;
 }
 

@@ -38,7 +38,6 @@ import {
   loadInstance,
   loadKontrAgents,
   loadRashEntries,
-  saveGlobalMeta,
   saveInstance,
   saveRashEntries,
   setInstanceStatus,
@@ -199,7 +198,6 @@ export function FormPage() {
         updatedAt: new Date().toISOString(),
       };
       await saveInstance(updated);
-      await saveGlobalMeta(updated.meta);
       setInstance(updated);
       return updated;
     },

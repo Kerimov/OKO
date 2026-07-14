@@ -1,5 +1,5 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "source": "z261.m_b",
   "total": 13,
   "items": [
@@ -14,7 +14,9 @@
       "city": null,
       "ogrn": "21572039",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Gazpromneft Supply International doo Beograd-Vraсar / Газпромнефть Саплай Интернэшнл доо Београд-Врачар Gazpromneft Supply International doo Beograd-Vraсar / Исоурсе / Айсорс Саплай Интернэшнл доо Београд-Врачар",
+      "idObdnsi": "1446403"
     },
     {
       "id": 28506,
@@ -27,7 +29,9 @@
       "city": null,
       "ogrn": "1085047006571",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Газпромнефть-Аэро Шереметьево ООО \"Газпромнефть-Аэро Шереметьево\"Общество c ограниченной ответственностью \"Газпромнефть-Аэро Шереметьево\"",
+      "idObdnsi": "297673"
     },
     {
       "id": 1,
@@ -40,7 +44,9 @@
       "city": "Москва",
       "ogrn": "1027700070518",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Газпром ПАО / Головная компания ОАО Газпром (Администрация) / Администрация ОАО Газпром",
+      "idObdnsi": "87107"
     },
     {
       "id": 28659,
@@ -53,7 +59,9 @@
       "city": null,
       "ogrn": "1097746398683",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "ООО \"Алтайское Подворье\"Общество c ограниченной ответственностью \"Алтайское Подворье\"",
+      "idObdnsi": "330818"
     },
     {
       "id": 27762,
@@ -66,7 +74,9 @@
       "city": "Ноябрьск",
       "ogrn": "1218900000880",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "ранее Арктика Медиа АО инн8905025944 guid136019 / ИД Благовест ОАО / Издательский дом Благовест ЗАО / ИД Благовест ЗАО / ИД \"Благовест\" ОАО / Арктика-Медиа АО",
+      "idObdnsi": "1583450"
     },
     {
       "id": 27721,
@@ -79,7 +89,9 @@
       "city": null,
       "ogrn": "1085105000221",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Газпромнефть-Аэро Мурманск ООО \"Газпромнефть-Аэро Мурманск\"Общество с ограниченной ответственностью \"Газпромнефть-Аэро Мурманск\"",
+      "idObdnsi": "97255"
     },
     {
       "id": 2334,
@@ -92,7 +104,9 @@
       "city": "Белоярский",
       "ogrn": "1028601522036",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "~",
+      "idObdnsi": "101652"
     },
     {
       "id": 51,
@@ -105,7 +119,9 @@
       "city": null,
       "ogrn": "1025007509768",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "ООО Авиапредприятие «Газпром авиа» / Авиапредприятие Газпромавиа ООО",
+      "idObdnsi": "97497"
     },
     {
       "id": 10,
@@ -118,7 +134,9 @@
       "city": "Надым",
       "ogrn": "1028900578080",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Надымгазпром",
+      "idObdnsi": "97439"
     },
     {
       "id": 25179,
@@ -131,7 +149,9 @@
       "city": null,
       "ogrn": "1037700086588",
       "use": true,
-      "mandatoryRash": true
+      "mandatoryRash": true,
+      "oldName": "Эколого-аналитический центр газовой промышленности ООО/ ЭАЦГП / ГП СПГ Владивосток/ СПГ Владивосток ГП",
+      "idObdnsi": "87758"
     },
     {
       "id": 56,
@@ -144,7 +164,9 @@
       "city": "Москва",
       "ogrn": "1027700198635",
       "use": false,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "Газфлот ООО",
+      "idObdnsi": "97496"
     },
     {
       "id": 3040,
@@ -157,7 +179,9 @@
       "city": null,
       "ogrn": null,
       "use": true,
-      "mandatoryRash": false
+      "mandatoryRash": false,
+      "oldName": "а также ИНДИВИДУАЛЬНЫЕ ПРЕДПРИНИМАТЕЛИ",
+      "idObdnsi": "999999999"
     },
     {
       "id": 3041,
@@ -166,7 +190,8 @@
       "orgType": 3,
       "inn": "0000000000",
       "kpp": "000000003",
-      "country": "STL"
+      "country": "STL",
+      "oldName": null
     }
   ]
 }

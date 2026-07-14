@@ -40,6 +40,12 @@ const EMPTY_CORR: FormCorrespondenceItem = {
   saldoYellow: null,
   saldoRed: null,
   saldoBlue: null,
+  saldoGreen: null,
+  saldoYellowCorr: null,
+  saldoRedCorr: null,
+  saldoBlueCorr: null,
+  reorgUpdate: null,
+  reorgUpdate2: null,
 };
 
 export function SaldoEditorPage() {
@@ -499,8 +505,11 @@ export function SaldoEditorPage() {
                 <thead>
                   <tr>
                     <th>Форма</th>
-                    <th>Пред. период</th>
-                    <th>Аналог. год</th>
+                    <th>Жёлтый</th>
+                    <th>Красный</th>
+                    <th>Синий</th>
+                    <th>Зелёный</th>
+                    <th>Reorg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -513,6 +522,9 @@ export function SaldoEditorPage() {
                       <td>{f.formId}</td>
                       <td className="expr-cell">{f.saldoYellow ? "✓" : ""}</td>
                       <td>{f.saldoRed ? "✓" : ""}</td>
+                      <td>{f.saldoBlue ? "✓" : ""}</td>
+                      <td>{f.saldoGreen ? "✓" : ""}</td>
+                      <td>{f.reorgUpdate || f.reorgUpdate2 ? "✓" : ""}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -523,35 +535,106 @@ export function SaldoEditorPage() {
           <section className="checks-detail-panel">
             <h2>Соответствие форм — {corrDraft.formId || "—"}</h2>
             <p className="admin-desc">
-              Какие графы переносятся: предыдущий период и аналогичный период прошлого года.
+              Маски граф FormCorrespondence: сальдо (жёлтый/красный), цветовые режимы свода
+              AggrSetReorg* (синий/зелёный) и флаг ReorgUpdate.
             </p>
             <div className="checks-form-grid">
             <label>
-              Графы предыдущего периода
+              Жёлтый — предыдущий период
               <textarea
-                rows={4}
+                rows={3}
                 value={corrDraft.saldoYellow ?? ""}
                 onChange={(e) =>
                   setCorrDraft({ ...corrDraft, saldoYellow: e.target.value || null })
                 }
                 placeholder="B,C,D-*;"
+                title="Yellow"
               />
             </label>
             <label>
-              Графы аналогичного периода прошлого года
+              Красный — аналогичный период прошлого года
               <textarea
-                rows={4}
+                rows={3}
                 value={corrDraft.saldoRed ?? ""}
                 onChange={(e) => setCorrDraft({ ...corrDraft, saldoRed: e.target.value || null })}
                 placeholder="B,C-*;"
+                title="Red"
               />
             </label>
             <label>
-              Служебные графы
+              Синий (свод / сальдо)
               <textarea
                 rows={3}
                 value={corrDraft.saldoBlue ?? ""}
                 onChange={(e) => setCorrDraft({ ...corrDraft, saldoBlue: e.target.value || null })}
+                title="Blue"
+              />
+            </label>
+            <label>
+              Зелёный (свод / реорганизация)
+              <textarea
+                rows={3}
+                value={corrDraft.saldoGreen ?? ""}
+                onChange={(e) => setCorrDraft({ ...corrDraft, saldoGreen: e.target.value || null })}
+                title="Green"
+              />
+            </label>
+            <label>
+              YellowCorr
+              <textarea
+                rows={2}
+                value={corrDraft.saldoYellowCorr ?? ""}
+                onChange={(e) =>
+                  setCorrDraft({ ...corrDraft, saldoYellowCorr: e.target.value || null })
+                }
+                placeholder="*-110;*-120;"
+                title="YellowCorr"
+              />
+            </label>
+            <label>
+              RedCorr
+              <textarea
+                rows={2}
+                value={corrDraft.saldoRedCorr ?? ""}
+                onChange={(e) =>
+                  setCorrDraft({ ...corrDraft, saldoRedCorr: e.target.value || null })
+                }
+                title="RedCorr"
+              />
+            </label>
+            <label>
+              BlueCorr
+              <textarea
+                rows={2}
+                value={corrDraft.saldoBlueCorr ?? ""}
+                onChange={(e) =>
+                  setCorrDraft({ ...corrDraft, saldoBlueCorr: e.target.value || null })
+                }
+                title="BlueCorr"
+              />
+            </label>
+            <label>
+              ReorgUpdate
+              <input
+                type="text"
+                value={corrDraft.reorgUpdate ?? ""}
+                onChange={(e) =>
+                  setCorrDraft({ ...corrDraft, reorgUpdate: e.target.value || null })
+                }
+                placeholder="*"
+                title="ReorgUpdate"
+              />
+            </label>
+            <label>
+              ReorgUpdate2
+              <input
+                type="text"
+                value={corrDraft.reorgUpdate2 ?? ""}
+                onChange={(e) =>
+                  setCorrDraft({ ...corrDraft, reorgUpdate2: e.target.value || null })
+                }
+                placeholder="*"
+                title="ReorgUpdate2"
               />
             </label>
             </div>
