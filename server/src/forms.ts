@@ -11,12 +11,21 @@ export interface FormColumnDto {
   frozen?: boolean;
   readonly?: boolean;
   fTotal?: boolean;
+  helpText?: string | null;
+  align?: "left" | "center" | "right" | null;
+  decimals?: number | null;
+  hidden?: boolean;
+  formula?: string | null;
 }
 
 export interface FormRowDto {
   num?: string;
   code?: string;
   name: string;
+  kind?: "data" | "header" | "total" | "section" | "hidden" | null;
+  level?: number | null;
+  readonly?: boolean;
+  formula?: string | null;
 }
 
 export interface FormSchemaDto {
@@ -37,6 +46,8 @@ export interface FormSchemaDto {
   allowAddRows?: boolean;
   kontrForm?: boolean;
   signatures: string[];
+  archived?: boolean;
+  schemaVersion?: number;
 }
 
 export interface FormCatalogDto {
@@ -77,7 +88,6 @@ const DEFAULT_CATEGORIES: Record<string, string> = {
 };
 
 export async function migrateFormTables(db: OkoDb): Promise<void> {
-
   if (!(await db.columnExists("form_templates", "pdf_file"))) {
     await db.exec("ALTER TABLE form_templates ADD COLUMN pdf_file TEXT");
   }
@@ -92,9 +102,46 @@ export async function migrateFormTables(db: OkoDb): Promise<void> {
       `ALTER TABLE form_templates ADD COLUMN signatures_json TEXT DEFAULT '["Руководитель","Главный бухгалтер"]'`
     );
   }
+  if (!(await db.columnExists("form_templates", "unit"))) {
+    await db.exec(`ALTER TABLE form_templates ADD COLUMN unit TEXT DEFAULT 'тыс.руб.'`);
+  }
+  if (!(await db.columnExists("form_templates", "archived"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN archived INTEGER DEFAULT 0");
+  }
+  if (!(await db.columnExists("form_templates", "schema_version"))) {
+    await db.exec("ALTER TABLE form_templates ADD COLUMN schema_version INTEGER DEFAULT 1");
+  }
 
   if (!(await db.columnExists("form_template_columns", "f_total"))) {
     await db.exec("ALTER TABLE form_template_columns ADD COLUMN f_total INTEGER DEFAULT 0");
+  }
+  if (!(await db.columnExists("form_template_columns", "help_text"))) {
+    await db.exec("ALTER TABLE form_template_columns ADD COLUMN help_text TEXT");
+  }
+  if (!(await db.columnExists("form_template_columns", "align"))) {
+    await db.exec("ALTER TABLE form_template_columns ADD COLUMN align TEXT");
+  }
+  if (!(await db.columnExists("form_template_columns", "decimals"))) {
+    await db.exec("ALTER TABLE form_template_columns ADD COLUMN decimals INTEGER");
+  }
+  if (!(await db.columnExists("form_template_columns", "hidden"))) {
+    await db.exec("ALTER TABLE form_template_columns ADD COLUMN hidden INTEGER DEFAULT 0");
+  }
+  if (!(await db.columnExists("form_template_columns", "formula"))) {
+    await db.exec("ALTER TABLE form_template_columns ADD COLUMN formula TEXT");
+  }
+
+  if (!(await db.columnExists("form_template_rows", "row_kind"))) {
+    await db.exec(`ALTER TABLE form_template_rows ADD COLUMN row_kind TEXT DEFAULT 'data'`);
+  }
+  if (!(await db.columnExists("form_template_rows", "row_level"))) {
+    await db.exec("ALTER TABLE form_template_rows ADD COLUMN row_level INTEGER DEFAULT 0");
+  }
+  if (!(await db.columnExists("form_template_rows", "readonly"))) {
+    await db.exec("ALTER TABLE form_template_rows ADD COLUMN readonly INTEGER DEFAULT 0");
+  }
+  if (!(await db.columnExists("form_template_rows", "formula"))) {
+    await db.exec("ALTER TABLE form_template_rows ADD COLUMN formula TEXT");
   }
 }
 
@@ -106,8 +153,9 @@ async function upsertFormFromSchema(
   await db
     .prepare(
       `INSERT INTO form_templates (
-      form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json,
+      sort_order, unit, archived, schema_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(form_id) DO UPDATE SET
       title = excluded.title,
       category = excluded.category,
@@ -116,7 +164,10 @@ async function upsertFormFromSchema(
       allow_add_rows = excluded.allow_add_rows,
       kontr_form = excluded.kontr_form,
       signatures_json = excluded.signatures_json,
-      sort_order = excluded.sort_order`
+      sort_order = excluded.sort_order,
+      unit = excluded.unit,
+      archived = excluded.archived,
+      schema_version = excluded.schema_version`
     )
     .run(
       schema.id,
@@ -127,7 +178,10 @@ async function upsertFormFromSchema(
       schema.allowAddRows ? 1 : 0,
       schema.kontrForm ? 1 : 0,
       JSON.stringify(schema.signatures ?? ["Руководитель", "Главный бухгалтер"]),
-      sortOrder
+      sortOrder,
+      schema.meta?.unit ?? "тыс.руб.",
+      schema.archived ? 1 : 0,
+      schema.schemaVersion ?? 1
     );
 
   await db.prepare("DELETE FROM form_template_columns WHERE form_id = ?").run(schema.id);
@@ -135,8 +189,9 @@ async function upsertFormFromSchema(
 
   const insCol = db.prepare(
     `INSERT INTO form_template_columns (
-      form_id, sort_order, column_key, label, col_type, width, frozen, readonly, f_total
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      form_id, sort_order, column_key, label, col_type, width, frozen, readonly, f_total,
+      help_text, align, decimals, hidden, formula
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const seenColKeys = new Set<string>();
   let colOrder = 0;
@@ -152,17 +207,33 @@ async function upsertFormFromSchema(
       c.width ?? 100,
       c.frozen ? 1 : 0,
       c.readonly || c.fTotal ? 1 : 0,
-      c.fTotal ? 1 : 0
+      c.fTotal ? 1 : 0,
+      c.helpText ?? null,
+      c.align ?? null,
+      c.decimals ?? null,
+      c.hidden ? 1 : 0,
+      c.formula ?? null
     );
   }
 
   const insRow = db.prepare(
-    `INSERT INTO form_template_rows (form_id, sort_order, row_num, row_code, row_name)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO form_template_rows (
+      form_id, sort_order, row_num, row_code, row_name, row_kind, row_level, readonly, formula
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (let i = 0; i < schema.rows.length; i++) {
     const r = schema.rows[i];
-    await insRow.run(schema.id, i, r.num ?? null, r.code ?? null, r.name);
+    await insRow.run(
+      schema.id,
+      i,
+      r.num ?? null,
+      r.code ?? null,
+      r.name,
+      r.kind ?? "data",
+      r.level ?? 0,
+      r.readonly ? 1 : 0,
+      r.formula ?? null
+    );
   }
 }
 
@@ -209,7 +280,8 @@ export async function reimportFormsFromJson(db: OkoDb): Promise<number> {
 export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSchemaDto | null> {
   const tpl = (await db
     .prepare(
-      `SELECT form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json
+      `SELECT form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json,
+              unit, archived, schema_version
        FROM form_templates WHERE form_id = ?`
     )
     .get(formId)) as
@@ -222,6 +294,9 @@ export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSch
         allow_add_rows: number;
         kontr_form: number;
         signatures_json: string;
+        unit: string | null;
+        archived: number | null;
+        schema_version: number | null;
       }
     | undefined;
 
@@ -230,7 +305,8 @@ export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSch
   const columns = (
     (await db
       .prepare(
-        `SELECT column_key, label, col_type, width, frozen, readonly, f_total
+        `SELECT column_key, label, col_type, width, frozen, readonly, f_total,
+                help_text, align, decimals, hidden, formula
          FROM form_template_columns WHERE form_id = ? ORDER BY sort_order`
       )
       .all(formId)) as Array<{
@@ -241,28 +317,56 @@ export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSch
       frozen: number;
       readonly: number;
       f_total: number;
+      help_text: string | null;
+      align: string | null;
+      decimals: number | null;
+      hidden: number | null;
+      formula: string | null;
     }>
-  ).map((c) => ({
-    key: c.column_key,
-    label: c.label,
-    type: c.col_type as "text" | "number",
-    width: c.width,
-    frozen: !!c.frozen,
-    readonly: !!c.readonly,
-    fTotal: !!c.f_total,
-  }));
+  ).map((c) => {
+    const col: FormColumnDto = {
+      key: c.column_key,
+      label: c.label,
+      type: c.col_type as "text" | "number",
+      width: c.width,
+      frozen: !!c.frozen,
+      readonly: !!c.readonly,
+      fTotal: !!c.f_total,
+    };
+    if (c.help_text) col.helpText = c.help_text;
+    if (c.align === "left" || c.align === "center" || c.align === "right") col.align = c.align;
+    if (c.decimals != null) col.decimals = c.decimals;
+    if (c.hidden) col.hidden = true;
+    if (c.formula) col.formula = c.formula;
+    return col;
+  });
 
   const rows = (
     (await db
       .prepare(
-        `SELECT row_num, row_code, row_name FROM form_template_rows
+        `SELECT row_num, row_code, row_name, row_kind, row_level, readonly, formula
+         FROM form_template_rows
          WHERE form_id = ? ORDER BY sort_order`
       )
-      .all(formId)) as Array<{ row_num: string | null; row_code: string | null; row_name: string }>
+      .all(formId)) as Array<{
+      row_num: string | null;
+      row_code: string | null;
+      row_name: string;
+      row_kind: string | null;
+      row_level: number | null;
+      readonly: number | null;
+      formula: string | null;
+    }>
   ).map((r) => {
     const item: FormRowDto = { name: r.row_name };
     if (r.row_num) item.num = r.row_num;
     if (r.row_code) item.code = r.row_code;
+    if (r.row_kind && r.row_kind !== "data") {
+      item.kind = r.row_kind as FormRowDto["kind"];
+    }
+    if (r.row_level) item.level = r.row_level;
+    if (r.readonly) item.readonly = true;
+    if (r.formula) item.formula = r.formula;
     return item;
   });
 
@@ -284,21 +388,24 @@ export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSch
       enterpriseCode: "1@1",
       periodStart: "",
       periodEnd: "",
-      unit: "тыс.руб.",
+      unit: tpl.unit || "тыс.руб.",
     },
     columns,
     rows,
     signatures,
+    schemaVersion: tpl.schema_version ?? 1,
   };
   if (tpl.allow_add_rows) schema.allowAddRows = true;
   if (tpl.kontr_form) schema.kontrForm = true;
+  if (tpl.archived) schema.archived = true;
   return schema;
 }
 
-export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto> {
+export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto & { forms: Array<FormCatalogDto["forms"][number] & { archived?: boolean }> }> {
   const rows = (await db
     .prepare(
-      `SELECT form_id, title, category, pages, pdf_file FROM form_templates ORDER BY sort_order, form_id`
+      `SELECT form_id, title, category, pages, pdf_file, COALESCE(archived, 0) AS archived
+       FROM form_templates ORDER BY sort_order, form_id`
     )
     .all()) as Array<{
     form_id: string;
@@ -306,6 +413,7 @@ export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto> {
     category: string;
     pages: number;
     pdf_file: string | null;
+    archived: number;
   }>;
 
   const usedCats = new Set(rows.map((r) => r.category));
@@ -313,12 +421,15 @@ export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto> {
   for (const [k, v] of Object.entries(DEFAULT_CATEGORIES)) {
     if (usedCats.has(k)) categories[k] = v;
   }
+  for (const cat of usedCats) {
+    if (!categories[cat]) categories[cat] = cat;
+  }
 
   return {
     version: "2.0",
     name: "ОКО — Портал форм корпоративной отчётности",
-    description: "Схемы форм из SQLite (a_stblROWs, a_stblFIELDs)",
-    source: "sqlite:form_templates",
+    description: "Схемы форм из PostgreSQL (a_stblROWs, a_stblFIELDs)",
+    source: "db:form_templates",
     categories,
     forms: rows.map((r) => ({
       id: r.form_id,
@@ -326,6 +437,7 @@ export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto> {
       category: r.category,
       pages: r.pages,
       pdfFile: r.pdf_file ?? `1@1_${r.form_id}.pdf`,
+      ...(r.archived ? { archived: true } : {}),
     })),
   };
 }
@@ -335,21 +447,34 @@ export async function updateFormMeta(
   formId: string,
   patch: {
     title?: string;
+    category?: string;
     pages?: number;
+    pdfFile?: string | null;
     allowAddRows?: boolean;
     kontrForm?: boolean;
     signatures?: string[];
+    unit?: string;
+    archived?: boolean;
+    schemaVersion?: number;
   }
 ): Promise<void> {
   const fields: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
   if (patch.title !== undefined) {
     fields.push("title = ?");
     values.push(patch.title);
   }
+  if (patch.category !== undefined) {
+    fields.push("category = ?");
+    values.push(patch.category);
+  }
   if (patch.pages !== undefined) {
     fields.push("pages = ?");
     values.push(patch.pages);
+  }
+  if (patch.pdfFile !== undefined) {
+    fields.push("pdf_file = ?");
+    values.push(patch.pdfFile);
   }
   if (patch.allowAddRows !== undefined) {
     fields.push("allow_add_rows = ?");
@@ -362,6 +487,18 @@ export async function updateFormMeta(
   if (patch.signatures !== undefined) {
     fields.push("signatures_json = ?");
     values.push(JSON.stringify(patch.signatures));
+  }
+  if (patch.unit !== undefined) {
+    fields.push("unit = ?");
+    values.push(patch.unit);
+  }
+  if (patch.archived !== undefined) {
+    fields.push("archived = ?");
+    values.push(patch.archived ? 1 : 0);
+  }
+  if (patch.schemaVersion !== undefined) {
+    fields.push("schema_version = ?");
+    values.push(patch.schemaVersion);
   }
   if (!fields.length) return;
   values.push(formId);
@@ -376,21 +513,30 @@ export async function replaceFormColumns(
   await db.prepare("DELETE FROM form_template_columns WHERE form_id = ?").run(formId);
   const ins = db.prepare(
     `INSERT INTO form_template_columns (
-      form_id, sort_order, column_key, label, col_type, width, frozen, readonly, f_total
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      form_id, sort_order, column_key, label, col_type, width, frozen, readonly, f_total,
+      help_text, align, decimals, hidden, formula
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
-  for (let i = 0; i < columns.length; i++) {
-    const c = columns[i];
+  const seen = new Set<string>();
+  let order = 0;
+  for (const c of columns) {
+    if (!c.key?.trim() || seen.has(c.key)) continue;
+    seen.add(c.key);
     await ins.run(
       formId,
-      i,
+      order++,
       c.key,
       c.label,
       c.type,
       c.width ?? 100,
       c.frozen ? 1 : 0,
       c.readonly || c.fTotal ? 1 : 0,
-      c.fTotal ? 1 : 0
+      c.fTotal ? 1 : 0,
+      c.helpText ?? null,
+      c.align ?? null,
+      c.decimals ?? null,
+      c.hidden ? 1 : 0,
+      c.formula ?? null
     );
   }
 }
@@ -402,11 +548,389 @@ export async function replaceFormRows(
 ): Promise<void> {
   await db.prepare("DELETE FROM form_template_rows WHERE form_id = ?").run(formId);
   const ins = db.prepare(
-    `INSERT INTO form_template_rows (form_id, sort_order, row_num, row_code, row_name)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO form_template_rows (
+      form_id, sort_order, row_num, row_code, row_name, row_kind, row_level, readonly, formula
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    await ins.run(formId, i, r.num ?? null, r.code ?? null, r.name);
+    await ins.run(
+      formId,
+      i,
+      r.num ?? null,
+      r.code ?? null,
+      r.name,
+      r.kind ?? "data",
+      r.level ?? 0,
+      r.readonly ? 1 : 0,
+      r.formula ?? null
+    );
   }
+}
+
+export async function saveFormSchemaAtomic(
+  db: OkoDb,
+  schema: FormSchemaDto
+): Promise<FormSchemaDto> {
+  const existing = await loadFormSchema(db, schema.id);
+  if (!existing) throw new Error(`Form ${schema.id} not found`);
+  const nextVersion = (existing.schemaVersion ?? 1) + 1;
+  const toSave: FormSchemaDto = {
+    ...schema,
+    schemaVersion: nextVersion,
+  };
+  await db.transaction(async (tx) => {
+    const sort = (
+      (await tx
+        .prepare("SELECT sort_order FROM form_templates WHERE form_id = ?")
+        .get(schema.id)) as { sort_order: number } | undefined
+    )?.sort_order;
+    await upsertFormFromSchema(tx, toSave, sort ?? 0);
+  });
+  const saved = await loadFormSchema(db, schema.id);
+  if (!saved) throw new Error("save failed");
+  return saved;
+}
+
+export async function createFormSchema(
+  db: OkoDb,
+  input: { id: string; title: string; category?: string; cloneFrom?: string }
+): Promise<FormSchemaDto> {
+  const id = input.id.trim();
+  if (!/^[A-Za-z0-9_]+$/.test(id)) throw new Error("Некорректный код формы");
+  if (await loadFormSchema(db, id)) throw new Error(`Форма ${id} уже существует`);
+
+  let base: FormSchemaDto | null = null;
+  if (input.cloneFrom) {
+    base = await loadFormSchema(db, input.cloneFrom);
+    if (!base) throw new Error(`Источник ${input.cloneFrom} не найден`);
+  }
+
+  const schema: FormSchemaDto = base
+    ? {
+        ...base,
+        id,
+        title: input.title || `${base.title} (копия)`,
+        category: input.category || base.category,
+        pdfFile: `1@1_${id}.pdf`,
+        archived: false,
+        schemaVersion: 1,
+      }
+    : {
+        id,
+        title: input.title || id,
+        category: input.category || id.split("_")[0] || "N01",
+        pages: 1,
+        pdfFile: `1@1_${id}.pdf`,
+        meta: {
+          organization: "",
+          enterpriseCode: "1@1",
+          periodStart: "",
+          periodEnd: "",
+          unit: "тыс.руб.",
+        },
+        columns: [
+          { key: "num", label: "№", type: "text", width: 60, frozen: true, readonly: true },
+          { key: "name", label: "Наименование", type: "text", width: 280, frozen: true },
+          { key: "B", label: "Графа B", type: "number", width: 100 },
+        ],
+        rows: [{ num: "1", name: "Новая строка", kind: "data" }],
+        signatures: ["Руководитель", "Главный бухгалтер"],
+        schemaVersion: 1,
+      };
+
+  const maxSort = (
+    (await db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM form_templates").get()) as {
+      m: number;
+    }
+  ).m;
+  await db.transaction(async (tx) => {
+    await upsertFormFromSchema(tx, schema, Number(maxSort) + 1);
+  });
+  const saved = await loadFormSchema(db, id);
+  if (!saved) throw new Error("create failed");
+  return saved;
+}
+
+export async function setFormArchived(db: OkoDb, formId: string, archived: boolean): Promise<FormSchemaDto> {
+  if (!(await loadFormSchema(db, formId))) throw new Error("Form not found");
+  await updateFormMeta(db, formId, { archived });
+  const saved = await loadFormSchema(db, formId);
+  if (!saved) throw new Error("archive failed");
+  return saved;
+}
+
+export interface FormDependencyHit {
+  kind: "check" | "rash" | "saldo" | "excel" | "recalc" | "instance" | "correspondence";
+  ref: string;
+  detail: string;
+}
+
+export async function getFormDependencies(
+  db: OkoDb,
+  formId: string,
+  opts?: { columnKey?: string; rowNo?: string }
+): Promise<{
+  formId: string;
+  totals: Record<string, number>;
+  hits: FormDependencyHit[];
+}> {
+  const hits: FormDependencyHit[] = [];
+  const col = opts?.columnKey?.trim().toUpperCase();
+  const rowNo = opts?.rowNo?.trim();
+
+  try {
+    const checks = (await db
+      .prepare(`SELECT number, expression, expression_alt, message FROM check_rules`)
+      .all()) as Array<{
+      number: number;
+      expression: string;
+      expression_alt: string | null;
+      message: string | null;
+    }>;
+    for (const c of checks) {
+      const full = `${c.expression} ${c.expression_alt ?? ""}`;
+      if (!full.includes(formId)) continue;
+      if (col && !full.toUpperCase().includes(`${formId}.${col}`) && !full.includes(`[${formId}`)) {
+        // still count form-level, but skip when looking for specific column without match
+        if (!full.toUpperCase().includes(`.${col}`) && !full.toUpperCase().includes(`,${col}`)) {
+          continue;
+        }
+      }
+      if (rowNo && !full.includes(rowNo)) continue;
+      hits.push({
+        kind: "check",
+        ref: String(c.number),
+        detail: (c.message || c.expression).slice(0, 120),
+      });
+      if (hits.filter((h) => h.kind === "check").length >= 40) break;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    let sql = `SELECT form_id, row_no, column_key, kod FROM rash_placements WHERE form_id = ?`;
+    const params: (string | number)[] = [formId];
+    if (rowNo) {
+      sql += ` AND row_no = ?`;
+      params.push(rowNo);
+    }
+    if (col) {
+      sql += ` AND UPPER(column_key) = ?`;
+      params.push(col);
+    }
+    sql += ` LIMIT 40`;
+    const places = (await db.prepare(sql).all(...params)) as Array<{
+      row_no: string;
+      column_key: string;
+      kod: number;
+    }>;
+    for (const p of places) {
+      hits.push({
+        kind: "rash",
+        ref: String(p.kod),
+        detail: `строка ${p.row_no} / гр. ${p.column_key || "*"}`,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const saldo = (await db
+      .prepare(
+        `SELECT number, target_form, target_column, target_row, source_form, source_column, source_row
+         FROM saldo_rules
+         WHERE target_form = ? OR source_form = ? OR end_form = ?
+         LIMIT 40`
+      )
+      .all(formId, formId, formId)) as Array<{
+      number: number;
+      target_form: string;
+      target_column: string | null;
+      target_row: number | null;
+      source_form: string | null;
+      source_column: string | null;
+      source_row: number | null;
+    }>;
+    for (const s of saldo) {
+      if (col) {
+        const cols = [s.target_column, s.source_column].map((x) => (x ?? "").toUpperCase());
+        if (!cols.includes(col)) continue;
+      }
+      if (rowNo) {
+        const rows = [s.target_row, s.source_row].map((x) => (x == null ? "" : String(x)));
+        if (!rows.includes(rowNo)) continue;
+      }
+      hits.push({
+        kind: "saldo",
+        ref: String(s.number),
+        detail: `${s.target_form}.${s.target_column ?? "?"} ← ${s.source_form ?? "?"}.${s.source_column ?? "?"}`,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const excel = (await db
+      .prepare(
+        `SELECT id, sheet_name, form_column, form_row FROM excel_mappings WHERE form_name = ? LIMIT 40`
+      )
+      .all(formId)) as Array<{
+      id: number;
+      sheet_name: string | null;
+      form_column: string | null;
+      form_row: string | null;
+    }>;
+    for (const e of excel) {
+      if (col && (e.form_column ?? "").toUpperCase() !== col) continue;
+      if (rowNo && String(e.form_row ?? "") !== rowNo) continue;
+      hits.push({
+        kind: "excel",
+        ref: String(e.id),
+        detail: `${e.sheet_name ?? "sheet"} ${e.form_column ?? ""}/${e.form_row ?? ""}`,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const corr = (await db
+      .prepare(
+        `SELECT saldo_yellow, saldo_red, saldo_blue, saldo_green FROM form_templates WHERE form_id = ?`
+      )
+      .get(formId)) as
+      | {
+          saldo_yellow: string | null;
+          saldo_red: string | null;
+          saldo_blue: string | null;
+          saldo_green: string | null;
+        }
+      | undefined;
+    if (corr) {
+      for (const [k, v] of Object.entries(corr)) {
+        if (v) hits.push({ kind: "correspondence", ref: k, detail: String(v) });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const recalcPath = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
+    if (fs.existsSync(recalcPath)) {
+      const data = JSON.parse(fs.readFileSync(recalcPath, "utf-8")) as {
+        byForm?: Record<string, unknown[]>;
+      };
+      const rules = data.byForm?.[formId];
+      if (Array.isArray(rules) && rules.length) {
+        hits.push({
+          kind: "recalc",
+          ref: formId,
+          detail: `${rules.length} правил пересчёта`,
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const inst = (await db
+      .prepare(`SELECT COUNT(*) AS c FROM form_instances WHERE template_id = ?`)
+      .get(formId)) as { c: number };
+    if (Number(inst?.c) > 0) {
+      hits.push({
+        kind: "instance",
+        ref: formId,
+        detail: `${inst.c} экземпляров комплектов`,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const totals: Record<string, number> = {};
+  for (const h of hits) {
+    totals[h.kind] = (totals[h.kind] ?? 0) + 1;
+  }
+  return { formId, totals, hits };
+}
+
+export async function previewFormsReimport(db: OkoDb): Promise<{
+  added: string[];
+  removed: string[];
+  changed: string[];
+  unchanged: number;
+  jsonTotal: number;
+  dbTotal: number;
+}> {
+  if (!fs.existsSync(CATALOG_JSON)) throw new Error("catalog.json not found");
+  const catalog = JSON.parse(fs.readFileSync(CATALOG_JSON, "utf-8")) as FormCatalogDto;
+  const dbCat = await exportCatalog(db);
+  const dbIds = new Set(dbCat.forms.map((f) => f.id));
+  const jsonIds = new Set(catalog.forms.map((f) => f.id));
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  let unchanged = 0;
+
+  for (const f of catalog.forms) {
+    if (!dbIds.has(f.id)) {
+      added.push(f.id);
+      continue;
+    }
+    const schemaPath = path.join(SCHEMAS_DIR, `${f.id}.json`);
+    if (!fs.existsSync(schemaPath)) {
+      changed.push(f.id);
+      continue;
+    }
+    const fileSchema = JSON.parse(fs.readFileSync(schemaPath, "utf-8")) as FormSchemaDto;
+    const dbSchema = await loadFormSchema(db, f.id);
+    if (!dbSchema) {
+      added.push(f.id);
+      continue;
+    }
+    const fileFp = JSON.stringify({
+      title: fileSchema.title,
+      columns: fileSchema.columns.map((c) => ({ key: c.key, label: c.label, type: c.type })),
+      rows: fileSchema.rows.map((r) => ({ num: r.num, code: r.code, name: r.name })),
+    });
+    const dbFp = JSON.stringify({
+      title: dbSchema.title,
+      columns: dbSchema.columns.map((c) => ({ key: c.key, label: c.label, type: c.type })),
+      rows: dbSchema.rows.map((r) => ({ num: r.num, code: r.code, name: r.name })),
+    });
+    if (fileFp === dbFp) unchanged += 1;
+    else changed.push(f.id);
+  }
+  for (const id of dbIds) {
+    if (!jsonIds.has(id)) removed.push(id);
+  }
+  return {
+    added: added.sort(),
+    removed: removed.sort(),
+    changed: changed.sort(),
+    unchanged,
+    jsonTotal: catalog.forms.length,
+    dbTotal: dbCat.forms.length,
+  };
+}
+
+export function suggestNextColumnKey(existing: string[]): string {
+  const used = new Set(existing.map((k) => k.toUpperCase()));
+  const alphabet = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for (const ch of alphabet) {
+    if (!used.has(ch)) return ch;
+  }
+  for (let i = 2; i < 100; i++) {
+    for (const ch of alphabet) {
+      const key = `${ch}${i}`;
+      if (!used.has(key)) return key;
+    }
+  }
+  return `X${existing.length + 1}`;
 }
