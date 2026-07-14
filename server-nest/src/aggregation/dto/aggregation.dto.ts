@@ -80,6 +80,22 @@ export class RunAggregationDto {
   @IsOptional()
   @IsNumber()
   targetZid?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Включать черновики участников. По умолчанию false — только формы со статусом «сдано»",
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeDraftSources?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Разрешить перезапись уже сданной целевой формы. По умолчанию false",
+  })
+  @IsOptional()
+  @IsBoolean()
+  overwriteSubmitted?: boolean;
 }
 
 export class CreateCorrSetDto {
@@ -141,4 +157,11 @@ export class FillBalanceRowsDto {
   @IsOptional()
   @IsIn(["ifEmpty", "overwrite"])
   mode?: "ifEmpty" | "overwrite";
+
+  @ApiPropertyOptional({
+    description: "Разрешить изменение сданной формы N01_1. По умолчанию false",
+  })
+  @IsOptional()
+  @IsBoolean()
+  overwriteSubmitted?: boolean;
 }

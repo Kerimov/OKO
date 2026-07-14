@@ -248,6 +248,7 @@ export class AggregationController {
         eid: body.eid,
         targetZid: body.targetZid,
         mode: body.mode,
+        overwriteSubmitted: body.overwriteSubmitted,
       });
     } catch (e) {
       if (e instanceof HttpException) throw e;
@@ -273,6 +274,8 @@ export class AggregationController {
         reorg: body.reorg,
         updateCorrSet: body.updateCorrSet,
         targetZid: body.targetZid,
+        includeDraftSources: body.includeDraftSources,
+        overwriteSubmitted: body.overwriteSubmitted,
       });
     } catch (e) {
       if (e instanceof HttpException) throw e;
@@ -291,6 +294,10 @@ export class AggregationController {
     try {
       await assertAggTarget(req, body.parentZid, body.targetZid);
       const db = await getDb();
+      const actor =
+        (req as { apiUser?: { username?: string }; apiRole?: string }).apiUser?.username ??
+        (req as { apiRole?: string }).apiRole ??
+        "unknown";
       const result = await runPackageAggregation(db, {
         parentZid: body.parentZid,
         eid: body.eid,
@@ -302,12 +309,12 @@ export class AggregationController {
         reorg: body.reorg,
         updateCorrSet: body.updateCorrSet,
         targetZid: body.targetZid,
+        includeDraftSources: body.includeDraftSources,
+        overwriteSubmitted: body.overwriteSubmitted,
+        lockedBy: actor,
       });
       await logDomainAudit(db, {
-        actor: (req as { apiUser?: { username?: string }; apiRole?: string }).apiUser
-          ?.username ??
-          (req as { apiRole?: string }).apiRole ??
-          null,
+        actor,
         action: "aggregation.run",
         entityType: "package",
         entityId: `${body.parentZid}:${body.eid}`,
@@ -317,6 +324,8 @@ export class AggregationController {
           targetZid: body.targetZid ?? body.parentZid,
           aggregated: result.aggregated,
           skipped: result.skipped,
+          includeDraftSources: !!body.includeDraftSources,
+          overwriteSubmitted: !!body.overwriteSubmitted,
         },
       });
       return result;

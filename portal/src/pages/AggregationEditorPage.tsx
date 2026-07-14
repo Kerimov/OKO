@@ -134,14 +134,14 @@ export function AggregationEditorPage() {
           <p className="admin-desc">
             Аналог Access <code>frmAggrCfg</code> / таблица <code>a_tblAgg_List</code>: какие
             организации входят в свод головной. Флаг «включено» = Include?. Запуск свода — в{" "}
-            <Link to="/tools">Сводка и импорт</Link>.
+            <Link to="/tools?tab=aggregation">Сводка → Свод</Link>.
           </p>
         </div>
         <div className="toolbar-actions">
           <button type="button" className="btn btn-secondary" onClick={() => void handleReimport()}>
             Импорт из файла
           </button>
-          <Link to="/tools" className="btn btn-primary">
+          <Link to="/tools?tab=aggregation" className="btn btn-primary">
             Запустить свод
           </Link>
         </div>

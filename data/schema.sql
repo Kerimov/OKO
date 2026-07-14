@@ -304,6 +304,15 @@ CREATE TABLE IF NOT EXISTS agg_corr_sets (
 
 CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
 
+-- Parallel aggregation run lock (Access AggrStop / ToBeAggregate)
+CREATE TABLE IF NOT EXISTS agg_run_locks (
+    parent_zid  INTEGER NOT NULL,
+    eid         INTEGER NOT NULL,
+    locked_by   TEXT NOT NULL,
+    locked_at   TEXT NOT NULL,
+    PRIMARY KEY (parent_zid, eid)
+);
+
 -- Quarantine for ReportPackage uploads before accept
 CREATE TABLE IF NOT EXISTS package_inbox (
     id TEXT PRIMARY KEY,

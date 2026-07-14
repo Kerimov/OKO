@@ -30,12 +30,20 @@ import type { OkoDb } from "./oko-db.js";
 import { dateToString } from "./dbValues.js";
 import { randomUUID } from "node:crypto";
 import { exportCatalog } from "./forms.js";
-import { loadInstance, upsertInstance } from "./instances.js";
+import {
+  assertInstanceEditable,
+  loadInstance,
+  normalizeInstanceStatus,
+  upsertInstance,
+} from "./instances.js";
 import { getFormCorrespondence, type FormCorrespondenceDto } from "./saldo.js";
 import type { OkoFormInstance } from "./types.js";
 import { ROOT } from "./paths.js";
 
 export type AggregationColorMode = "full" | CorrespondenceColor;
+
+/** Access AggrStop / ToBeAggregate: one active package aggregation per parent+period. */
+const AGG_LOCK_TTL_MS = 30 * 60 * 1000;
 
 export interface AggListRow {
   id: number;
@@ -95,6 +103,18 @@ export interface RunAggregationOptions {
    * Default = parentZid (сворачивающая по a_tblAgg_List).
    */
   targetZid?: number;
+  /**
+   * Include draft child forms as sources. Default false — only submitted
+   * instances (safer; avoids consolidating unfinished work).
+   */
+  includeDraftSources?: boolean;
+  /**
+   * Allow overwriting a submitted target form. Default false.
+   * Admins/operators must opt in (replaces silent overwrite of locked forms).
+   */
+  overwriteSubmitted?: boolean;
+  /** Actor label for AggrStop lock / audit (username). */
+  lockedBy?: string;
 }
 
 export interface AggFormPreview {
@@ -111,7 +131,11 @@ export interface AggFormPreview {
     | "no-color-spec"
     | "reorg-update-blocked"
     | "no-existing-corr"
+    | "draft-only-sources"
+    | "target-submitted"
     | null;
+  /** Children that only have draft instances (when drafts excluded). */
+  draftChildZids?: number[];
 }
 
 export interface AggregationPreview {
@@ -254,6 +278,13 @@ export async function migrateAggTables(db: OkoDb): Promise<void> {
         UNIQUE(corr_zid)
       );
       CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
+      CREATE TABLE IF NOT EXISTS agg_run_locks (
+        parent_zid INTEGER NOT NULL,
+        eid INTEGER NOT NULL,
+        locked_by TEXT NOT NULL,
+        locked_at TEXT NOT NULL,
+        PRIMARY KEY (parent_zid, eid)
+      );
     `);
     return;
   }
@@ -269,6 +300,13 @@ export async function migrateAggTables(db: OkoDb): Promise<void> {
       UNIQUE(corr_zid)
     );
     CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
+    CREATE TABLE IF NOT EXISTS agg_run_locks (
+      parent_zid INTEGER NOT NULL,
+      eid INTEGER NOT NULL,
+      locked_by TEXT NOT NULL,
+      locked_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (parent_zid, eid)
+    );
   `);
 }
 
@@ -466,17 +504,133 @@ async function latestInstanceForTemplate(
   db: OkoDb,
   zid: number,
   eid: number,
-  templateId: string
+  templateId: string,
+  options?: { includeDraft?: boolean }
 ): Promise<OkoFormInstance | null> {
+  const includeDraft = options?.includeDraft === true;
   const row = (await db
     .prepare(
-      `SELECT instance_id FROM form_instances
-       WHERE zid = ? AND eid = ? AND template_id = ?
-       ORDER BY updated_at DESC LIMIT 1`
+      includeDraft
+        ? `SELECT instance_id FROM form_instances
+           WHERE zid = ? AND eid = ? AND template_id = ?
+           ORDER BY updated_at DESC LIMIT 1`
+        : `SELECT instance_id FROM form_instances
+           WHERE zid = ? AND eid = ? AND template_id = ?
+             AND status = 'submitted'
+           ORDER BY updated_at DESC LIMIT 1`
     )
     .get(zid, eid, templateId)) as { instance_id: string } | undefined;
   if (!row) return null;
   return loadInstance(db, row.instance_id);
+}
+
+async function hasDraftOnlySource(
+  db: OkoDb,
+  zid: number,
+  eid: number,
+  templateId: string
+): Promise<boolean> {
+  const submitted = await latestInstanceForTemplate(db, zid, eid, templateId, {
+    includeDraft: false,
+  });
+  if (submitted) return false;
+  const any = await latestInstanceForTemplate(db, zid, eid, templateId, {
+    includeDraft: true,
+  });
+  return !!any;
+}
+
+export interface AggregationLockInfo {
+  parentZid: number;
+  eid: number;
+  lockedBy: string;
+  lockedAt: string;
+}
+
+/** Access AggrStop: exclusive lock for package aggregation. */
+export async function acquireAggregationLock(
+  db: OkoDb,
+  parentZid: number,
+  eid: number,
+  lockedBy: string
+): Promise<AggregationLockInfo> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const existing = (await db
+    .prepare(
+      `SELECT parent_zid, eid, locked_by, locked_at
+       FROM agg_run_locks WHERE parent_zid = ? AND eid = ?`
+    )
+    .get(parentZid, eid)) as
+    | { parent_zid: number; eid: number; locked_by: string; locked_at: string }
+    | undefined;
+
+  if (existing) {
+    const lockedAtMs = Date.parse(String(existing.locked_at));
+    const stale =
+      !Number.isFinite(lockedAtMs) || now.getTime() - lockedAtMs > AGG_LOCK_TTL_MS;
+    const sameActor = existing.locked_by === lockedBy;
+    if (!stale && !sameActor) {
+      const err = new Error(
+        `Свод уже выполняется пользователем «${existing.locked_by}» (с ${existing.locked_at}). Повторите позже.`
+      );
+      (err as Error & { status: number }).status = 409;
+      throw err;
+    }
+    await db
+      .prepare(
+        `UPDATE agg_run_locks SET locked_by = ?, locked_at = ? WHERE parent_zid = ? AND eid = ?`
+      )
+      .run(lockedBy, nowIso, parentZid, eid);
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO agg_run_locks (parent_zid, eid, locked_by, locked_at) VALUES (?, ?, ?, ?)`
+      )
+      .run(parentZid, eid, lockedBy, nowIso);
+  }
+  return { parentZid, eid, lockedBy, lockedAt: nowIso };
+}
+
+export async function releaseAggregationLock(
+  db: OkoDb,
+  parentZid: number,
+  eid: number,
+  lockedBy?: string
+): Promise<void> {
+  if (lockedBy) {
+    await db
+      .prepare(
+        `DELETE FROM agg_run_locks WHERE parent_zid = ? AND eid = ? AND locked_by = ?`
+      )
+      .run(parentZid, eid, lockedBy);
+  } else {
+    await db
+      .prepare(`DELETE FROM agg_run_locks WHERE parent_zid = ? AND eid = ?`)
+      .run(parentZid, eid);
+  }
+}
+
+export async function getAggregationLock(
+  db: OkoDb,
+  parentZid: number,
+  eid: number
+): Promise<AggregationLockInfo | null> {
+  const row = (await db
+    .prepare(
+      `SELECT parent_zid, eid, locked_by, locked_at
+       FROM agg_run_locks WHERE parent_zid = ? AND eid = ?`
+    )
+    .get(parentZid, eid)) as
+    | { parent_zid: number; eid: number; locked_by: string; locked_at: string }
+    | undefined;
+  if (!row) return null;
+  return {
+    parentZid: row.parent_zid,
+    eid: row.eid,
+    lockedBy: row.locked_by,
+    lockedAt: String(row.locked_at),
+  };
 }
 
 /** Sum numeric columns — delegates to @oko/engine (Access AggregateSet / AggrSetSumReorg). */
@@ -561,6 +715,8 @@ export async function previewPackageAggregation(
     colorMode = "full",
     reorg = false,
     updateCorrSet = false,
+    includeDraftSources = false,
+    overwriteSubmitted = false,
   } = options;
   const targetZid = options.targetZid ?? parentZid;
   await loadParentContext(db, parentZid, eid);
@@ -575,16 +731,26 @@ export async function previewPackageAggregation(
   const formFilter =
     options.formIds && options.formIds.length > 0 ? new Set(options.formIds) : null;
   const gateReorg = reorg || updateCorrSet;
+  const sourceOpts = { includeDraft: includeDraftSources };
 
   const forms: AggFormPreview[] = [];
   for (const form of catalog.forms) {
     if (formFilter && !formFilter.has(form.id)) continue;
     const presentChildZids: number[] = [];
     const missingChildZids: number[] = [];
+    const draftChildZids: number[] = [];
     for (const childZid of children) {
-      const inst = await latestInstanceForTemplate(db, childZid, eid, form.id);
+      const inst = await latestInstanceForTemplate(db, childZid, eid, form.id, sourceOpts);
       if (inst) presentChildZids.push(childZid);
-      else missingChildZids.push(childZid);
+      else {
+        missingChildZids.push(childZid);
+        if (
+          !includeDraftSources &&
+          (await hasDraftOnlySource(db, childZid, eid, form.id))
+        ) {
+          draftChildZids.push(childZid);
+        }
+      }
     }
 
     const meta = await loadFormColorMeta(db, form.id);
@@ -599,8 +765,26 @@ export async function previewPackageAggregation(
     ) {
       skippedReason = "reorg-update-blocked";
     } else if (updateCorrSet && colorMode !== "full") {
-      const existing = await latestInstanceForTemplate(db, targetZid, eid, form.id);
+      const existing = await latestInstanceForTemplate(db, targetZid, eid, form.id, {
+        includeDraft: true,
+      });
       if (!existing) skippedReason = "no-existing-corr";
+    }
+
+    if (!skippedReason && presentChildZids.length === 0 && draftChildZids.length > 0) {
+      skippedReason = "draft-only-sources";
+    }
+
+    if (!skippedReason && !overwriteSubmitted) {
+      const existingTarget = await latestInstanceForTemplate(db, targetZid, eid, form.id, {
+        includeDraft: true,
+      });
+      if (
+        existingTarget &&
+        normalizeInstanceStatus(existingTarget.status) === "submitted"
+      ) {
+        skippedReason = "target-submitted";
+      }
     }
 
     const dataReady = requireAllChildren
@@ -618,6 +802,7 @@ export async function previewPackageAggregation(
       willAggregate,
       maskPresent,
       skippedReason,
+      draftChildZids: draftChildZids.length ? draftChildZids : undefined,
     });
   }
 
@@ -654,8 +839,11 @@ export async function runPackageAggregation(
     colorMode = "full",
     reorg = false,
     updateCorrSet = false,
+    includeDraftSources = false,
+    overwriteSubmitted = false,
   } = options;
   const targetZid = options.targetZid ?? parentZid;
+  const lockedBy = options.lockedBy?.trim() || "system";
   const { parent: _parent, period, enterpriseCode } = await loadParentContext(db, parentZid, eid);
   const targetOrg = (await db
     .prepare("SELECT name FROM organizations WHERE zid = ?")
@@ -663,131 +851,151 @@ export async function runPackageAggregation(
   if (!targetOrg) throw new Error("Целевая организация (корректирующий набор) не найдена");
   const children = await resolveChildren(db, parentZid, options.childZids);
   const gateReorg = reorg || updateCorrSet;
+  const sourceOpts = { includeDraft: includeDraftSources };
 
   const catalog = await exportCatalog(db);
   const formFilter =
     options.formIds && options.formIds.length > 0 ? new Set(options.formIds) : null;
 
-  return db.transaction(async (tx) => {
-    const missing: string[] = [];
-    const instanceIds: string[] = [];
-    const formResults: NonNullable<RunAggregationResult["forms"]> = [];
-    let aggregated = 0;
-    let skipped = 0;
+  await acquireAggregationLock(db, parentZid, eid, lockedBy);
+  try {
+    return await db.transaction(async (tx) => {
+      const missing: string[] = [];
+      const instanceIds: string[] = [];
+      const formResults: NonNullable<RunAggregationResult["forms"]> = [];
+      let aggregated = 0;
+      let skipped = 0;
 
-    for (const form of catalog.forms) {
-      if (formFilter && !formFilter.has(form.id)) continue;
+      for (const form of catalog.forms) {
+        if (formFilter && !formFilter.has(form.id)) continue;
 
-      const meta = await loadFormColorMeta(tx, form.id);
-      const mask = resolveColorMask(meta, colorMode);
-      if (colorMode !== "full" && !mask) {
-        missing.push(form.id);
-        skipped++;
-        formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
-        continue;
-      }
-      if (
-        gateReorg &&
-        colorMode !== "full" &&
-        !parseReorgUpdateFlag(meta?.reorgUpdate ?? meta?.reorgUpdate2)
-      ) {
-        skipped++;
-        formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
-        continue;
-      }
-
-      const existing = await latestInstanceForTemplate(tx, targetZid, eid, form.id);
-      if (updateCorrSet && colorMode !== "full" && !existing) {
-        skipped++;
-        formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
-        continue;
-      }
-
-      const sources: OkoFormInstance[] = [];
-      const sourceChildZids: number[] = [];
-      for (const childZid of children) {
-        const inst = await latestInstanceForTemplate(tx, childZid, eid, form.id);
-        if (inst) {
-          sources.push(inst);
-          sourceChildZids.push(childZid);
+        const meta = await loadFormColorMeta(tx, form.id);
+        const mask = resolveColorMask(meta, colorMode);
+        if (colorMode !== "full" && !mask) {
+          missing.push(form.id);
+          skipped++;
+          formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
+          continue;
         }
-      }
+        if (
+          gateReorg &&
+          colorMode !== "full" &&
+          !parseReorgUpdateFlag(meta?.reorgUpdate ?? meta?.reorgUpdate2)
+        ) {
+          skipped++;
+          formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
+          continue;
+        }
 
-      if (sources.length === 0 || (requireAllChildren && sourceChildZids.length < children.length)) {
-        missing.push(form.id);
-        skipped++;
+        const existing = await latestInstanceForTemplate(tx, targetZid, eid, form.id, {
+          includeDraft: true,
+        });
+        if (updateCorrSet && colorMode !== "full" && !existing) {
+          skipped++;
+          formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
+          continue;
+        }
+        if (
+          existing &&
+          normalizeInstanceStatus(existing.status) === "submitted" &&
+          !overwriteSubmitted
+        ) {
+          skipped++;
+          formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
+          continue;
+        }
+        if (existing) {
+          assertInstanceEditable(existing, overwriteSubmitted);
+        }
+
+        const sources: OkoFormInstance[] = [];
+        const sourceChildZids: number[] = [];
+        for (const childZid of children) {
+          const inst = await latestInstanceForTemplate(tx, childZid, eid, form.id, sourceOpts);
+          if (inst) {
+            sources.push(inst);
+            sourceChildZids.push(childZid);
+          }
+        }
+
+        if (sources.length === 0 || (requireAllChildren && sourceChildZids.length < children.length)) {
+          missing.push(form.id);
+          skipped++;
+          formResults.push({
+            formId: form.id,
+            status: "skipped",
+            sourceChildZids,
+          });
+          continue;
+        }
+
+        const summed = sumInstances(
+          form.id,
+          sources,
+          mask,
+          updateCorrSet && existing ? existing.rows : undefined
+        );
+        const now = new Date().toISOString();
+
+        let rows = summed.rows;
+        if (recalc) {
+          rows = await recalcAggregatedRows(tx, form.id, rows);
+        }
+
+        const modeLabel =
+          colorMode === "full"
+            ? "свод"
+            : updateCorrSet
+              ? `обновл-${colorMode}`
+              : reorg
+                ? `реорг-${colorMode}`
+                : `свод-${colorMode}`;
+
+        const targetName = targetOrg.name;
+        const instance: OkoFormInstance = {
+          ...summed,
+          rows,
+          instanceId: existing?.instanceId ?? randomUUID(),
+          zid: targetZid,
+          eid,
+          status: "draft",
+          displayName: `${form.id} — ${targetName.slice(0, 40)} (${modeLabel})`,
+          meta: {
+            organization: targetName,
+            enterpriseCode,
+            periodStart: dateToString(period.period_start),
+            periodEnd: dateToString(period.period_end),
+            unit: sources[0].meta.unit ?? "тыс.руб.",
+          },
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        await upsertInstance(tx, instance);
+        instanceIds.push(instance.instanceId);
+        aggregated++;
         formResults.push({
           formId: form.id,
-          status: "skipped",
+          status: sourceChildZids.length === children.length ? "ok" : "partial",
           sourceChildZids,
+          instanceId: instance.instanceId,
         });
-        continue;
       }
 
-      const summed = sumInstances(
-        form.id,
-        sources,
-        mask,
-        updateCorrSet && existing ? existing.rows : undefined
-      );
-      const now = new Date().toISOString();
-
-      let rows = summed.rows;
-      if (recalc) {
-        rows = await recalcAggregatedRows(tx, form.id, rows);
-      }
-
-      const modeLabel =
-        colorMode === "full"
-          ? "свод"
-          : updateCorrSet
-            ? `обновл-${colorMode}`
-            : reorg
-              ? `реорг-${colorMode}`
-              : `свод-${colorMode}`;
-
-      const targetName = targetOrg.name;
-      const instance: OkoFormInstance = {
-        ...summed,
-        rows,
-        instanceId: existing?.instanceId ?? randomUUID(),
-        zid: targetZid,
+      return {
+        parentZid,
         eid,
-        status: "draft",
-        displayName: `${form.id} — ${targetName.slice(0, 40)} (${modeLabel})`,
-        meta: {
-          organization: targetName,
-          enterpriseCode,
-          periodStart: dateToString(period.period_start),
-          periodEnd: dateToString(period.period_end),
-          unit: sources[0].meta.unit ?? "тыс.руб.",
-        },
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
+        children,
+        aggregated,
+        skipped,
+        missing,
+        instanceIds,
+        forms: formResults,
+        targetZid,
       };
-      await upsertInstance(tx, instance);
-      instanceIds.push(instance.instanceId);
-      aggregated++;
-      formResults.push({
-        formId: form.id,
-        status: sourceChildZids.length === children.length ? "ok" : "partial",
-        sourceChildZids,
-        instanceId: instance.instanceId,
-      });
-    }
-
-    return {
-      parentZid,
-      eid,
-      children,
-      aggregated,
-      skipped,
-      missing,
-      instanceIds,
-      forms: formResults,
-      targetZid,
-    };
-  });
+    });
+  } finally {
+    await releaseAggregationLock(db, parentZid, eid, lockedBy);
+  }
 }
 
 async function recalcAggregatedRows(
@@ -929,11 +1137,15 @@ export async function createCorrectReorg(
     let formsMirrored = 0;
 
     for (const form of catalog.forms) {
-      const existingCorr = await latestInstanceForTemplate(tx, org.zid, input.eid, form.id);
+      const existingCorr = await latestInstanceForTemplate(tx, org.zid, input.eid, form.id, {
+        includeDraft: true,
+      });
       if (existingCorr) continue;
 
       if (kind === "mirror") {
-        const src = await latestInstanceForTemplate(tx, input.parentZid, input.eid, form.id);
+        const src = await latestInstanceForTemplate(tx, input.parentZid, input.eid, form.id, {
+          includeDraft: true,
+        });
         if (src) {
           const clone: OkoFormInstance = {
             ...src,
@@ -1041,10 +1253,14 @@ export async function validatePackageAccountRows(
     ? options.forms
     : ([...ACC_FORM_IDS] as AccFormId[]);
 
-  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID);
+  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID, {
+    includeDraft: true,
+  });
   const forms: Array<{ formId: AccFormId; accRows: OkoFormInstance["rows"] }> = [];
   for (const formId of formIds) {
-    const inst = await latestInstanceForTemplate(db, zid, options.eid, formId);
+    const inst = await latestInstanceForTemplate(db, zid, options.eid, formId, {
+      includeDraft: true,
+    });
     forms.push({ formId, accRows: inst?.rows ?? [] });
   }
 
@@ -1076,8 +1292,12 @@ export async function checkPackageRelationsAccRows(
   options: { parentZid: number; eid: number; targetZid?: number; tolerance?: number }
 ): Promise<RelationsAccRowsResult & { zid: number; eid: number }> {
   const zid = options.targetZid ?? options.parentZid;
-  const acc = await latestInstanceForTemplate(db, zid, options.eid, FILL_BALANCE_SOURCE_FORM);
-  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID);
+  const acc = await latestInstanceForTemplate(db, zid, options.eid, FILL_BALANCE_SOURCE_FORM, {
+    includeDraft: true,
+  });
+  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID, {
+    includeDraft: true,
+  });
   const result = checkRelationsAccRows({
     accRows: acc?.rows ?? [],
     balRows: bal?.rows ?? [],
@@ -1095,11 +1315,16 @@ export async function fillPackageBalanceRows(
     eid: number;
     targetZid?: number;
     mode?: "ifEmpty" | "overwrite";
+    overwriteSubmitted?: boolean;
   }
 ): Promise<FillBalanceRowsResult & { zid: number; eid: number; instanceId?: string }> {
   const zid = options.targetZid ?? options.parentZid;
-  const acc = await latestInstanceForTemplate(db, zid, options.eid, FILL_BALANCE_SOURCE_FORM);
-  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID);
+  const acc = await latestInstanceForTemplate(db, zid, options.eid, FILL_BALANCE_SOURCE_FORM, {
+    includeDraft: true,
+  });
+  const bal = await latestInstanceForTemplate(db, zid, options.eid, BALANCE_FORM_ID, {
+    includeDraft: true,
+  });
   if (!bal) {
     return {
       ok: false,
@@ -1113,6 +1338,8 @@ export async function fillPackageBalanceRows(
       eid: options.eid,
     };
   }
+
+  assertInstanceEditable(bal, options.overwriteSubmitted === true);
 
   const filled = fillBalanceRows({
     accRows: acc?.rows ?? [],

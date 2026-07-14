@@ -294,6 +294,15 @@ CREATE TABLE IF NOT EXISTS agg_corr_sets (
 
 CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
 
+-- Parallel aggregation run lock (Access AggrStop / ToBeAggregate)
+CREATE TABLE IF NOT EXISTS agg_run_locks (
+    parent_zid  INTEGER NOT NULL,
+    eid         INTEGER NOT NULL,
+    locked_by   TEXT NOT NULL,
+    locked_at   TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (parent_zid, eid)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
