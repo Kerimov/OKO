@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   createSaldoRule,
   deleteSaldoRule,
@@ -50,7 +51,10 @@ const EMPTY_CORR: FormCorrespondenceItem = {
 
 export function SaldoEditorPage() {
   const backend = isBackendMode();
-  const [tab, setTab] = useState<Tab>("rules");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() =>
+    searchParams.get("tab") === "correspondence" ? "correspondence" : "rules"
+  );
   const [stats, setStats] = useState<{
     total: number;
     typeT: number;
@@ -60,7 +64,7 @@ export function SaldoEditorPage() {
   const [items, setItems] = useState<SaldoRule[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [formFilter, setFormFilter] = useState("");
   const [saldoType, setSaldoType] = useState<"" | "t" | "s" | "g">("");
   const [selected, setSelected] = useState<SaldoRule | null>(null);
@@ -105,21 +109,41 @@ export function SaldoEditorPage() {
     try {
       const data = await loadFormCorrespondence();
       setCorrItems(data.forms);
-      if (!corrSelected && data.forms.length) {
-        setCorrSelected(data.forms[0]);
-        setCorrDraft({ ...data.forms[0] });
+      const wantId = searchParams.get("formId");
+      const pick =
+        (wantId ? data.forms.find((f) => f.formId === wantId) : undefined) ??
+        data.forms[0] ??
+        null;
+      if (pick) {
+        setCorrSelected(pick);
+        setCorrDraft({ ...pick });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
-  }, [backend, corrSelected]);
+  }, [backend, searchParams]);
 
   useEffect(() => {
     if (tab === "rules") loadRulesPage();
-    else loadCorrespondence();
+    else void loadCorrespondence();
   }, [tab, loadRulesPage, loadCorrespondence]);
+
+  // Deep-link field focus: ?field=saldo_green
+  useEffect(() => {
+    if (tab !== "correspondence") return;
+    const field = searchParams.get("field");
+    if (!field) return;
+    const id = `corr-field-${field.replace(/_/g, "-")}`;
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        el.focus();
+      }
+    }
+  }, [tab, searchParams, corrDraft.formId]);
 
   const selectRule = (rule: SaldoRule) => {
     setSelected(rule);
@@ -542,6 +566,7 @@ export function SaldoEditorPage() {
             <label>
               Жёлтый — предыдущий период
               <textarea
+                id="corr-field-saldo-yellow"
                 rows={3}
                 value={corrDraft.saldoYellow ?? ""}
                 onChange={(e) =>
@@ -554,6 +579,7 @@ export function SaldoEditorPage() {
             <label>
               Красный — аналогичный период прошлого года
               <textarea
+                id="corr-field-saldo-red"
                 rows={3}
                 value={corrDraft.saldoRed ?? ""}
                 onChange={(e) => setCorrDraft({ ...corrDraft, saldoRed: e.target.value || null })}
@@ -564,6 +590,7 @@ export function SaldoEditorPage() {
             <label>
               Синий (свод / сальдо)
               <textarea
+                id="corr-field-saldo-blue"
                 rows={3}
                 value={corrDraft.saldoBlue ?? ""}
                 onChange={(e) => setCorrDraft({ ...corrDraft, saldoBlue: e.target.value || null })}
@@ -573,6 +600,7 @@ export function SaldoEditorPage() {
             <label>
               Зелёный (свод / реорганизация)
               <textarea
+                id="corr-field-saldo-green"
                 rows={3}
                 value={corrDraft.saldoGreen ?? ""}
                 onChange={(e) => setCorrDraft({ ...corrDraft, saldoGreen: e.target.value || null })}
@@ -582,6 +610,7 @@ export function SaldoEditorPage() {
             <label>
               YellowCorr
               <textarea
+                id="corr-field-saldo-yellow-corr"
                 rows={2}
                 value={corrDraft.saldoYellowCorr ?? ""}
                 onChange={(e) =>
@@ -594,6 +623,7 @@ export function SaldoEditorPage() {
             <label>
               RedCorr
               <textarea
+                id="corr-field-saldo-red-corr"
                 rows={2}
                 value={corrDraft.saldoRedCorr ?? ""}
                 onChange={(e) =>
@@ -605,6 +635,7 @@ export function SaldoEditorPage() {
             <label>
               BlueCorr
               <textarea
+                id="corr-field-saldo-blue-corr"
                 rows={2}
                 value={corrDraft.saldoBlueCorr ?? ""}
                 onChange={(e) =>

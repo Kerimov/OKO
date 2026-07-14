@@ -1,15 +1,25 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { FormColumn, KontrAgent, RashThresholds, RowData } from "../types";
 import type { RashCellSlot } from "../engine/rashEngine";
 import {
   defaultKontrShowFilter,
   filterKontrByShow,
+  kontrInsertIndex,
   kontrShowOptionsForRule,
   rashSlotKey,
   rashSlotVisible,
 } from "../engine/rashEngine";
 import { cellErrorKey } from "../engine/cellErrors";
 import { KontrInput } from "./KontrInput";
+import {
+  isSpreadsheetGridEnabled,
+  SpreadsheetFormTable,
+} from "./SpreadsheetFormTable";
+import { isUniverBackendEnabled } from "./spreadsheetFlags";
+
+const UniverFormHost = lazy(() =>
+  import("./UniverFormHost").then((m) => ({ default: m.UniverFormHost }))
+);
 
 export interface CellFocusInfo {
   rowIndex: number;
@@ -37,7 +47,10 @@ interface Props {
   columns: FormColumn[];
   rows: RowData[];
   onChange: (rows: RowData[]) => void;
+  formId?: string;
   allowAddRows?: boolean;
+  rowKinds?: Array<"data" | "header" | "total" | "section" | "hidden" | null | undefined>;
+  cellFormulas?: Map<string, string>;
   kontrMode?: boolean;
   kontrAgents?: KontrAgent[];
   kontrRefA1Name?: string | null;
@@ -60,9 +73,47 @@ interface Props {
   onRashOpen?: (slot: RashCellSlot, rowIndex: number) => void;
   /** Ячейки, заполняемые только из расшифровки (t_ras). */
   rashReadonlyCells?: Set<string>;
+  designerMode?: boolean;
+  onFormulaCommit?: (info: {
+    rowIndex: number;
+    columnKey: string;
+    formula: string;
+  }) => void;
+  onSelectionChange?: (info: {
+    rowIndex: number;
+    columnKey: string;
+    rowNo: string;
+  } | null) => void;
 }
 
-export function FormTable({
+export function FormTable(props: Props) {
+  const canUseUniver =
+    isUniverBackendEnabled() &&
+    isSpreadsheetGridEnabled() &&
+    !props.kontrMode &&
+    !(props.rashSlots && props.rashSlots.length > 0);
+
+  if (canUseUniver && props.formId) {
+    return (
+      <Suspense fallback={<div className="muted">Загрузка Univer…</div>}>
+        <UniverFormHost
+          formId={props.formId}
+          columns={props.columns}
+          rows={props.rows}
+          readOnly={props.readOnly || props.designerMode}
+          onChange={props.designerMode ? undefined : props.onChange}
+        />
+      </Suspense>
+    );
+  }
+
+  if (isSpreadsheetGridEnabled()) {
+    return <SpreadsheetFormTable {...props} />;
+  }
+  return <LegacyFormTable {...props} />;
+}
+
+function LegacyFormTable({
   columns,
   rows,
   onChange,
@@ -158,7 +209,14 @@ export function FormTable({
   const addRow = () => {
     const empty: RowData = {};
     for (const col of columns) empty[col.key] = "";
-    onChange([...rows, empty]);
+    if (!kontrMode) {
+      onChange([...rows, empty]);
+      return;
+    }
+    const insertAt = kontrInsertIndex(rows);
+    const next = [...rows];
+    next.splice(insertAt, 0, empty);
+    onChange(next);
   };
 
   const removeRow = (idx: number) => {

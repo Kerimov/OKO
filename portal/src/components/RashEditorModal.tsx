@@ -7,13 +7,16 @@ import type {
   RashRule,
 } from "../types";
 import {
+  addsumInputType,
   defaultKontrShowFilter,
+  effectiveRashFormula,
   filterKontrByShow,
   getAddsumForRule,
   getRashNumericColumns,
   kontrShowOptionsForRule,
   numVal,
   parseRefFilter,
+  parseTotalColumn,
 } from "../engine/rashEngine";
 import {
   refItemLabel,
@@ -58,6 +61,18 @@ function emptyEntry(
   };
 }
 
+function filterModalEntries(
+  entries: FormRashEntry[],
+  ctx: NonNullable<RashEditorModalProps["context"]>
+): FormRashEntry[] {
+  return entries.filter(
+    (e) =>
+      e.parentRowNo === ctx.parentRowNo &&
+      e.rashKod === ctx.rashKod &&
+      (!e.columnKey || !ctx.columnKey || e.columnKey === ctx.columnKey)
+  );
+}
+
 export function RashEditorModal({
   open,
   onClose,
@@ -72,6 +87,8 @@ export function RashEditorModal({
 }: RashEditorModalProps) {
   const [draft, setDraft] = useState<FormRashEntry[]>([]);
   const [showFilter, setShowFilter] = useState("1,2");
+  /** Once true, draft is authoritative (including empty = delete all). */
+  const [seeded, setSeeded] = useState(false);
 
   const showOptions = useMemo(() => {
     if (!context) return [];
@@ -84,9 +101,17 @@ export function RashEditorModal({
   }, [showOptions, showFilter]);
 
   useEffect(() => {
-    if (!context) return;
+    if (!open || !context) {
+      setDraft([]);
+      setSeeded(false);
+      return;
+    }
+    setDraft(filterModalEntries(initialEntries, context));
+    setSeeded(true);
     setShowFilter(defaultKontrShowFilter(context.rule.refA1Name));
-  }, [context?.rashKod, context?.rule.refA1Name]);
+    // Seed only when the modal opens / target cell changes — not on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional seed key
+  }, [open, context?.formId, context?.parentRowNo, context?.rashKod, context?.columnKey]);
 
   const filteredAgents = useMemo(() => {
     if (!context) return kontrAgents;
@@ -97,6 +122,9 @@ export function RashEditorModal({
     if (!context) return [];
     return getRashNumericColumns(context.rule, formColumns, addsum);
   }, [context, formColumns, addsum]);
+
+  const formula = context ? effectiveRashFormula(context.rule) : null;
+  const sumCol = parseTotalColumn(formula) ?? context?.columnKey ?? "";
 
   const attrA2 = context ? parseRefFilter(context.rule.refA2Name) : null;
   const attrA3 = context ? parseRefFilter(context.rule.refA3Name) : null;
@@ -117,38 +145,32 @@ export function RashEditorModal({
     return refOptionsForSpec(rashRefs, context.rule.refA4Name);
   }, [context, rashRefs, attrA4]);
 
-  if (!open || !context) return null;
+  if (!open || !context || !seeded) return null;
 
-  const entries =
-    draft.length > 0
-      ? draft
-      : initialEntries.filter(
-          (e) =>
-            e.parentRowNo === context.parentRowNo &&
-            e.rashKod === context.rashKod &&
-            (!e.columnKey || !context.columnKey || e.columnKey === context.columnKey)
-        );
-
-  const working =
-    entries.length > 0
-      ? entries
-      : [emptyEntry(context, 0)];
+  // Ghost row for empty drafts so the user can start typing; remove-all stays [].
+  const showingGhost = draft.length === 0 && !readOnly;
+  const working = showingGhost ? [emptyEntry(context, 0)] : draft;
 
   const setWorking = (next: FormRashEntry[]) => setDraft(next);
 
   const updateLine = (idx: number, patch: Partial<FormRashEntry>) => {
-    const next = working.map((e, i) => (i === idx ? { ...e, ...patch } : e));
+    const base = showingGhost ? [emptyEntry(context, 0)] : draft;
+    const next = base.map((e, i) => (i === idx ? { ...e, ...patch } : e));
     setWorking(next);
   };
 
-  const updateValue = (idx: number, key: string, raw: string) => {
-    const next = working.map((e, i) => {
+  const updateValue = (idx: number, key: string, raw: string, colType: FormColumn["type"]) => {
+    const base = showingGhost ? [emptyEntry(context, 0)] : draft;
+    const next = base.map((e, i) => {
       if (i !== idx) return e;
       const values = { ...e.values };
-      if (raw.trim() === "") delete values[key];
-      else {
+      if (raw.trim() === "") {
+        delete values[key];
+      } else if (colType === "number") {
         const n = parseFloat(raw.replace(",", "."));
         values[key] = Number.isFinite(n) ? n : raw;
+      } else {
+        values[key] = raw;
       }
       return { ...e, values };
     });
@@ -165,22 +187,33 @@ export function RashEditorModal({
   };
 
   const addLine = () => {
-    setWorking([...working, emptyEntry(context, working.length)]);
+    const base = showingGhost ? [] : draft;
+    setWorking([...base, emptyEntry(context, base.length)]);
   };
 
   const removeLine = (idx: number) => {
-    setWorking(working.filter((_, i) => i !== idx));
+    if (showingGhost) {
+      setDraft([]);
+      return;
+    }
+    setWorking(draft.filter((_, i) => i !== idx));
   };
 
-  const sumCol = context.columnKey;
   const total = working.reduce((s, e) => s + numVal(e.values[sumCol]), 0);
 
+  const handleClose = () => {
+    setDraft([]);
+    setSeeded(false);
+    onClose();
+  };
+
   const handleSave = () => {
-    const cleaned = working
+    const cleaned = draft
       .filter((e) => e.kontrName?.trim() || Object.keys(e.values).length > 0)
       .map((e, i) => ({ ...e, lineNo: i }));
     onSave(cleaned);
     setDraft([]);
+    setSeeded(false);
     onClose();
   };
 
@@ -226,8 +259,30 @@ export function RashEditorModal({
     );
   };
 
+  const inputModeForCol = (col: FormColumn): "decimal" | "text" | undefined => {
+    if (col.key.startsWith("_addsum_")) {
+      const sort = Number(col.key.replace("_addsum_", ""));
+      const a = getAddsumForRule(context.rashKod, addsum).find((x) => x.sort === sort);
+      const t = addsumInputType(a?.fldType);
+      if (t === "number") return "decimal";
+      return "text";
+    }
+    return col.type === "number" ? "decimal" : "text";
+  };
+
+  const htmlTypeForCol = (col: FormColumn): string => {
+    if (col.key.startsWith("_addsum_")) {
+      const sort = Number(col.key.replace("_addsum_", ""));
+      const a = getAddsumForRule(context.rashKod, addsum).find((x) => x.sort === sort);
+      const t = addsumInputType(a?.fldType);
+      if (t === "date") return "date";
+      return "text";
+    }
+    return "text";
+  };
+
   return (
-    <div className="rash-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="rash-modal-backdrop" role="presentation" onClick={handleClose}>
       <div
         className="rash-modal"
         role="dialog"
@@ -241,13 +296,13 @@ export function RashEditorModal({
               {context.parentLabel} · строка {context.parentRowNo} · правило №
               {context.rashKod}
             </p>
-            {context.rule.totalFormula && (
+            {formula && (
               <p className="rash-modal-formula">
-                <code>{context.rule.totalFormula}</code>
+                <code>{formula}</code>
               </p>
             )}
           </div>
-          <button type="button" className="btn-icon rash-modal-close" onClick={onClose}>
+          <button type="button" className="btn-icon rash-modal-close" onClick={handleClose}>
             ×
           </button>
         </header>
@@ -255,7 +310,7 @@ export function RashEditorModal({
         <div className="rash-modal-summary">
           <span>
             Итог на форме формируется из суммы расшифровки по гр.{" "}
-            <strong>{context.columnKey}</strong>
+            <strong>{sumCol}</strong>
           </span>
           <span>
             Сумма в подформе: <strong>{total}</strong>
@@ -353,11 +408,11 @@ export function RashEditorModal({
                         String(line.values[c.key] ?? "")
                       ) : (
                         <input
-                          type="text"
-                          inputMode="decimal"
-                          className="num-input"
+                          type={htmlTypeForCol(c)}
+                          inputMode={inputModeForCol(c)}
+                          className={c.type === "number" ? "num-input" : undefined}
                           value={String(line.values[c.key] ?? "")}
-                          onChange={(e) => updateValue(idx, c.key, e.target.value)}
+                          onChange={(e) => updateValue(idx, c.key, e.target.value, c.type)}
                         />
                       )}
                     </td>
@@ -396,7 +451,7 @@ export function RashEditorModal({
         )}
 
         <footer className="rash-modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>
             Отмена
           </button>
           {!readOnly && (

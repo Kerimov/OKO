@@ -116,6 +116,56 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_form_instances_package_tpl
   ON form_instances (zid, eid, template_id)
   WHERE zid IS NOT NULL AND eid IS NOT NULL;
 
+-- Per-cell template metadata (formulas, styles, validation)
+CREATE TABLE IF NOT EXISTS form_cell_definitions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id         TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
+    row_id          TEXT NOT NULL,
+    column_key      TEXT NOT NULL,
+    formula_a1      TEXT,
+    formula_stable  TEXT,
+    readonly        INTEGER DEFAULT 0,
+    style_json      TEXT,
+    validation_json TEXT,
+    number_format   TEXT,
+    help_text       TEXT,
+    UNIQUE(form_id, row_id, column_key)
+);
+
+CREATE TABLE IF NOT EXISTS form_template_revisions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id         TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
+    schema_version  INTEGER NOT NULL,
+    snapshot_json   TEXT NOT NULL,
+    actor           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cell_change_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT NOT NULL,
+    row_no      INTEGER NOT NULL,
+    column_key  TEXT NOT NULL,
+    old_value   TEXT,
+    new_value   TEXT,
+    actor       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recalc_rules (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id         TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    row_no          INTEGER,
+    column_key      TEXT,
+    formula         TEXT,
+    sign            TEXT,
+    source_row      INTEGER,
+    columns         TEXT,
+    source_columns  TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0
+);
+
 -- Validation rules (a_tblchecks)
 CREATE TABLE IF NOT EXISTS check_rules (
     number          INTEGER PRIMARY KEY,

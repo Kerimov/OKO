@@ -119,6 +119,81 @@ export async function saveFormSchema(schema: FormSchema): Promise<FormSchema> {
   return res.json();
 }
 
+export interface FormCellDefinitionDto {
+  formId: string;
+  rowId: string;
+  columnKey: string;
+  formulaA1?: string | null;
+  formulaStable?: string | null;
+  readonly?: boolean;
+  style?: unknown;
+  validation?: unknown;
+  numberFormat?: string | null;
+  helpText?: string | null;
+}
+
+export async function listFormCellDefinitions(
+  formId: string
+): Promise<FormCellDefinitionDto[]> {
+  const res = await apiFetchRaw(
+    `/api/forms/${encodeURIComponent(formId)}/cell-definitions`
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function saveFormCellDefinition(
+  formId: string,
+  body: Omit<FormCellDefinitionDto, "formId">
+): Promise<FormCellDefinitionDto[]> {
+  const res = await apiFetchRaw(
+    `/api/forms/${encodeURIComponent(formId)}/cell-definitions`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function deleteFormCellDefinition(
+  formId: string,
+  rowId: string,
+  columnKey: string
+): Promise<{ deleted: number }> {
+  const q = new URLSearchParams({ rowId, columnKey });
+  const res = await apiFetchRaw(
+    `/api/forms/${encodeURIComponent(formId)}/cell-definitions?${q}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function renameFormColumn(
+  formId: string,
+  fromKey: string,
+  toKey: string
+): Promise<{
+  formId: string;
+  fromKey: string;
+  toKey: string;
+  updated: Record<string, number>;
+}> {
+  const res = await apiFetchRaw(
+    `/api/forms/${encodeURIComponent(formId)}/columns/rename`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromKey, toKey }),
+    }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function reimportFormsFromJson(): Promise<{ reimported: number }> {
   const res = await apiFetchRaw("/api/forms/reimport", { method: "POST" });
   if (!res.ok) throw new Error(await res.text());

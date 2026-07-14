@@ -240,6 +240,21 @@ export async function saveInstance(instance: OkoFormInstance): Promise<void> {
   }
 }
 
+/** Batch cell patch (optimistic revision). Backend only. */
+export async function patchInstanceCells(
+  instanceId: string,
+  cells: Array<{ rowNo: number; columnKey: string; value?: string | number | null }>,
+  expectedRevision?: number
+): Promise<{ revision: number; updated: number }> {
+  if (!useBackend) {
+    throw new Error("patchInstanceCells требует API-сервер");
+  }
+  return apiFetch(`/api/instances/${instanceId}/cells`, {
+    method: "PATCH",
+    body: JSON.stringify({ cells, expectedRevision }),
+  });
+}
+
 /**
  * Persist many instances atomically when API is available (single DB transaction).
  * Offline/local mode updates all localStorage keys in one pass (same process).

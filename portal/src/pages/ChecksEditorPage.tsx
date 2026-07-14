@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   createCheckRule,
   deleteCheckRule,
+  fetchCheckRule,
   fetchChecksPage,
   fetchChecksStats,
   reimportChecksFromJson,
@@ -34,6 +36,7 @@ const EMPTY_RULE: CheckRule = {
 
 export function ChecksEditorPage() {
   const backend = isBackendMode();
+  const [searchParams] = useSearchParams();
   const [stats, setStats] = useState<{
     total: number;
     active: number;
@@ -43,7 +46,7 @@ export function ChecksEditorPage() {
   const [items, setItems] = useState<CheckRule[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? searchParams.get("number") ?? "");
   const [formFilter, setFormFilter] = useState("");
   const [onlyPeriod, setOnlyPeriod] = useState(false);
   const [selected, setSelected] = useState<CheckRule | null>(null);
@@ -82,6 +85,34 @@ export function ChecksEditorPage() {
   useEffect(() => {
     loadPage();
   }, [loadPage]);
+
+  useEffect(() => {
+    const raw = searchParams.get("number") ?? searchParams.get("q");
+    if (!raw || !backend) return;
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return;
+    if (selected?.number === num) return;
+    const fromList = items.find((r) => r.number === num);
+    if (fromList) {
+      setSelected(fromList);
+      setDraft({ ...fromList });
+      setTestResult("");
+      return;
+    }
+    let cancelled = false;
+    void fetchCheckRule(num)
+      .then((rule) => {
+        if (cancelled || !rule) return;
+        const r = rule as CheckRule;
+        setSelected(r);
+        setDraft({ ...r });
+        setTestResult("");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, items, searchParams, selected?.number]);
 
   const selectRule = (rule: CheckRule) => {
     setSelected(rule);

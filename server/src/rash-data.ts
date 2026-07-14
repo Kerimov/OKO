@@ -113,37 +113,48 @@ export async function saveRashEntries(
   formId: string,
   entries: RashEntryDto[]
 ): Promise<RashEntryDto[]> {
-  await db
-    .prepare("DELETE FROM form_rash_entries WHERE instance_id = ? AND form_id = ?")
-    .run(instanceId, formId);
+  await db.transaction(async (tx) => {
+    await tx
+      .prepare("DELETE FROM form_rash_entries WHERE instance_id = ? AND form_id = ?")
+      .run(instanceId, formId);
 
-  const insert = db.prepare(
-    `INSERT INTO form_rash_entries (
-      instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
-      kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4, values_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const valuesJson = JSON.stringify(e.values ?? {});
-    await insert.run(
-      instanceId,
-      formId,
-      e.parentRowNo,
-      e.columnKey ?? null,
-      e.rashKod,
-      e.lineNo ?? i,
-      e.kontrId ?? null,
-      e.kontrName ?? null,
-      e.inn ?? null,
-      e.kpp ?? null,
-      e.attrA2 ?? null,
-      e.attrA3 ?? null,
-      e.attrA4 ?? null,
-      valuesJson
+    const insert = tx.prepare(
+      `INSERT INTO form_rash_entries (
+        instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
+        kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4, values_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-  }
+
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const valuesJson = JSON.stringify(e.values ?? {});
+      await insert.run(
+        instanceId,
+        formId,
+        e.parentRowNo,
+        e.columnKey ?? null,
+        e.rashKod,
+        e.lineNo ?? i,
+        e.kontrId ?? null,
+        e.kontrName ?? null,
+        e.inn ?? null,
+        e.kpp ?? null,
+        e.attrA2 ?? null,
+        e.attrA3 ?? null,
+        e.attrA4 ?? null,
+        valuesJson
+      );
+    }
+
+    const now = new Date().toISOString();
+    await tx
+      .prepare(
+        `UPDATE form_instances
+         SET revision = COALESCE(revision, 1) + 1, updated_at = ?
+         WHERE instance_id = ?`
+      )
+      .run(now, instanceId);
+  });
   return loadRashEntries(db, instanceId, formId);
 }
 

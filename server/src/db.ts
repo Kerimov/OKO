@@ -38,6 +38,7 @@ import {
 } from "./aggregation.js";
 import { migratePackageInbox } from "./packageInbox.js";
 import { migrateMethodologyHistory } from "./methodology.js";
+import { migrateSpreadsheetTables, seedRecalcRulesFromJson } from "./spreadsheet.js";
 import { runNumberedMigrations } from "./migrations/runner.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
 import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
@@ -60,7 +61,13 @@ async function initSchema(database: OkoDb): Promise<void> {
   await migrateAggTables(database);
   await migratePackageInbox(database);
   await migrateMethodologyHistory(database);
+  await migrateSpreadsheetTables(database);
   await runNumberedMigrations(database);
+
+  const seededRecalc = await seedRecalcRulesFromJson(database);
+  if (seededRecalc > 0) {
+    console.log(`Seeded ${seededRecalc} recalc rules from recalc-rules.json`);
+  }
 
   const seededAggOrgs = await seedOrganizationsFromAggCodes(database);
   if (seededAggOrgs > 0) {

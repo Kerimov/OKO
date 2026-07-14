@@ -1,5 +1,6 @@
 import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
+import { loadRashEntries, saveRashEntries } from "./rash-data.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -16,6 +17,14 @@ export async function migrateInstanceTables(db: OkoDb): Promise<void> {
   }
   if (!(await db.columnExists("form_instances", "status"))) {
     await db.exec("ALTER TABLE form_instances ADD COLUMN status TEXT DEFAULT 'draft'");
+  }
+  if (!(await db.columnExists("form_instances", "template_schema_version"))) {
+    await db.exec(
+      "ALTER TABLE form_instances ADD COLUMN template_schema_version INTEGER DEFAULT 1"
+    );
+  }
+  if (!(await db.columnExists("form_instances", "revision"))) {
+    await db.exec("ALTER TABLE form_instances ADD COLUMN revision INTEGER DEFAULT 1");
   }
 }
 
@@ -168,7 +177,7 @@ export async function loadInstanceFromDb(
     .prepare(
       `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
               period_start, period_end, unit, enterprise_code, signatures_json, status,
-              created_at, updated_at
+              revision, template_schema_version, created_at, updated_at
        FROM form_instances WHERE instance_id = ?`
     )
     .get(instanceId)) as
@@ -186,6 +195,8 @@ export async function loadInstanceFromDb(
         enterprise_code: string | null;
         signatures_json: string;
         status: string | null;
+        revision: number | null;
+        template_schema_version: number | null;
         created_at: string;
         updated_at: string;
       }
@@ -214,6 +225,8 @@ export async function loadInstanceFromDb(
     signatures = {};
   }
 
+  const rashEntries = await loadRashEntries(db, instanceId);
+
   return {
     instanceId: header.instance_id,
     templateId: header.template_id,
@@ -222,6 +235,8 @@ export async function loadInstanceFromDb(
     zid: intOrNull(header.zid),
     eid: intOrNull(header.eid),
     status: normalizeInstanceStatus(header.status),
+    revision: Number(header.revision ?? 1),
+    templateSchemaVersion: Number(header.template_schema_version ?? 1),
     meta: {
       organization: header.organization ?? "",
       enterpriseCode: header.enterprise_code ?? "1@1",
@@ -231,6 +246,7 @@ export async function loadInstanceFromDb(
     },
     rows: rowsFromCells(cells),
     signatures,
+    rashEntries: rashEntries.length > 0 ? rashEntries : undefined,
     createdAt: header.created_at,
     updatedAt: header.updated_at,
   };
@@ -346,8 +362,125 @@ export function assertInstanceEditable(inst: OkoFormInstance, isAdmin: boolean):
   }
 }
 
+export interface CellPatchInput {
+  rowNo: number;
+  columnKey: string;
+  value?: string | number | null;
+}
+
+/**
+ * Batch upsert cells without full DELETE/INSERT of the instance.
+ * Bumps revision and writes cell_change_log entries.
+ */
+export async function patchInstanceCells(
+  db: OkoDb,
+  instanceId: string,
+  patches: CellPatchInput[],
+  actor?: string,
+  expectedRevision?: number
+): Promise<{ revision: number; updated: number }> {
+  if (patches.length > 5000) {
+    const err = new Error("Too many cells in one patch (max 5000)");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const header = (await db
+    .prepare(
+      `SELECT revision, status FROM form_instances WHERE instance_id = ?`
+    )
+    .get(instanceId)) as { revision: number | null; status: string | null } | undefined;
+  if (!header) {
+    const err = new Error("Not found");
+    (err as Error & { status: number }).status = 404;
+    throw err;
+  }
+
+  const currentRev = Number(header.revision ?? 1);
+  if (expectedRevision != null && expectedRevision !== currentRev) {
+    const err = new Error(`Revision conflict: expected ${expectedRevision}, got ${currentRev}`);
+    (err as Error & { status: number }).status = 409;
+    throw err;
+  }
+
+  const now = new Date().toISOString();
+  let updated = 0;
+
+  await db.transaction(async (tx) => {
+    const upsert = tx.prepare(
+      `INSERT INTO form_cell_values (instance_id, row_no, row_name, column_key, value_num, value_text)
+       VALUES (?, ?, NULL, ?, ?, ?)
+       ON CONFLICT(instance_id, row_no, column_key) DO UPDATE SET
+         value_num = excluded.value_num,
+         value_text = excluded.value_text`
+    );
+    const del = tx.prepare(
+      `DELETE FROM form_cell_values WHERE instance_id = ? AND row_no = ? AND column_key = ?`
+    );
+    const log = tx.prepare(
+      `INSERT INTO cell_change_log (instance_id, row_no, column_key, old_value, new_value, actor)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    const getOld = tx.prepare(
+      `SELECT value_num, value_text FROM form_cell_values
+       WHERE instance_id = ? AND row_no = ? AND column_key = ?`
+    );
+
+    for (const p of patches) {
+      const old = (await getOld.get(instanceId, p.rowNo, p.columnKey)) as
+        | { value_num: number | null; value_text: string | null }
+        | undefined;
+      const oldStr =
+        old == null
+          ? null
+          : old.value_num != null
+            ? String(old.value_num)
+            : old.value_text;
+      const newStr =
+        p.value === undefined || p.value === null || p.value === ""
+          ? null
+          : String(p.value);
+
+      if (newStr === null) {
+        await del.run(instanceId, p.rowNo, p.columnKey);
+      } else {
+        const parts = cellValueParts(p.value as string | number);
+        await upsert.run(
+          instanceId,
+          p.rowNo,
+          p.columnKey,
+          parts.value_num,
+          parts.value_text
+        );
+      }
+      await log.run(instanceId, p.rowNo, p.columnKey, oldStr, newStr, actor ?? null);
+      updated++;
+    }
+
+    await tx
+      .prepare(
+        `UPDATE form_instances SET revision = ?, updated_at = ? WHERE instance_id = ?`
+      )
+      .run(currentRev + 1, now, instanceId);
+  });
+
+  return { revision: currentRev + 1, updated };
+}
+
 export async function upsertInstance(db: OkoDb, inst: OkoFormInstance): Promise<void> {
   await saveInstanceCells(db, inst);
+  // Persist t_ras detail when present on the payload (packages / local saves).
+  // Dedicated PUT /rash remains the primary editor path; undefined means leave as-is.
+  if (inst.rashEntries !== undefined) {
+    const formId = inst.templateId;
+    const forForm = inst.rashEntries.filter((e) => !e.formId || e.formId === formId);
+    await saveRashEntries(
+      db,
+      inst.instanceId,
+      formId,
+      forForm.map((e) => ({ ...e, formId: e.formId || formId }))
+    );
+  }
   await db
     .prepare(
       `INSERT INTO portal_instances (

@@ -1,21 +1,6 @@
 import {
-  BadRequestException,
-  Body,
-  ConflictException,
-  Controller,
-  Get,
-  HttpCode,
-  InternalServerErrorException,
-  NotFoundException,
-  Param,
-  Post,
-  Put,
-  Query,
-  UseGuards,
-} from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import {
   createFormSchema,
+  cascadeRenameColumnKey,
   exportCatalog,
   getFormDependencies,
   loadFormSchema,
@@ -32,6 +17,29 @@ import {
 } from "../../../server/src/forms.js";
 import { getDb } from "../../../server/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import {
+  deleteCellDefinition,
+  listCellDefinitions,
+  upsertCellDefinition,
+  saveTemplateRevision,
+} from "../../../server/src/spreadsheet.js";
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  InternalServerErrorException,
+  NotFoundException,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 @ApiTags("forms")
 @ApiBearerAuth()
@@ -160,13 +168,104 @@ export class FormsController {
     return loadFormSchema(db, id);
   }
 
+  @Get(":id/cell-definitions")
+  @ApiOperation({ summary: "Определения ячеек шаблона (формулы/стили)" })
+  async cellDefinitions(@Param("id") id: string) {
+    if (!(await loadFormSchema(await getDb(), id))) {
+      throw new NotFoundException({ error: "Form not found" });
+    }
+    return listCellDefinitions(await getDb(), id);
+  }
+
+  @Put(":id/cell-definitions")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Сохранить определение ячейки" })
+  async putCellDefinition(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      rowId: string;
+      columnKey: string;
+      formulaA1?: string | null;
+      formulaStable?: string | null;
+      readonly?: boolean;
+      style?: unknown;
+      validation?: unknown;
+      numberFormat?: string | null;
+      helpText?: string | null;
+    }
+  ) {
+    if (!(await loadFormSchema(await getDb(), id))) {
+      throw new NotFoundException({ error: "Form not found" });
+    }
+    if (!body?.rowId || !body?.columnKey) {
+      throw new BadRequestException({ error: "rowId and columnKey required" });
+    }
+    return upsertCellDefinition(await getDb(), { formId: id, ...body });
+  }
+
+  @Delete(":id/cell-definitions")
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Удалить определение ячейки" })
+  @ApiQuery({ name: "rowId", required: true })
+  @ApiQuery({ name: "columnKey", required: true })
+  async removeCellDefinition(
+    @Param("id") id: string,
+    @Query("rowId") rowId?: string,
+    @Query("columnKey") columnKey?: string
+  ) {
+    if (!(await loadFormSchema(await getDb(), id))) {
+      throw new NotFoundException({ error: "Form not found" });
+    }
+    if (!rowId?.trim() || !columnKey?.trim()) {
+      throw new BadRequestException({ error: "rowId and columnKey required" });
+    }
+    return deleteCellDefinition(await getDb(), id, rowId.trim(), columnKey.trim());
+  }
+
+  @Post(":id/columns/rename")
+  @UseGuards(AdminGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: "Переименовать графу с каскадом ссылок (admin)" })
+  async renameColumn(
+    @Param("id") id: string,
+    @Body() body: { fromKey?: string; toKey?: string }
+  ) {
+    if (!body?.fromKey?.trim() || !body?.toKey?.trim()) {
+      throw new BadRequestException({ error: "fromKey and toKey required" });
+    }
+    try {
+      return await cascadeRenameColumnKey(
+        await getDb(),
+        id,
+        body.fromKey.trim(),
+        body.toKey.trim()
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "rename failed";
+      if (/not found/i.test(msg)) throw new NotFoundException({ error: msg });
+      if (/already exists|нельзя/i.test(msg)) {
+        throw new ConflictException({ error: msg });
+      }
+      throw new BadRequestException({ error: msg });
+    }
+  }
+
   @Put(":id/schema")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить schema целиком (атомарно, admin)" })
   async replaceSchema(@Param("id") id: string, @Body() body: FormSchemaDto) {
     if (body.id !== id) throw new BadRequestException({ error: "id mismatch" });
     try {
-      return await saveFormSchemaAtomic(await getDb(), body);
+      const saved = await saveFormSchemaAtomic(await getDb(), body);
+      await saveTemplateRevision(
+        await getDb(),
+        id,
+        saved.schemaVersion ?? 1,
+        saved,
+        "admin"
+      );
+      return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "save failed";
       if (/not found/i.test(msg)) throw new NotFoundException({ error: msg });

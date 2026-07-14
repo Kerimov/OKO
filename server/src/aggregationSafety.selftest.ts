@@ -14,13 +14,18 @@ function stubInstance(status: string): OkoFormInstance {
     templateId: "N01_1",
     templateTitle: "Balance",
     displayName: "test",
-    organization: "org",
-    periodStart: "2024-01-01",
-    periodEnd: "2024-12-31",
+    meta: {
+      organization: "org",
+      enterpriseCode: "1@1",
+      periodStart: "2024-01-01",
+      periodEnd: "2024-12-31",
+      unit: "тыс.руб.",
+    },
+    rows: [],
+    signatures: {},
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
     status: status as OkoFormInstance["status"],
-    sheets: [],
   };
 }
 

@@ -1,8 +1,12 @@
 import type { OkoDb } from "../oko-db.js";
 import { uniquePackageTemplateMigration } from "./001_unique_package_template.js";
+import { spreadsheetCellModelMigration } from "./002_spreadsheet_cell_model.js";
 import type { Migration } from "./types.js";
 
-export const NUMBERED_MIGRATIONS: Migration[] = [uniquePackageTemplateMigration];
+export const NUMBERED_MIGRATIONS: Migration[] = [
+  uniquePackageTemplateMigration,
+  spreadsheetCellModelMigration,
+];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {
   await db.exec(`

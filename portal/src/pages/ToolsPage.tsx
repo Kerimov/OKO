@@ -73,6 +73,7 @@ import {
   listMethodologyHistory,
   rollbackMethodology,
   snapshotMethodology,
+  dryRunMethodology,
   type MethodologyRelease,
 } from "../engine/packageRules";
 import { prepareRecalcPackage, type RecalcPackageItem } from "../engine/recalcEngine";
@@ -1467,6 +1468,21 @@ export function ToolsPage() {
                   setStatus(
                     e instanceof Error ? e.message : "Ошибка снапшота методологии"
                   );
+                }
+              })();
+            },
+            onDryRun: () => {
+              void (async () => {
+                try {
+                  const r = await dryRunMethodology({});
+                  const changed = r.diff.filter((d) => !d.same).map((d) => d.key);
+                  setStatus(
+                    r.wouldChange
+                      ? `Dry-run: изменятся ${changed.join(", ") || "ключи"}`
+                      : "Dry-run: checksums совпадают с активным релизом"
+                  );
+                } catch (e) {
+                  setStatus(e instanceof Error ? e.message : "Ошибка dry-run");
                 }
               })();
             },

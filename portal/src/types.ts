@@ -141,6 +141,9 @@ export interface OkoFormInstance {
   rashEntries?: FormRashEntry[];
   createdAt: string;
   updatedAt: string;
+  /** Optimistic concurrency for PATCH /cells (API). */
+  revision?: number;
+  templateSchemaVersion?: number;
 }
 
 export interface InstanceSummary {

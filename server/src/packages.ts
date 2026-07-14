@@ -3,6 +3,7 @@ import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
 import { deleteInstanceFromDb, saveInstanceCells } from "./instances.js";
+import { saveRashEntries } from "./rash-data.js";
 import type { OkoFormInstance } from "./types.js";
 
 export interface OrganizationDto {
@@ -871,6 +872,18 @@ export async function importReportPackage(
         };
 
         await saveInstanceCells(tx, inst);
+        if (raw.rashEntries !== undefined) {
+          const formId = inst.templateId;
+          const forForm = (raw.rashEntries ?? []).filter(
+            (e) => !e.formId || e.formId === formId
+          );
+          await saveRashEntries(
+            tx,
+            inst.instanceId,
+            formId,
+            forForm.map((e) => ({ ...e, formId: e.formId || formId }))
+          );
+        }
         if (existingId) result.updated++;
         else result.created++;
       } catch (e) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   deleteRashRule,
   fetchNextRashKod,
@@ -103,6 +104,7 @@ function applyRefsToRule(
 export function RashEditorPage() {
   const backend = isBackendMode();
   const adminOk = useAdminAccess().ok;
+  const [searchParams] = useSearchParams();
   const [stats, setStats] = useState<{
     total: number;
     addsum: number;
@@ -112,7 +114,9 @@ export function RashEditorPage() {
   const [items, setItems] = useState<RashRule[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(
+    () => searchParams.get("kod") ?? searchParams.get("q") ?? ""
+  );
   const [formFilter, setFormFilter] = useState("");
   const [selected, setSelected] = useState<RashRule | null>(null);
   const [draft, setDraft] = useState<RashRule>(EMPTY_RULE);
@@ -172,6 +176,29 @@ export function RashEditorPage() {
   useEffect(() => {
     void loadPage();
   }, [loadPage]);
+
+  useEffect(() => {
+    const raw = searchParams.get("kod") ?? searchParams.get("q");
+    if (!raw || !backend) return;
+    const kod = Number(raw);
+    if (!Number.isFinite(kod) || kod < 0) return;
+    if (selected?.kod === kod) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const fromList = items.find((r) => r.kod === kod);
+        const rule = fromList ?? (await fetchRashRule(kod));
+        if (!cancelled && rule) await loadDetail({ ...EMPTY_RULE, ...rule });
+      } catch {
+        /* ignore missing kod */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // loadDetail is stable enough via selected guard; avoid re-open loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backend, items, searchParams, selected?.kod]);
 
   useEffect(() => {
     void loadCatalog()

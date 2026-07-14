@@ -442,6 +442,22 @@ export function FormPage() {
 
   const handleSubmitForm = async () => {
     if (!instance || instanceStatus === "submitted") return;
+    if (rashMode && schema) {
+      try {
+        const issues = await window.oko.runRashChecks(schema.id, rows, rashEntries);
+        const errors = issues.filter((i) => i.severity === "error");
+        if (errors.length > 0) {
+          setRashIssues(issues);
+          setStatus(
+            `Сдача заблокирована: ${errors.length} ошибок расшифровки. Исправьте и повторите.`
+          );
+          return;
+        }
+      } catch {
+        setError("Не удалось проверить расшифровки перед сдачей");
+        return;
+      }
+    }
     if (
       !confirm(
         "Отметить форму готовой? После этого редактирование будет недоступно (координатор может вернуть в черновик)."

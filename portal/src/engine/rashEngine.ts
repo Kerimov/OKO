@@ -12,6 +12,7 @@ import type {
 import { isKontrForm } from "../constants";
 import { loadRashRules } from "../api";
 import { numVal, rashThresholdLevel } from "@oko/engine";
+import { evalColumnLetterFormula } from "@oko/spreadsheet";
 import {
   rashKodForCell,
   rowMeta,
@@ -217,9 +218,17 @@ export function parseFormulaColumns(formula: string | null | undefined): string[
   return [...cols];
 }
 
+/** True if string looks like Access total formula `M=B+C+D-…`. */
+export function looksLikeRashTotalFormula(raw: string | null | undefined): boolean {
+  if (!raw?.trim()) return false;
+  const compact = raw.replace(/\s/g, "");
+  return /^[A-ZА-Я]=[A-ZА-Я0-9+\-*/.()]+$/i.test(compact);
+}
+
 /** totalFormula или формула из note (напр. «M=B+C+D» в note правила 51112). */
 export function effectiveRashFormula(rule: RashRule): string | null {
-  if (rule.totalFormula?.trim()) return rule.totalFormula.trim();
+  const fromField = rule.totalFormula?.trim();
+  if (fromField && looksLikeRashTotalFormula(fromField)) return fromField;
   const note = rule.note?.trim();
   if (!note) return null;
   const compact = note.replace(/\s/g, "");
@@ -227,7 +236,11 @@ export function effectiveRashFormula(rule: RashRule): string | null {
   return m ? `${m[1].toUpperCase()}=${m[2]}` : null;
 }
 
-/** Parse sp_rash ref attribute: "Контрагент/1, 2" → { kind, allowedTypes } */
+/**
+ * Parse sp_rash ref attribute: "Контрагент/1, 2" → { kind, allowedTypes }.
+ * For classifiers (Страна/RU,DE or Регион/31,32) all tokens go to allowedCodes
+ * so numeric kods are not lost as orgType filters.
+ */
 export function parseRefFilter(spec: string | null | undefined): {
   kind: string;
   allowedTypes: number[];
@@ -239,12 +252,19 @@ export function parseRefFilter(spec: string | null | undefined): {
   const rest = slash >= 0 ? spec.slice(slash + 1).trim() : "";
   const allowedTypes: number[] = [];
   const allowedCodes: string[] = [];
+  const isKontr = kind.toLowerCase() === "контрагент";
   if (rest) {
     for (const part of rest.split(/[,;]/)) {
       const p = part.trim();
-      const n = parseInt(p, 10);
-      if (Number.isFinite(n)) allowedTypes.push(n);
-      else if (p) allowedCodes.push(p);
+      if (!p) continue;
+      if (isKontr) {
+        const n = parseInt(p, 10);
+        // Access: 1/2/3 = orgType; larger numbers = OrgForm / special codes.
+        if (Number.isFinite(n) && n >= 1 && n <= 3) allowedTypes.push(n);
+        else allowedCodes.push(p);
+      } else {
+        allowedCodes.push(p);
+      }
     }
   }
   return { kind, allowedTypes, allowedCodes };
@@ -335,20 +355,30 @@ export function getAddsumForRule(kod: number, addsum: RashAddsum[]): RashAddsum[
     .sort((a, b) => a.sort - b.sort);
 }
 
+export type RashAddsumInputType = "number" | "text" | "date";
+
+export function addsumInputType(fldType: string | null | undefined): RashAddsumInputType {
+  const t = (fldType ?? "").trim().toLowerCase();
+  if (t.includes("дат")) return "date";
+  if (t.includes("текст") || t.includes("строк") || t.includes("наимен")) return "text";
+  return "number";
+}
+
 export function getRashNumericColumns(
   rule: RashRule,
   formColumns: FormColumn[],
   addsum: RashAddsum[]
 ): FormColumn[] {
   const keys = new Set<string>();
-  if (rule.totalFormula) {
-    const formula = rule.totalFormula.replace(/\s/g, "");
-    const eq = formula.indexOf("=");
-    const rhs = eq >= 0 ? formula.slice(eq + 1) : formula;
+  const formula = effectiveRashFormula(rule);
+  if (formula) {
+    const compact = formula.replace(/\s/g, "");
+    const eq = compact.indexOf("=");
+    const rhs = eq >= 0 ? compact.slice(eq + 1) : compact;
     for (const m of rhs.matchAll(/([A-ZА-Я])/gi)) {
       keys.add(m[1].toUpperCase());
     }
-    const totalCol = parseTotalColumn(rule.totalFormula);
+    const totalCol = parseTotalColumn(formula);
     if (totalCol) keys.add(totalCol);
   } else {
     for (const col of formColumns) {
@@ -361,10 +391,11 @@ export function getRashNumericColumns(
     if (found) cols.push(found);
   }
   for (const a of getAddsumForRule(rule.kod, addsum)) {
+    const input = addsumInputType(a.fldType);
     cols.push({
       key: `_addsum_${a.sort}`,
       label: a.sumTitle.trim(),
-      type: a.fldType.toLowerCase().includes("кол") ? "number" : "number",
+      type: input === "number" ? "number" : "text",
       width: 120,
     });
   }
@@ -376,24 +407,8 @@ export function evaluateTotalFormula(
   row: RowData,
   columns?: string[]
 ): number {
-  const eq = formula.indexOf("=");
-  const rhs = (eq >= 0 ? formula.slice(eq + 1) : formula).replace(/\s/g, "");
-  let expr = rhs;
-  const colKeys =
-    columns ??
-    Array.from(rhs.matchAll(/([A-ZА-Я])/gi)).map((m) => m[1].toUpperCase());
-  for (const key of colKeys) {
-    const re = new RegExp(key, "gi");
-    expr = expr.replace(re, String(numVal(row[key])));
-  }
-  try {
-    if (!/^[\d.+\-*/()]+$/.test(expr)) return 0;
-    // eslint-disable-next-line no-new-func
-    const result = Function(`"use strict"; return (${expr});`)() as number;
-    return Number.isFinite(result) ? result : 0;
-  } catch {
-    return 0;
-  }
+  void columns;
+  return evalColumnLetterFormula(formula, (letter) => numVal(row[letter]));
 }
 
 function pushSlotForColumn(
@@ -589,18 +604,52 @@ export function groupKontrRows(rows: RowData[]): KontrRowGroup[] {
   return groups;
 }
 
+/** Insert index for a new kontr child: after trailing children of the nearest parent. */
+export function kontrInsertIndex(rows: RowData[], preferNearIndex?: number): number {
+  let parentIdx = -1;
+  const probe =
+    preferNearIndex != null && Number.isFinite(preferNearIndex)
+      ? Math.min(Math.max(0, preferNearIndex), Math.max(0, rows.length - 1))
+      : rows.length - 1;
+
+  for (let i = probe; i >= 0; i--) {
+    if (String(rows[i]?.num ?? "").trim()) {
+      parentIdx = i;
+      break;
+    }
+  }
+  if (parentIdx < 0) {
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i].num ?? "").trim()) parentIdx = i;
+    }
+  }
+  if (parentIdx < 0) return rows.length;
+
+  let insertAt = parentIdx + 1;
+  while (insertAt < rows.length && !String(rows[insertAt].num ?? "").trim()) {
+    insertAt++;
+  }
+  return insertAt;
+}
+
 export function sumRashEntries(
   entries: FormRashEntry[],
   columnKey: string
 ): number {
   let sum = 0;
+  let hit = false;
   for (const e of entries) {
     if (e.values[columnKey] !== undefined) {
       sum += numVal(e.values[columnKey]);
-      continue;
+      hit = true;
     }
-    const totalCol = Object.keys(e.values).find((k) => !k.startsWith("_addsum_"));
-    if (totalCol) sum += numVal(e.values[totalCol]);
+  }
+  if (hit) return sum;
+  // Legacy lines that store a single amount under another letter — only when no entry
+  // has the requested column (so multi-column rashes do not cross-contaminate).
+  for (const e of entries) {
+    const keys = Object.keys(e.values).filter((k) => !k.startsWith("_addsum_"));
+    if (keys.length === 1) sum += numVal(e.values[keys[0]]);
   }
   return sum;
 }
@@ -876,14 +925,13 @@ export function validateCellRash(
       }
     }
 
-    const slotFormula = effectiveRashFormula(slot.rule);
-    const checkTotal =
-      entries.length > 0
-        ? slotFormula
-          ? evaluateTotalFormula(slotFormula, row)
-          : sumRashEntries(entries, slot.columnKey)
-        : 0;
-    const level = rashThresholdLevel(Math.abs(checkTotal), data.thresholds);
+    // Requirement level always comes from the parent form cell / total formula —
+    // never from "0 when empty", otherwise mandatory slots above threshold are missed.
+    const displayCol = slot.displayColumnKey ?? slot.columnKey;
+    const parentValue = formula
+      ? evaluateTotalFormula(formula, row)
+      : numVal(row[displayCol]);
+    const level = rashThresholdLevel(Math.abs(parentValue), data.thresholds);
 
     if (entries.length === 0 && level > 0) {
       issues.push({
@@ -1029,7 +1077,8 @@ export function syncAllRashToRows(
   const seen = new Set<string>();
   for (const e of rashEntries) {
     if (e.formId !== formId) continue;
-    const key = `${e.parentRowNo}:${e.rashKod}`;
+    // Include columnKey so multi-column rashes on the same row/kod are all applied.
+    const key = `${e.parentRowNo}:${e.rashKod}:${e.columnKey ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const rule = formRules.find((r) => r.kod === e.rashKod);

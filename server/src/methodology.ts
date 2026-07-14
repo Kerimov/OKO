@@ -11,6 +11,8 @@ export interface MethodologyChecksums {
   saldo?: string;
   correspondence?: string;
   kontr?: string;
+  /** Form templates / schemas fingerprint. */
+  forms?: string;
 }
 
 export interface MethodologyRelease {
@@ -69,6 +71,7 @@ export function buildChecksums(parts: {
   saldo?: unknown;
   correspondence?: unknown;
   kontr?: unknown;
+  forms?: unknown;
 }): MethodologyChecksums {
   const out: MethodologyChecksums = {};
   if (parts.checks != null) out.checks = sha256Hex(parts.checks);
@@ -78,6 +81,7 @@ export function buildChecksums(parts: {
   if (parts.saldo != null) out.saldo = sha256Hex(parts.saldo);
   if (parts.correspondence != null) out.correspondence = sha256Hex(parts.correspondence);
   if (parts.kontr != null) out.kontr = sha256Hex(parts.kontr);
+  if (parts.forms != null) out.forms = sha256Hex(parts.forms);
   return out;
 }
 
@@ -93,6 +97,7 @@ export function diffMethodologyChecksums(
     "saldo",
     "correspondence",
     "kontr",
+    "forms",
   ];
   return keys.map((key) => {
     const l = left?.[key] ?? null;
@@ -341,5 +346,45 @@ export async function compareMethodologyReleases(
     left,
     right,
     diff: diffMethodologyChecksums(left?.checksums, right?.checksums),
+  };
+}
+
+/**
+ * Dry-run: compare proposed checksums (or checksums from parts) against active release.
+ * Does not write anything.
+ */
+export async function dryRunMethodology(
+  db: OkoDb,
+  body: {
+    version?: string;
+    checksums?: MethodologyChecksums;
+    parts?: {
+      checks?: unknown;
+      rash?: unknown;
+      recalc?: unknown;
+      rowFormulas?: unknown;
+      saldo?: unknown;
+      correspondence?: unknown;
+      kontr?: unknown;
+      forms?: unknown;
+    };
+  }
+): Promise<{
+  active: MethodologyRelease | null;
+  proposed: MethodologyChecksums;
+  diff: MethodologyChecksumDiff[];
+  wouldChange: boolean;
+}> {
+  const active = await getMethodologyRelease(db);
+  const proposed =
+    body.checksums && Object.keys(body.checksums).length > 0
+      ? body.checksums
+      : buildChecksums(body.parts ?? {});
+  const diff = diffMethodologyChecksums(active?.checksums, proposed);
+  return {
+    active,
+    proposed,
+    diff,
+    wouldChange: diff.some((d) => !d.same),
   };
 }
