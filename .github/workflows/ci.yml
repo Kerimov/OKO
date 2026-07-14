@@ -1,0 +1,194 @@
+name: ci
+
+on:
+  push:
+    paths:
+      - "portal/**"
+      - "server/**"
+      - "server-nest/**"
+      - "packages/engine/**"
+      - "desktop/tauri/**"
+      - "deploy/**"
+      - "data/**"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "portal/**"
+      - "server/**"
+      - "server-nest/**"
+      - "packages/engine/**"
+      - "desktop/tauri/**"
+      - "deploy/**"
+      - "data/**"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  portal-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      - run: npm run build
+      - run: npm run test:e2e
+        env:
+          CI: "1"
+
+  engine-selftests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm run selftest
+
+  tauri-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/tauri_security_smoke.py
+      - name: Rust path-allowlist unit tests
+        working-directory: desktop/tauri/src-tauri
+        run: cargo test path_allowlist_tests -- --nocapture
+
+  server-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            server-nest/package-lock.json
+      - name: Install server + nest
+        run: |
+          cd server && npm ci
+          cd ../server-nest && npm ci
+      - name: Typecheck domain
+        working-directory: server
+        run: npm run typecheck
+      - name: Session policy selftest
+        working-directory: server
+        run: npm run test:selftest
+      - name: Typecheck Nest
+        working-directory: server-nest
+        run: npm run build
+
+  corpus-and-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/validate_corpus.py
+      - run: python3 scripts/scan_secrets.py
+
+  docker-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Nest API image
+        run: docker build -f deploy/Dockerfile.api-nest -t oko-api:ci .
+
+  api-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oko
+          POSTGRES_PASSWORD: oko
+          POSTGRES_DB: oko
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oko -d oko"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://oko:oko@localhost:5432/oko
+      DATABASE_SSL: "false"
+      PORT: "3001"
+      OKO_BOOTSTRAP_ADMIN_USER: admin
+      OKO_BOOTSTRAP_ADMIN_PASSWORD: oko-e2e-admin-pass
+      OKO_API_URL: http://127.0.0.1:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            server-nest/package-lock.json
+            packages/engine/package.json
+      - name: Install dependencies
+        run: |
+          cd packages/engine && npm install --ignore-scripts 2>/dev/null || true
+          cd ../../server && npm ci
+          cd ../server-nest && npm ci
+      - name: Migration dry-run
+        working-directory: server
+        run: npm run migrate:dry-run
+      - name: Start API
+        working-directory: server-nest
+        run: |
+          npm start > /tmp/oko-api.log 2>&1 &
+          echo $! > /tmp/oko-api.pid
+      - name: Wait for ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3001/api/ready >/dev/null; then
+              echo "API ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to become ready"
+          cat /tmp/oko-api.log || true
+          exit 1
+      - name: API journey
+        run: node scripts/api_journey.mjs
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f /tmp/oko-api.pid ]; then kill "$(cat /tmp/oko-api.pid)" || true; fi
+          tail -n 80 /tmp/oko-api.log || true

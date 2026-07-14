@@ -368,6 +368,7 @@ def export_agg(cur) -> dict:
 def export_form_correspondence(cur) -> dict:
     cur.execute(
         "SELECT Tname, GosForm, str, npp, Yellow, Red, Blue, Green, "
+        "ReorgUpdate, ReorgUpdate2, "
         "YellowCorr, RedCorr, BlueCorr, Dostup "
         "FROM FormCorrespondence ORDER BY npp"
     )
@@ -384,6 +385,8 @@ def export_form_correspondence(cur) -> dict:
                 "saldoRed": d.get("Red"),
                 "saldoBlue": d.get("Blue"),
                 "saldoGreen": d.get("Green"),
+                "reorgUpdate": d.get("ReorgUpdate"),
+                "reorgUpdate2": d.get("ReorgUpdate2"),
                 "saldoYellowCorr": d.get("YellowCorr"),
                 "saldoRedCorr": d.get("RedCorr"),
                 "saldoBlueCorr": d.get("BlueCorr"),
