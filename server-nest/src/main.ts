@@ -9,6 +9,7 @@ import { bootstrapDatabase } from "../../server/src/db.js";
 import { isPostgresMode } from "../../server/src/oko-db.js";
 import { mountLegacyApi } from "../../server/src/legacy-routes.js";
 import { AppModule } from "./app.module.js";
+import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger("Bootstrap");
@@ -24,6 +25,7 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix("api");
   app.enableCors();
+  app.useGlobalFilters(new DomainExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

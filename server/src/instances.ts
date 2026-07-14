@@ -65,14 +65,15 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
   const rows = Array.isArray(inst.rows) ? inst.rows : [];
+  const schemaVersion = Number(inst.templateSchemaVersion ?? 1);
 
   await db
     .prepare(
       `INSERT INTO form_instances (
       instance_id, template_id, zid, eid, template_title, display_name, organization,
       period_start, period_end, unit, enterprise_code, signatures_json, status,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      template_schema_version, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_id) DO UPDATE SET
       template_id = excluded.template_id,
       zid = excluded.zid,
@@ -86,6 +87,7 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       enterprise_code = excluded.enterprise_code,
       signatures_json = excluded.signatures_json,
       status = excluded.status,
+      template_schema_version = COALESCE(form_instances.template_schema_version, excluded.template_schema_version),
       updated_at = excluded.updated_at`
     )
     .run(
@@ -102,6 +104,7 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       inst.meta?.enterpriseCode ?? "1@1",
       signaturesJson,
       status,
+      schemaVersion,
       inst.createdAt,
       inst.updatedAt
     );
@@ -371,12 +374,23 @@ export async function setInstanceStatus(
 }
 
 export function assertInstanceEditable(inst: OkoFormInstance, isAdmin: boolean): void {
-  if (isAdmin) return;
-  if (normalizeInstanceStatus(inst.status) === "submitted") {
+  if (normalizeInstanceStatus(inst.status) === "submitted" && !isAdmin) {
     const err = new Error("Form is submitted and cannot be edited");
     (err as Error & { status: number }).status = 403;
     throw err;
   }
+}
+
+/** Async check: submitted (non-admin) OR closed period. */
+export async function assertInstanceWritable(
+  db: OkoDb,
+  inst: OkoFormInstance,
+  isAdmin: boolean,
+  opts?: { force?: boolean }
+): Promise<void> {
+  assertInstanceEditable(inst, isAdmin);
+  const { assertPeriodWritableForInstance } = await import("./periodLifecycle.js");
+  await assertPeriodWritableForInstance(db, inst.zid, inst.eid, opts);
 }
 
 export interface CellPatchInput {
@@ -548,7 +562,7 @@ export async function upsertInstancesBatch(
     for (const inst of instances) {
       const existing = await loadInstance(tx, inst.instanceId);
       if (existing) {
-        assertInstanceEditable(existing, isAdmin);
+        await assertInstanceWritable(tx, existing, isAdmin);
       }
       await upsertInstance(tx, inst);
     }

@@ -176,6 +176,13 @@ export interface ReportingPeriod {
   periodEnd: string | null;
   quarter: number | null;
   year: number | null;
+  packageStatus?: PackageWorkflowStatus;
+  packageComment?: string | null;
+  periodStatus?: "open" | "closed";
+  closedAt?: string | null;
+  closedBy?: string | null;
+  methodologyReleaseId?: string | null;
+  formSetCount?: number;
 }
 
 export interface WorkContext {

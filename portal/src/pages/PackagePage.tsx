@@ -4,6 +4,9 @@ import {
   createOrganization,
   createPeriod,
   createReportPackage,
+  closePeriod,
+  reopenPeriod,
+  distributePackagesToChildren,
   deleteReportPackage,
   fetchPackageCompleteness,
   listOrganizations,
@@ -38,6 +41,7 @@ export function PackagePage() {
   const [loading, setLoading] = useState(true);
 
   const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgParentZid, setNewOrgParentZid] = useState<number | "">("");
   const [newPeriodName, setNewPeriodName] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
@@ -50,6 +54,10 @@ export function PackagePage() {
   const selectedPeriod = useMemo(
     () => periods.find((p) => p.eid === eid),
     [periods, eid]
+  );
+  const childOrgs = useMemo(
+    () => (zid === "" ? [] : orgs.filter((o) => o.parentZid === zid)),
+    [orgs, zid]
   );
 
   const canDeletePackage =
@@ -118,12 +126,19 @@ export function PackagePage() {
     setBusy(true);
     setStatus("");
     try {
-      const org = await createOrganization({ name: newOrgName.trim() });
+      const org = await createOrganization({
+        name: newOrgName.trim(),
+        parentZid: newOrgParentZid === "" ? null : newOrgParentZid,
+      });
       const next = [...orgs, org].sort((a, b) => a.name.localeCompare(b.name, "ru"));
       setOrgs(next);
       setNewOrgName("");
+      setNewOrgParentZid("");
       await handleZidChange(org.zid);
-      setStatus(`Организация «${org.name}» создана (код ${org.zid})`);
+      setStatus(
+        `Организация «${org.name}» создана (код ${org.zid})` +
+          (org.parentZid != null ? ` · родитель Z${org.parentZid}` : "")
+      );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания организации");
     } finally {
@@ -211,7 +226,7 @@ export function PackagePage() {
     }
   };
 
-  const handleWorkflow = async (next: PackageWorkflowStatus) => {
+  const handleWorkflow = async (next: PackageWorkflowStatus, force = false) => {
     if (zid === "" || eid === "") return;
     setBusy(true);
     setStatus("");
@@ -220,20 +235,115 @@ export function PackagePage() {
         zid,
         eid,
         next,
-        workflowComment.trim() || null
+        workflowComment.trim() || null,
+        force
       );
       setWorkflowComment("");
       await refreshCompleteness(zid, eid);
-      setStatus(`Статус комплекта: ${packageWorkflowLabel(wf.status)}`);
+      setStatus(
+        `Статус комплекта: ${packageWorkflowLabel(wf.status)}${
+          force ? " (без проверки полноты)" : ""
+        }`
+      );
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка смены статуса");
+      const msg = e instanceof Error ? e.message : "Ошибка смены статуса";
+      if (
+        admin &&
+        !force &&
+        (next === "submitted" || next === "accepted") &&
+        /неполон|не все формы/i.test(msg) &&
+        confirm(`${msg}\n\nВсё равно сменить статус (force)?`)
+      ) {
+        setBusy(false);
+        await handleWorkflow(next, true);
+        return;
+      }
+      setStatus(msg);
     } finally {
       setBusy(false);
     }
   };
 
+  const handleClosePeriod = async () => {
+    if (zid === "" || eid === "") return;
+    if (
+      !confirm(
+        "Закрыть период? После закрытия формы комплекта нельзя будет редактировать."
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      await closePeriod(zid, eid);
+      setPeriods(await listPeriods(zid));
+      setStatus("Период закрыт");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка закрытия периода");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReopenPeriod = async () => {
+    if (zid === "" || eid === "") return;
+    if (!confirm("Переоткрыть закрытый период? Изменения снова будут возможны.")) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      await reopenPeriod(zid, eid);
+      setPeriods(await listPeriods(zid));
+      setStatus("Период переоткрыт");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка переоткрытия");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDistribute = async () => {
+    if (zid === "" || eid === "") return;
+    const hasChildren = childOrgs.length > 0;
+    const others = orgs.filter((o) => o.zid !== zid).length;
+    const useFallback = !hasChildren;
+    if (useFallback && others === 0) {
+      setStatus(
+        "Некому раздавать: создайте дочерние организации (с родителем) или другие org"
+      );
+      return;
+    }
+    const msg = hasChildren
+      ? `Создать такие же периоды и пустые комплекты у ${childOrgs.length} дочерних org?`
+      : `У текущей org нет дочерних (parent_zid). Раздать всем остальным организациям (${others})?`;
+    if (!confirm(msg)) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const res = await distributePackagesToChildren({
+        parentZid: zid,
+        sourceEid: eid,
+        fallbackAllOthers: useFallback,
+      });
+      setStatus(
+        `Раздано: периодов ${res.createdPeriods}, комплектов ${res.createdPackages}` +
+          (res.children.length
+            ? ` → ${res.children.map((c) => c.name).join(", ")}`
+            : "")
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка раздачи");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const periodClosed = selectedPeriod?.periodStatus === "closed";
   const wf = completeness?.workflow?.status ?? "draft";
   const workflowActions = useMemo(() => {
+    if (periodClosed) return [];
     const all: Array<{ status: PackageWorkflowStatus; label: string; adminOnly?: boolean }> = [
       { status: "submitted", label: "Сдать на проверку" },
       { status: "returned", label: "Вернуть", adminOnly: true },
@@ -252,7 +362,7 @@ export function PackagePage() {
       (a) =>
         (allowed[wf] ?? []).includes(a.status) && (admin || !a.adminOnly)
     );
-  }, [wf, admin]);
+  }, [wf, admin, periodClosed]);
 
   const missing = completeness?.items.filter((i) => !i.filled) ?? [];
 
@@ -311,6 +421,17 @@ export function PackagePage() {
               selectedPeriod.periodStart ?? "",
               selectedPeriod.periodEnd ?? ""
             )}
+            {" · "}
+            Период:{" "}
+            <strong>
+              {selectedPeriod.periodStatus === "closed" ? "закрыт" : "открыт"}
+            </strong>
+            {selectedPeriod.formSetCount != null
+              ? ` · форм в комплекте: ${selectedPeriod.formSetCount}`
+              : ""}
+            {selectedPeriod.methodologyReleaseId
+              ? ` · методология: ${selectedPeriod.methodologyReleaseId.slice(0, 8)}…`
+              : ""}
           </p>
         )}
       </section>
@@ -327,7 +448,33 @@ export function PackagePage() {
                 placeholder="ПАО «Газпром»"
               />
             </label>
+            <label>
+              Головная (parent)
+              <select
+                value={newOrgParentZid}
+                onChange={(e) =>
+                  setNewOrgParentZid(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+              >
+                <option value="">— нет (корневая) —</option>
+                {orgs.map((o) => (
+                  <option key={o.zid} value={o.zid}>
+                    {o.name} (Z{o.zid})
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          <p className="tools-hint">
+            Для «Раздать дочкам» укажите головную org у дочерних. Сейчас дочерних у
+            выбранной: <strong>{childOrgs.length}</strong>
+            {childOrgs.length > 0
+              ? ` (${childOrgs.map((c) => c.name).join(", ")})`
+              : ""}
+            .
+          </p>
           <button
             type="button"
             className="btn btn-secondary"
@@ -398,6 +545,12 @@ export function PackagePage() {
             <strong>{packageWorkflowLabel(completeness.workflow?.status)}</strong>
             {completeness.workflow?.comment ? ` — ${completeness.workflow.comment}` : ""}
           </p>
+          {completeness.draft > 0 && completeness.workflow?.status === "draft" && (
+            <p className="tools-hint">
+              «Сдать на проверку» отправит комплект ЦО. Принять комплект можно будет после
+              того, как все формы будут сданы отдельно («Сдать форму» в карточке формы).
+            </p>
+          )}
           <div className="tools-grid" style={{ marginBottom: "0.75rem" }}>
             <label>
               Комментарий к статусу
@@ -435,12 +588,48 @@ export function PackagePage() {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy || zid === "" || eid === ""}
+              disabled={busy || zid === "" || eid === "" || periodClosed}
               onClick={() => void handleCreatePackage()}
             >
               {busy ? "Создание…" : "Завести пустые формы (комплект)"}
             </button>
-            {canDeletePackage && (
+            {admin && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || zid === "" || eid === "" || periodClosed}
+                onClick={() => void handleDistribute()}
+                title={
+                  childOrgs.length > 0
+                    ? `Дочерних: ${childOrgs.length}`
+                    : "Нет дочерних — предложит раздать всем остальным org"
+                }
+              >
+                Раздать дочкам
+                {childOrgs.length > 0 ? ` (${childOrgs.length})` : ""}
+              </button>
+            )}
+            {admin && !periodClosed && wf === "accepted" && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || zid === "" || eid === ""}
+                onClick={() => void handleClosePeriod()}
+              >
+                Закрыть период
+              </button>
+            )}
+            {admin && periodClosed && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || zid === "" || eid === ""}
+                onClick={() => void handleReopenPeriod()}
+              >
+                Переоткрыть период
+              </button>
+            )}
+            {canDeletePackage && !periodClosed && (
               <button
                 type="button"
                 className="btn btn-danger-outline"

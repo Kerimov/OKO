@@ -358,6 +358,42 @@ export async function setInstanceStatus(
   });
 }
 
+export type BulkSubmitResult = {
+  submitted: string[];
+  failed: Array<{
+    instanceId: string;
+    displayName?: string;
+    error: string;
+    result?: { failed?: number; skipped?: number };
+  }>;
+};
+
+/** Массовая сдача через один запрос (пакетный sibling-load на сервере). */
+export async function submitInstancesBulk(
+  instanceIds: string[]
+): Promise<BulkSubmitResult> {
+  if (!useBackend) {
+    const submitted: string[] = [];
+    const failed: BulkSubmitResult["failed"] = [];
+    for (const id of instanceIds) {
+      try {
+        await setInstanceStatus(id, "submitted");
+        submitted.push(id);
+      } catch (e) {
+        failed.push({
+          instanceId: id,
+          error: e instanceof Error ? e.message : "ошибка",
+        });
+      }
+    }
+    return { submitted, failed };
+  }
+  return apiFetch<BulkSubmitResult>("/api/instances/bulk-status", {
+    method: "POST",
+    body: JSON.stringify({ ids: instanceIds, status: "submitted" }),
+  });
+}
+
 /** Server dry-run of period checks (Nest). Offline mode returns null. */
 export async function runInstanceChecks(
   instanceId: string,

@@ -1,11 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsOptional, IsString } from "class-validator";
 
 export class InstanceStatusDto {
   @ApiProperty({ enum: ["draft", "submitted"] })
   @IsString()
   @IsIn(["draft", "submitted"])
   status!: "draft" | "submitted";
+}
+
+export class InstanceBulkStatusDto {
+  @ApiProperty({ type: [String], description: "ID экземпляров форм" })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  ids!: string[];
+
+  @ApiProperty({ enum: ["submitted"], default: "submitted" })
+  @IsString()
+  @IsIn(["submitted"])
+  status!: "submitted";
 }
 
 export class InstanceRunChecksDto {

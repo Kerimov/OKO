@@ -21,7 +21,7 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger"
 import type { Request } from "express";
 import { getDb } from "../../../server/src/db.js";
 import {
-  assertInstanceEditable,
+  assertInstanceWritable,
   buildEvalSnapshotFromDb,
   deleteInstanceFromDb,
   findInstanceIdByPackageTemplate,
@@ -34,7 +34,11 @@ import {
   upsertInstance,
   upsertInstancesBatch,
 } from "../../../server/src/instances.js";
-import { submitInstanceWithChecks, runInstancePeriodChecks } from "../../../server/src/instance-submit.js";
+import {
+  submitInstanceWithChecks,
+  submitInstancesBulkWithChecks,
+  runInstancePeriodChecks,
+} from "../../../server/src/instance-submit.js";
 import {
   assertOrgInstanceAccess,
   enforceOrgInstanceWrite,
@@ -48,6 +52,7 @@ import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
+  InstanceBulkStatusDto,
   InstanceCellPatchDto,
   InstanceMigrateDto,
   InstanceRashPutDto,
@@ -129,16 +134,51 @@ export class InstancesController {
   @Get(":id")
   @ApiOperation({ summary: "Экземпляр формы по ID" })
   async getOne(@Req() req: Request, @Param("id") id: string) {
-    const inst = await loadInstance(await getDb(), id);
-    if (!inst) {
-      throw new NotFoundException({ error: "Not found" });
+    try {
+      const inst = await loadInstance(await getDb(), id);
+      if (!inst) {
+        throw new NotFoundException({ error: "Not found" });
+      }
+      assertOrgInstanceAccess(req, inst);
+      return inst;
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "load instance failed");
+    }
+  }
+
+  @Post("bulk-status")
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      "Массовая сдача форм (submitted). Sibling-данные пакета грузятся один раз.",
+  })
+  async bulkStatus(@Req() req: OkoRequest, @Body() body: InstanceBulkStatusDto) {
+    if (!Array.isArray(body?.ids) || body.ids.length === 0) {
+      throw new BadRequestException({ error: "ids required" });
+    }
+    if (body.status !== "submitted") {
+      throw new BadRequestException({ error: "only status=submitted supported" });
     }
     try {
-      assertOrgInstanceAccess(req, inst);
+      const db = await getDb();
+      const allowed: string[] = [];
+      for (const id of body.ids) {
+        const existing = await loadInstance(db, id);
+        if (!existing) continue;
+        assertOrgInstanceAccess(req, existing);
+        if (existing.status === "submitted") {
+          allowed.push(id);
+          continue;
+        }
+        await assertInstanceWritable(db, existing, req.apiRole === "admin");
+        allowed.push(id);
+      }
+      return await submitInstancesBulkWithChecks(db, allowed);
     } catch (e) {
-      rethrowAsHttp(e);
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "bulk status update failed");
     }
-    return inst;
   }
 
   @Post("batch")
@@ -180,11 +220,16 @@ export class InstancesController {
         const existing = await loadInstance(db, body.instanceId);
         if (existing) {
           assertOrgInstanceAccess(req, existing);
-          assertInstanceEditable(existing, req.apiRole === "admin");
+          await assertInstanceWritable(db, existing, req.apiRole === "admin");
         }
       }
       const inst = enforceOrgInstanceWrite(req, body);
       if (!inst.status) inst.status = "draft";
+
+      if (inst.zid != null && inst.eid != null) {
+        const { assertPeriodWritable } = await import("../../../server/src/periodLifecycle.js");
+        await assertPeriodWritable(db, inst.eid, inst.zid);
+      }
 
       // Package scope: only one form per template. If another instance already
       // occupies (zid, eid, template_id), reject with its id instead of opaque DB error.
@@ -233,7 +278,7 @@ export class InstancesController {
       const existing = await loadInstance(await getDb(), id);
       if (existing) {
         assertOrgInstanceAccess(req, existing);
-        assertInstanceEditable(existing, req.apiRole === "admin");
+        await assertInstanceWritable(await getDb(), existing, req.apiRole === "admin");
       }
       const scoped = enforceOrgInstanceWrite(req, body);
       await upsertInstance(await getDb(), scoped);
@@ -254,7 +299,7 @@ export class InstancesController {
       const existing = await loadInstance(await getDb(), id);
       if (!existing) throw new NotFoundException({ error: "Not found" });
       assertOrgInstanceAccess(req, existing);
-      assertInstanceEditable(existing, req.apiRole === "admin");
+      await assertInstanceWritable(await getDb(), existing, req.apiRole === "admin");
       if (!Array.isArray(body.cells) || body.cells.length === 0) {
         throw new BadRequestException({ error: "cells required" });
       }
@@ -284,11 +329,13 @@ export class InstancesController {
   ) {
     const { status } = body;
     try {
-      const existing = await loadInstance(await getDb(), id);
+      const db = await getDb();
+      const existing = await loadInstance(db, id);
       if (!existing) {
         throw new NotFoundException({ error: "Not found" });
       }
       assertOrgInstanceAccess(req, existing);
+      await assertInstanceWritable(db, existing, req.apiRole === "admin");
       if (status === "draft" && req.apiRole !== "admin") {
         throw new ForbiddenException({ error: "Only admin can reopen submitted forms" });
       }
@@ -385,7 +432,7 @@ export class InstancesController {
     }
     try {
       assertOrgInstanceAccess(req, existing);
-      assertInstanceEditable(existing, req.apiRole === "admin");
+      await assertInstanceWritable(db, existing, req.apiRole === "admin");
     } catch (e) {
       rethrowAsHttp(e);
     }

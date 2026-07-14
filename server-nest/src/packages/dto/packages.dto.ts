@@ -55,6 +55,11 @@ export class CreatePeriodDto {
   @IsOptional()
   @IsNumber()
   year?: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  methodologyReleaseId?: string | null;
 }
 
 export class WorkContextDto {
@@ -87,6 +92,11 @@ export class PackageWorkflowPutDto extends PackageZidEidDto {
   @IsOptional()
   @IsString()
   comment?: string | null;
+
+  @ApiPropertyOptional({ description: "Admin: skip completeness gates" })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class PackageImportDto extends PackageZidEidDto {

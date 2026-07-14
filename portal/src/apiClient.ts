@@ -95,9 +95,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 function formatApiError(status: number, body: string): string {
   try {
     const data = JSON.parse(body) as {
-      error?: string;
+      error?: string | { error?: string };
       authRequired?: boolean;
-      message?: string | string[];
+      message?: string | string[] | { error?: string };
       result?: { failed?: number; skipped?: number };
     };
     if (status === 401 && data.authRequired) {
@@ -112,7 +112,16 @@ function formatApiError(status: number, body: string): string {
     }
     if (typeof data.message === "string") return data.message;
     if (Array.isArray(data.message)) return data.message.join("; ");
-    return data.error ?? body;
+    if (data.message && typeof data.message === "object" && data.message.error) {
+      return data.message.error;
+    }
+    if (typeof data.error === "string" && data.error !== "Bad Request" && data.error !== "Internal Server Error") {
+      return data.error;
+    }
+    if (data.error && typeof data.error === "object" && data.error.error) {
+      return data.error.error;
+    }
+    return body;
   } catch {
     return body;
   }

@@ -505,10 +505,32 @@ export async function updateFormMeta(
   await db.prepare(`UPDATE form_templates SET ${fields.join(", ")} WHERE form_id = ?`).run(...values);
 }
 
+export async function bumpFormSchemaVersion(
+  db: OkoDb,
+  formId: string,
+  actor?: string
+): Promise<number> {
+  const row = (await db
+    .prepare(`SELECT COALESCE(schema_version, 1) AS schema_version FROM form_templates WHERE form_id = ?`)
+    .get(formId)) as { schema_version: number } | undefined;
+  if (!row) throw new Error("Form not found");
+  const next = Number(row.schema_version ?? 1) + 1;
+  await db
+    .prepare(`UPDATE form_templates SET schema_version = ? WHERE form_id = ?`)
+    .run(next, formId);
+  const schema = await loadFormSchema(db, formId);
+  if (schema) {
+    const { saveTemplateRevision } = await import("./spreadsheet.js");
+    await saveTemplateRevision(db, formId, next, schema, actor);
+  }
+  return next;
+}
+
 export async function replaceFormColumns(
   db: OkoDb,
   formId: string,
-  columns: FormColumnDto[]
+  columns: FormColumnDto[],
+  opts?: { actor?: string; bumpVersion?: boolean }
 ): Promise<void> {
   await db.prepare("DELETE FROM form_template_columns WHERE form_id = ?").run(formId);
   const ins = db.prepare(
@@ -539,12 +561,16 @@ export async function replaceFormColumns(
       c.formula ?? null
     );
   }
+  if (opts?.bumpVersion !== false) {
+    await bumpFormSchemaVersion(db, formId, opts?.actor);
+  }
 }
 
 export async function replaceFormRows(
   db: OkoDb,
   formId: string,
-  rows: FormRowDto[]
+  rows: FormRowDto[],
+  opts?: { actor?: string; bumpVersion?: boolean }
 ): Promise<void> {
   await db.prepare("DELETE FROM form_template_rows WHERE form_id = ?").run(formId);
   const ins = db.prepare(
@@ -565,6 +591,9 @@ export async function replaceFormRows(
       r.readonly ? 1 : 0,
       r.formula ?? null
     );
+  }
+  if (opts?.bumpVersion !== false) {
+    await bumpFormSchemaVersion(db, formId, opts?.actor);
   }
 }
 

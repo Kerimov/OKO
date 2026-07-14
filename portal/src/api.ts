@@ -97,9 +97,16 @@ export async function loadCatalog(): Promise<FormCatalog> {
   return res.json();
 }
 
-export async function loadSchema(formId: string): Promise<FormSchema> {
+export async function loadSchema(
+  formId: string,
+  schemaVersion?: number | null
+): Promise<FormSchema> {
   try {
-    const res = await apiFetchRaw(`/api/forms/${encodeURIComponent(formId)}`);
+    const q =
+      schemaVersion != null && Number.isFinite(schemaVersion)
+        ? `?version=${encodeURIComponent(String(schemaVersion))}`
+        : "";
+    const res = await apiFetchRaw(`/api/forms/${encodeURIComponent(formId)}${q}`);
     if (res.ok) return res.json();
   } catch {
     /* API unavailable */

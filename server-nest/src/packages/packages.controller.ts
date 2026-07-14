@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpException,
@@ -64,18 +65,31 @@ export class PackagesController {
   })
   async setWorkflow(@Req() req: OkoRequest, @Body() body: PackageWorkflowPutDto) {
     if (!body.zid || !body.eid || !body.status) {
-      throw new BadRequestException({ error: "zid, eid and status required" });
+      throw new BadRequestException("zid, eid and status required");
     }
     try {
       assertOrgZidParam(req, body.zid);
-      return setPackageWorkflow(await getDb(), body.zid, body.eid, {
+      return await setPackageWorkflow(await getDb(), body.zid, body.eid, {
         status: body.status as PackageWorkflowStatus,
         comment: body.comment ?? null,
         actor: req.apiUser?.username ?? req.apiRole ?? null,
         isAdmin: req.apiRole === "admin",
+        force: body.force === true && req.apiRole === "admin",
       });
     } catch (e) {
       if (e instanceof HttpException) throw e;
+      const msg = e instanceof Error ? e.message : "workflow update failed";
+      const status = (e as Error & { status?: number }).status;
+      if (status === 403) {
+        throw new ForbiddenException(msg);
+      }
+      if (
+        status === 400 ||
+        /неполон|не все|недопустимый|закрыт|нельзя принять|period is closed/i.test(msg)
+      ) {
+        throw new BadRequestException(msg);
+      }
+      console.error("[packages/workflow]", msg, e);
       rethrowAsHttp(e, "workflow update failed");
     }
   }
