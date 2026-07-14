@@ -45,6 +45,27 @@ export function assertOrgZidParam(req: Request, zid: number): void {
   }
 }
 
+/**
+ * Org users may write aggregation only into their parent ZID or a registered
+ * correcting set of that parent. Admins are unrestricted.
+ */
+export function assertAggregationTargetZid(
+  req: Request,
+  parentZid: number,
+  targetZid: number | null | undefined,
+  allowedCorrZids: number[]
+): void {
+  assertOrgZidParam(req, parentZid);
+  const target = targetZid ?? parentZid;
+  if (userZid(req) == null) return;
+  if (target === parentZid) return;
+  if (!allowedCorrZids.includes(target)) {
+    const err = new Error("Access denied for target organization");
+    (err as Error & { status: number }).status = 403;
+    throw err;
+  }
+}
+
 export function handleOrgError(
   res: Response,
   e: unknown,
