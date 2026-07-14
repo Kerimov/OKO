@@ -30,6 +30,10 @@ export interface RunAggregationOptions {
   reorg?: boolean;
   updateCorrSet?: boolean;
   targetZid?: number;
+  /** Default false: only submitted child forms. */
+  includeDraftSources?: boolean;
+  /** Default false: refuse overwrite of submitted target forms. */
+  overwriteSubmitted?: boolean;
 }
 
 export interface AggFormPreview {
@@ -40,7 +44,14 @@ export interface AggFormPreview {
   ready: boolean;
   willAggregate: boolean;
   maskPresent?: boolean;
-  skippedReason?: "no-color-spec" | "reorg-update-blocked" | "no-existing-corr" | null;
+  skippedReason?:
+    | "no-color-spec"
+    | "reorg-update-blocked"
+    | "no-existing-corr"
+    | "draft-only-sources"
+    | "target-submitted"
+    | null;
+  draftChildZids?: number[];
 }
 
 export interface AggregationPreview {
@@ -256,6 +267,7 @@ export async function fillBalanceFromAccounts(input: {
   eid: number;
   targetZid?: number;
   mode?: "ifEmpty" | "overwrite";
+  overwriteSubmitted?: boolean;
 }): Promise<FillBalanceApiResult> {
   return apiFetch<FillBalanceApiResult>("/api/aggregation/account-rows/fill-balance", {
     method: "POST",

@@ -31,6 +31,8 @@ export interface AggregationTabProps {
     reorg: boolean;
     updateCorr: boolean;
     fillBalanceMode: "ifEmpty" | "overwrite";
+    includeDraftSources: boolean;
+    overwriteSubmitted: boolean;
   };
   results: {
     preview: AggregationPreview | null;
@@ -53,12 +55,16 @@ export interface AggregationTabProps {
   onReorgChange: (value: boolean) => void;
   onUpdateCorrChange: (value: boolean) => void;
   onFillBalanceModeChange: (mode: "ifEmpty" | "overwrite") => void;
+  onIncludeDraftSourcesChange: (value: boolean) => void;
+  onOverwriteSubmittedChange: (value: boolean) => void;
   onCreateCorrSet: (kind: "correct" | "mirror") => void;
   onPreview: () => void;
   onAggregate: () => void;
   onCheckRelations: () => void;
   onFillBalance: () => void;
   onClearPreview: () => void;
+  onSyncWithWorkContext?: () => void;
+  workContext?: { zid: number | null; eid: number | null };
 }
 
 export function AggregationTab({
@@ -80,16 +86,29 @@ export function AggregationTab({
   onReorgChange,
   onUpdateCorrChange,
   onFillBalanceModeChange,
+  onIncludeDraftSourcesChange,
+  onOverwriteSubmittedChange,
   onCreateCorrSet,
   onPreview,
   onAggregate,
   onCheckRelations,
   onFillBalance,
   onClearPreview,
+  onSyncWithWorkContext,
+  workContext,
 }: AggregationTabProps) {
   const { parentZid, eid, targetZid, parents, periods, corrSets, childEntries, selectedChildren } =
     selection;
-  const { colorMode, requireAll, recalc, reorg, updateCorr, fillBalanceMode } = options;
+  const {
+    colorMode,
+    requireAll,
+    recalc,
+    reorg,
+    updateCorr,
+    fillBalanceMode,
+    includeDraftSources,
+    overwriteSubmitted,
+  } = options;
   const {
     preview,
     aggrChecks,
@@ -99,19 +118,34 @@ export function AggregationTab({
     fillBalance,
   } = results;
 
+  const contextMismatch =
+    workContext &&
+    parentZid !== "" &&
+    eid !== "" &&
+    (workContext.zid !== parentZid || workContext.eid !== eid);
+
   return (
     <section className="tools-section">
-      <h2>Свод комплекта (агрегация)</h2>
+      <h2>Свод комплекта</h2>
       <p className="tools-hint">
-        Аналог Access «Администрирование → Агрегация» (<code>frmAggrMain</code>): сумма форм
-        участников в сводную организацию за период. Список участников и флаги «включено»
-        настраиваются в{" "}
-        <Link to="/admin/aggregation">конфигурации агрегации</Link> (как{" "}
-        <code>frmAggrCfg</code> / <code>a_tblAgg_List</code>). Цветовые режимы —{" "}
-        <code>AggrSetReorg*</code> (создание корректирующего набора); отдельно — обновление
-        маски (<code>AggrGreenUpdate</code>). Приём данных участников — вкладка «Обмен».
-        После свода увязки агрегации запускаются по формам целевого ZID/EID.
+        Сумма форм участников в сводную организацию за период. Список участников настраивается
+        в <Link to="/admin/aggregation">конфигурации агрегации</Link>. Приём данных — вкладка
+        «Обмен». По умолчанию в свод входят только <strong>сданные</strong> формы участников.
       </p>
+      {contextMismatch && (
+        <p className="warn-bar">
+          Свод: орг. {parentZid}, период {eid} — отличается от рабочего комплекта (орг.{" "}
+          {workContext.zid ?? "—"}, период {workContext.eid ?? "—"}).
+          {onSyncWithWorkContext && (
+            <>
+              {" "}
+              <button type="button" className="btn btn-secondary" onClick={onSyncWithWorkContext}>
+                Синхронизировать с комплектом
+              </button>
+            </>
+          )}
+        </p>
+      )}
       {backend ? (
         <>
           <div className="tools-grid">
@@ -149,7 +183,7 @@ export function AggregationTab({
               </select>
             </label>
             <label>
-              Куда писать свод (k_zid)
+              Куда писать свод
               <select
                 value={targetZid === "" ? parentZid || "" : targetZid}
                 disabled={parentZid === ""}
@@ -160,7 +194,7 @@ export function AggregationTab({
                   );
                   onClearPreview();
                 }}
-                title="CreateCorrectReorg target / сводная по умолчанию"
+                title="Целевой комплект / корректирующий набор"
               >
                 <option value={parentZid === "" ? "" : parentZid}>
                   Сводная организация (как есть)
@@ -183,7 +217,7 @@ export function AggregationTab({
                 className="btn btn-secondary"
                 disabled={busy}
                 onClick={() => void onCreateCorrSet("correct")}
-                title="CreateCorrectReorg — пустой корректирующий набор"
+                title="Пустой корректирующий набор"
               >
                 Создать корр. набор
               </button>
@@ -192,7 +226,7 @@ export function AggregationTab({
                 className="btn btn-secondary"
                 disabled={busy}
                 onClick={() => void onCreateCorrSet("mirror")}
-                title="Набор-зеркало — копия форм сводной"
+                title="Копия форм сводной"
               >
                 Создать зеркало
               </button>
@@ -253,13 +287,13 @@ export function AggregationTab({
               <select
                 value={colorMode}
                 onChange={(e) => onColorModeChange(e.target.value as AggregationColorMode)}
-                title="full = AggregateSet; цвета = AggrSetReorg* / маски FormCorrespondence (+*Corr)"
+                title="Полный свод или маска по соответствию форм"
               >
-                <option value="full">Полный (все ячейки)</option>
-                <option value="green">Зелёный — корректирующий набор</option>
-                <option value="yellow">Жёлтый (+ YellowCorr)</option>
-                <option value="red">Красный (+ RedCorr)</option>
-                <option value="blue">Синий (+ BlueCorr)</option>
+                <option value="full">Обычный свод (все ячейки)</option>
+                <option value="green">Корректировка — зелёная маска</option>
+                <option value="yellow">Корректировка — жёлтая маска</option>
+                <option value="red">Корректировка — красная маска</option>
+                <option value="blue">Корректировка — синяя маска</option>
               </select>
             </label>
             <label className="checkbox-inline">
@@ -278,26 +312,39 @@ export function AggregationTab({
               />
               Пересчитать итоги после свода
             </label>
-            <label className="checkbox-inline" title="btnReorg / создание корректирующего набора">
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={includeDraftSources}
+                onChange={(e) => onIncludeDraftSourcesChange(e.target.checked)}
+              />
+              Включать черновики участников
+            </label>
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={overwriteSubmitted}
+                onChange={(e) => onOverwriteSubmittedChange(e.target.checked)}
+              />
+              Перезаписывать уже сданные целевые формы
+            </label>
+            <label className="checkbox-inline" title="Создание корректирующего набора">
               <input
                 type="checkbox"
                 checked={reorg}
                 disabled={colorMode === "full" || updateCorr}
                 onChange={(e) => onReorgChange(e.target.checked)}
               />
-              Создать корректирующий набор (ReorgUpdate)
+              Режим реорганизации (только формы с разрешённым обновлением)
             </label>
-            <label
-              className="checkbox-inline"
-              title="AggrGreenUpdate: обновить маску, сохранить остальные ячейки родителя"
-            >
+            <label className="checkbox-inline" title="Обновить маску, сохранив остальные ячейки">
               <input
                 type="checkbox"
                 checked={updateCorr}
                 disabled={colorMode === "full"}
                 onChange={(e) => onUpdateCorrChange(e.target.checked)}
               />
-              Обновить корректирующий набор (AggrGreenUpdate)
+              Обновить корректирующий набор
             </label>
           </div>
 
@@ -308,7 +355,7 @@ export function AggregationTab({
               disabled={busy || parentZid === "" || eid === "" || selectedChildren.length === 0}
               onClick={() => void onPreview()}
             >
-              {busy ? "…" : "Проверить готовность"}
+              {busy ? "…" : "Превью свода"}
             </button>
             <button
               type="button"
@@ -355,12 +402,16 @@ export function AggregationTab({
                           {f.skippedReason === "no-color-spec"
                             ? "нет маски цвета"
                             : f.skippedReason === "reorg-update-blocked"
-                              ? "нет ReorgUpdate"
+                              ? "нет разрешения на обновление"
                               : f.skippedReason === "no-existing-corr"
                                 ? "нет корр. набора"
-                                : f.willAggregate
-                                  ? "—"
-                                  : "нет данных"}
+                                : f.skippedReason === "draft-only-sources"
+                                  ? "только черновики"
+                                  : f.skippedReason === "target-submitted"
+                                    ? "цель уже сдана"
+                                    : f.willAggregate
+                                      ? "—"
+                                      : "нет данных"}
                         </td>
                       </tr>
                     ))}
@@ -374,7 +425,7 @@ export function AggregationTab({
 
           {aggrChecks && (
             <div style={{ marginTop: "0.75rem" }}>
-              <p className="tools-hint">Увязки только для агрегации (forAggrOnly):</p>
+              <p className="tools-hint">Увязки только для агрегации:</p>
               <CheckResultsPanel result={aggrChecks} />
             </div>
           )}
@@ -382,8 +433,7 @@ export function AggregationTab({
           {reorgChecks && (
             <div style={{ marginTop: "0.75rem" }}>
               <p className="tools-hint">
-                Увязки реорганизации (CheckItReorg*): {reorgChecks.passed}/
-                {reorgChecks.total} пройдено
+                Увязки реорганизации: {reorgChecks.passed}/{reorgChecks.total} пройдено
                 {reorgChecks.skipped
                   ? `, пропуск/ошибка разбора: ${reorgChecks.skipped}`
                   : ""}
@@ -395,7 +445,7 @@ export function AggregationTab({
           {accountRows && (
             <div style={{ marginTop: "0.75rem" }}>
               <p className="tools-hint">
-                Соответствие счетов и строк (AggrSetAccount / a__TempRows)
+                Соответствие счетов и строк
                 {accountRows.message
                   ? `: ${accountRows.message}`
                   : `: пар ${accountRows.totals.tempRows}, замечаний ${
@@ -454,7 +504,7 @@ export function AggregationTab({
               disabled={busy || parentZid === "" || eid === ""}
               onClick={() => void onCheckRelations()}
             >
-              Проверить суммы (RelCheck)
+              Проверить суммы (баланс)
             </button>
             <label className="checkbox-inline">
               <input
@@ -471,7 +521,7 @@ export function AggregationTab({
               className="btn btn-secondary"
               disabled={busy || parentZid === "" || eid === ""}
               onClick={() => void onFillBalance()}
-              title="FillBalanceRows: N01_02 → N01_1.H"
+              title="Заполнить N01_1.H из N01_02"
             >
               Заполнить баланс из N01_02
             </button>
@@ -479,7 +529,7 @@ export function AggregationTab({
 
           {fillBalance && (
             <p className="tools-hint" style={{ marginTop: "0.5rem" }}>
-              FillBalanceRows ({fillBalance.mode}): обновлено {fillBalance.updated}
+              Заполнение баланса ({fillBalance.mode}): обновлено {fillBalance.updated}
               {fillBalance.skippedNonEmpty
                 ? `, пропущено непустых ${fillBalance.skippedNonEmpty}`
                 : ""}
@@ -490,7 +540,7 @@ export function AggregationTab({
           {relations && (
             <div style={{ marginTop: "0.75rem" }}>
               <p className="tools-hint">
-                Сверка сумм счетов и баланса (CheckRelationsAccRows) — N01_02 → H
+                Сверка сумм счетов и баланса — N01_02 → H
                 {relations.message
                   ? `: ${relations.message}`
                   : `: расхождений ${relations.mismatched} из ${relations.compared}, пропуск итогов ${relations.skipped}`}

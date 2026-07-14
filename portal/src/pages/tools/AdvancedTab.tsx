@@ -1,83 +1,47 @@
-import type { InstanceSummary } from "../../types";
+import { Link } from "react-router-dom";
+import type { ToolsTabId } from "./tabs";
 
 export interface AdvancedTabProps {
-  templates: string[];
-  byTemplate: Map<string, InstanceSummary[]>;
-  templateId: string;
-  onTemplateChange: (templateId: string) => void;
-  selectedIds: string[];
-  onToggleSelected: (instanceId: string) => void;
-  busy: boolean;
-  ready: boolean;
-  onAggregate: () => void;
+  onNavigateTab: (tab: ToolsTabId) => void;
 }
 
-export function AdvancedTab({
-  templates,
-  byTemplate,
-  templateId,
-  onTemplateChange,
-  selectedIds,
-  onToggleSelected,
-  busy,
-  ready,
-  onAggregate,
-}: AdvancedTabProps) {
+/**
+ * Former “manual aggregation of 2+ instances of one template” was incompatible
+ * with unique (zid, eid, template_id): a package can hold only one instance per
+ * form. Package-level свод (a_tblAgg_List) is the supported path.
+ */
+export function AdvancedTab({ onNavigateTab }: AdvancedTabProps) {
   return (
     <section className="tools-section">
-      <h2>Агрегация вручную (один шаблон)</h2>
+      <h2>Расширенные операции</h2>
       <p className="tools-hint">
-        Как в Access при варианте «несколько заполнителей одной формы»: сложить выбранные
-        экземпляры одного шаблона построчно (числа суммируются). Нужны{" "}
-        <strong>минимум 2 сохранённые формы одного шаблона</strong>. Для свода по участникам
-        иерархии используйте вкладку «Свод».
+        Ручное сложение нескольких экземпляров одной формы в одном комплекте
+        отключено: в БД действует уникальность{" "}
+        <code>(организация, период, шаблон)</code>, поэтому внутри комплекта
+        может быть только одна форма каждого типа.
       </p>
-      <label>
-        Шаблон
-        <select
-          value={templateId}
-          onChange={(e) => onTemplateChange(e.target.value)}
+      <p className="tools-hint">
+        Для промышленного свода используйте вкладку «Свод» (участники из{" "}
+        <Link to="/admin/aggregation">конфигурации агрегации</Link>
+        ). Чтобы собрать данные нескольких заполнителей одной организации —
+        принимайте частичные комплекты на вкладке «Обмен».
+      </p>
+      <div className="toolbar-actions" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onNavigateTab("aggregation")}
         >
-          <option value="">— выберите —</option>
-          {templates.map((t) => (
-            <option key={t} value={t}>
-              {t} ({byTemplate.get(t)?.length ?? 0})
-            </option>
-          ))}
-        </select>
-      </label>
-      {templateId && (
-        <ul className="aggr-list">
-          {(byTemplate.get(templateId) ?? []).map((s) => (
-            <li key={s.instanceId}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(s.instanceId)}
-                  onChange={() => onToggleSelected(s.instanceId)}
-                />
-                {s.displayName}
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={() => void onAggregate()}
-        disabled={busy}
-        title={
-          ready
-            ? "Суммировать выбранные формы"
-            : "Выберите шаблон и отметьте 2+ формы"
-        }
-      >
-        {busy ? "Агрегация…" : "Создать агрегированную форму"}
-        {!ready && templateId && (
-          <span className="btn-hint"> ({selectedIds.length}/2)</span>
-        )}
-      </button>
+          К своду комплекта
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => onNavigateTab("exchange")}
+        >
+          К обмену
+        </button>
+      </div>
     </section>
   );
 }

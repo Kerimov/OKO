@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { loadSchema } from "../api";
 import {
   checkAccountRelations,
@@ -18,7 +18,6 @@ import {
   type FillBalanceApiResult,
   type RelationsAccRowsApiResult,
 } from "../aggregationApi";
-import { aggregateInstances } from "../engine/aggregateEngine";
 import {
   getCheckRuleCounts,
   reorgVariantsForRun,
@@ -114,7 +113,6 @@ function parseToolsTab(raw: string | null): ToolsTabId {
 }
 
 export function ToolsPage() {
-  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const auth = useAuth();
@@ -158,9 +156,6 @@ export function ToolsPage() {
   const [saldoDryRun, setSaldoDryRun] = useState(false);
   const [saldoCompare, setSaldoCompare] = useState<SaldoCompareResult | null>(null);
 
-  const [aggrTemplate, setAggrTemplate] = useState("");
-  const [aggrSelected, setAggrSelected] = useState<string[]>([]);
-
   const [pkgParentZid, setPkgParentZid] = useState<number | "">("");
   const [pkgEid, setPkgEid] = useState<number | "">("");
   const [pkgChildEntries, setPkgChildEntries] = useState<AggListEntry[]>([]);
@@ -170,6 +165,8 @@ export function ToolsPage() {
   const [pkgColorMode, setPkgColorMode] = useState<AggregationColorMode>("full");
   const [pkgReorg, setPkgReorg] = useState(false);
   const [pkgUpdateCorr, setPkgUpdateCorr] = useState(false);
+  const [pkgIncludeDraftSources, setPkgIncludeDraftSources] = useState(false);
+  const [pkgOverwriteSubmitted, setPkgOverwriteSubmitted] = useState(false);
   const [pkgTargetZid, setPkgTargetZid] = useState<number | "">("");
   const [pkgCorrSets, setPkgCorrSets] = useState<AggCorrSet[]>([]);
   const [pkgPreview, setPkgPreview] = useState<AggregationPreview | null>(null);
@@ -190,7 +187,7 @@ export function ToolsPage() {
   const [workZid, setWorkZid] = useState<number | null>(null);
   const [workEid, setWorkEid] = useState<number | null>(null);
   const [recalcReport, setRecalcReport] = useState<RecalcPackageItem[] | null>(null);
-  const [importOverwrite, setImportOverwrite] = useState(true);
+  const [importOverwrite, setImportOverwrite] = useState(false);
   const [importing, setImporting] = useState(false);
   const [pendingPackage, setPendingPackage] = useState<
     Awaited<ReturnType<typeof readReportPackageFile>> | null
@@ -311,21 +308,6 @@ export function ToolsPage() {
     return summaries.filter((s) => s.zid === workZid && s.eid === workEid);
   }, [summaries, workZid, workEid]);
 
-  const byTemplate = useMemo(() => {
-    const map = new Map<string, InstanceSummary[]>();
-    for (const s of scopedSummaries) {
-      const list = map.get(s.templateId) ?? [];
-      list.push(s);
-      map.set(s.templateId, list);
-    }
-    return map;
-  }, [scopedSummaries]);
-
-  const templates = useMemo(
-    () => Array.from(byTemplate.keys()).sort(),
-    [byTemplate]
-  );
-
   const aggParentZids = pkgParents;
 
   const applyParentSelection = async (zid: number, preferredEid?: number) => {
@@ -371,6 +353,14 @@ export function ToolsPage() {
       setStatus("Выберите сводную организацию и период");
       return;
     }
+    const label = kind === "mirror" ? "зеркало" : "корректирующий набор";
+    if (
+      !window.confirm(
+        `Создать ${label} для орг. ${pkgParentZid}, период ${pkgEid}? Будут созданы новые формы в целевом комплекте.`
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setStatus("");
     try {
@@ -398,6 +388,15 @@ export function ToolsPage() {
       setStatus("Выберите сводную организацию и период");
       return;
     }
+    if (fillBalanceMode === "overwrite") {
+      if (
+        !window.confirm(
+          "Перезаписать колонку H баланса из N01_02? Существующие значения будут заменены."
+        )
+      ) {
+        return;
+      }
+    }
     setBusy(true);
     try {
       const targetZid = pkgTargetZid === "" ? undefined : pkgTargetZid;
@@ -406,6 +405,7 @@ export function ToolsPage() {
         eid: pkgEid,
         targetZid,
         mode: fillBalanceMode,
+        overwriteSubmitted: pkgOverwriteSubmitted,
       });
       setFillBalanceResult(filled);
       if (filled.ok) {
@@ -417,15 +417,15 @@ export function ToolsPage() {
         setRelationsResult(rel);
         await refresh();
         setStatus(
-          `FillBalanceRows: обновлено ${filled.updated} строк H` +
+          `Заполнение баланса: обновлено ${filled.updated} строк H` +
             (filled.skippedNonEmpty ? `, пропущено непустых ${filled.skippedNonEmpty}` : "") +
-            ` · RelCheck: ${rel.mismatched}/${rel.compared} расхождений`
+            ` · сверка: ${rel.mismatched}/${rel.compared} расхождений`
         );
       } else {
         setStatus(filled.message ?? "Не удалось заполнить баланс");
       }
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка FillBalanceRows");
+      setStatus(e instanceof Error ? e.message : "Ошибка заполнения баланса");
     } finally {
       setBusy(false);
     }
@@ -513,6 +513,8 @@ export function ToolsPage() {
         reorg: pkgReorg,
         updateCorrSet: pkgUpdateCorr,
         targetZid: pkgTargetZid === "" ? undefined : pkgTargetZid,
+        includeDraftSources: pkgIncludeDraftSources,
+        overwriteSubmitted: pkgOverwriteSubmitted,
       });
       setPkgPreview(preview);
       setStatus(
@@ -537,6 +539,17 @@ export function ToolsPage() {
       setStatus("Отметьте хотя бы одного участника свода");
       return;
     }
+    const destZid = pkgTargetZid === "" ? pkgParentZid : pkgTargetZid;
+    const warnings: string[] = [];
+    if (pkgIncludeDraftSources) warnings.push("включая черновики участников");
+    if (pkgOverwriteSubmitted) warnings.push("с перезаписью сданных целевых форм");
+    const confirmMsg =
+      `Выполнить свод орг. ${pkgParentZid} → ${destZid}, период ${pkgEid}` +
+      ` (${pkgSelectedChildren.length} участников` +
+      (warnings.length ? `; ${warnings.join("; ")}` : "") +
+      ")?\n\nОперация перезапишет формы целевого комплекта.";
+    if (!window.confirm(confirmMsg)) return;
+
     setBusy(true);
     setStatus("");
     setAggrCheckResult(null);
@@ -555,6 +568,8 @@ export function ToolsPage() {
         reorg: pkgReorg,
         updateCorrSet: pkgUpdateCorr,
         targetZid: pkgTargetZid === "" ? undefined : pkgTargetZid,
+        includeDraftSources: pkgIncludeDraftSources,
+        overwriteSubmitted: pkgOverwriteSubmitted,
       });
       await refresh();
       const targetZid =
@@ -619,6 +634,8 @@ export function ToolsPage() {
         reorg: pkgReorg,
         updateCorrSet: pkgUpdateCorr,
         targetZid: pkgTargetZid === "" ? undefined : pkgTargetZid,
+        includeDraftSources: pkgIncludeDraftSources,
+        overwriteSubmitted: pkgOverwriteSubmitted,
       });
       setPkgPreview(preview);
       const dest =
@@ -632,7 +649,7 @@ export function ToolsPage() {
             ? ` · обновление корр. набора (${pkgColorMode})`
             : ` · ${pkgReorg ? "создание корр. набора" : "свод"} ${pkgColorMode}`;
       const reorgHint = reorgChecks
-        ? ` · CheckItReorg: ${reorgChecks.passed}/${reorgChecks.total}`
+        ? ` · увязки реорг.: ${reorgChecks.passed}/${reorgChecks.total}`
         : "";
       const acctHint = acct
         ? acct.message
@@ -646,8 +663,8 @@ export function ToolsPage() {
         : "";
       const relHint = rel
         ? rel.message
-          ? ` · RelCheck: ${rel.message}`
-          : ` · RelCheck: ${rel.mismatched}/${rel.compared} расхождений`
+          ? ` · сверка: ${rel.message}`
+          : ` · сверка: ${rel.mismatched}/${rel.compared} расхождений`
         : "";
       setStatus(
         `Свод завершён: ${result.aggregated} форм, пропущено ${result.skipped}` +
@@ -664,6 +681,15 @@ export function ToolsPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleSyncAggWithWorkContext = () => {
+    if (workZid == null) {
+      setStatus("Сначала выберите организацию в комплекте");
+      return;
+    }
+    void applyParentSelection(workZid, workEid ?? undefined);
+    setStatus(`Свод синхронизирован с комплектом: орг. ${workZid}, период ${workEid ?? "—"}`);
   };
 
   const handleCheckAll = async () => {
@@ -1013,53 +1039,6 @@ export function ToolsPage() {
     }
   };
 
-  const handleAggregate = async () => {
-    if (workZid == null || workEid == null) {
-      setStatus("Сначала выберите организацию и период в комплекте");
-      return;
-    }
-    if (!aggrTemplate) {
-      setStatus("Выберите шаблон формы");
-      return;
-    }
-    if (aggrSelected.length < 2) {
-      setStatus("Отметьте минимум 2 формы одного шаблона для агрегации");
-      return;
-    }
-    setBusy(true);
-    setStatus("");
-    try {
-      const scoped =
-        periodInstances.length > 0
-          ? periodInstances
-          : (await loadAllInstances()).filter((i) => i.zid === workZid && i.eid === workEid);
-      const sources = scoped.filter((i) => aggrSelected.includes(i.instanceId));
-      if (sources.length < 2) {
-        setStatus("Выбранные формы должны относиться к рабочему комплекту");
-        return;
-      }
-      const { instance } = aggregateInstances({
-        templateId: aggrTemplate,
-        sources,
-      });
-      const stamped = {
-        ...instance,
-        zid: workZid,
-        eid: workEid,
-      };
-      await saveInstance(stamped);
-      await refresh();
-      setStatus(`Создана агрегированная форма: ${stamped.displayName}`);
-      navigate(`/my/${stamped.instanceId}`);
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка агрегации");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const aggrReady = !!aggrTemplate && aggrSelected.length >= 2;
-
   const missingForms = completeness?.items.filter((i) => !i.filled) ?? [];
   const activeTabMeta = TOOLS_TABS.find((t) => t.id === activeTab);
 
@@ -1110,11 +1089,13 @@ export function ToolsPage() {
         </Link>
       </div>
 
-      <nav className="tools-tabs" aria-label="Разделы сводки и импорта">
+      <nav className="tools-tabs" role="tablist" aria-label="Разделы сводки и импорта">
         {TOOLS_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
             className={activeTab === tab.id ? "active" : undefined}
             onClick={() => setActiveTab(tab.id)}
             title={tab.hint}
@@ -1125,7 +1106,11 @@ export function ToolsPage() {
       </nav>
       {activeTabMeta && <p className="tools-tab-hint">{activeTabMeta.hint}</p>}
 
-      {status && <div className="status-bar">{status}</div>}
+      {status && (
+        <div className="status-bar" role="status" aria-live="polite">
+          {status}
+        </div>
+      )}
 
       {activeTab === "overview" && (
         <OverviewTab
@@ -1367,6 +1352,8 @@ export function ToolsPage() {
             reorg: pkgReorg,
             updateCorr: pkgUpdateCorr,
             fillBalanceMode,
+            includeDraftSources: pkgIncludeDraftSources,
+            overwriteSubmitted: pkgOverwriteSubmitted,
           }}
           results={{
             preview: pkgPreview,
@@ -1424,12 +1411,22 @@ export function ToolsPage() {
             setPkgPreview(null);
           }}
           onFillBalanceModeChange={setFillBalanceMode}
+          onIncludeDraftSourcesChange={(value) => {
+            setPkgIncludeDraftSources(value);
+            setPkgPreview(null);
+          }}
+          onOverwriteSubmittedChange={(value) => {
+            setPkgOverwriteSubmitted(value);
+            setPkgPreview(null);
+          }}
           onCreateCorrSet={handleCreateCorrSet}
           onPreview={handleAggPreview}
           onAggregate={handlePackageAggregate}
           onCheckRelations={handleCheckRelations}
           onFillBalance={handleFillBalance}
           onClearPreview={() => setPkgPreview(null)}
+          workContext={{ zid: workZid, eid: workEid }}
+          onSyncWithWorkContext={handleSyncAggWithWorkContext}
         />
       )}
 
@@ -1488,28 +1485,7 @@ export function ToolsPage() {
         />
       )}
 
-      {activeTab === "advanced" && (
-        <AdvancedTab
-          templates={templates}
-          byTemplate={byTemplate}
-          templateId={aggrTemplate}
-          onTemplateChange={(id) => {
-            setAggrTemplate(id);
-            setAggrSelected([]);
-          }}
-          selectedIds={aggrSelected}
-          onToggleSelected={(instanceId) =>
-            setAggrSelected((p) =>
-              p.includes(instanceId)
-                ? p.filter((x) => x !== instanceId)
-                : [...p, instanceId]
-            )
-          }
-          busy={busy}
-          ready={aggrReady}
-          onAggregate={handleAggregate}
-        />
-      )}
+      {activeTab === "advanced" && <AdvancedTab onNavigateTab={setActiveTab} />}
     </div>
   );
 }

@@ -70,6 +70,13 @@ export function OverviewTab({
           >
             К своду
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => onNavigateTab("saldo")}
+          >
+            К сальдо
+          </button>
         </div>
       </section>
 
