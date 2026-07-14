@@ -69,6 +69,7 @@ export {
 
 export {
   applySaldoDetailedRules,
+  compareSaldoDetailedRules,
   ruleMatchesSaldoType,
   applySaldoToTarget,
   compareSaldoColumns,

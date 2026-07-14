@@ -117,9 +117,19 @@ export class FormsController {
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Схема формы" })
-  async getOne(@Param("id") id: string) {
-    const schema = await loadFormSchema(await getDb(), id);
+  @ApiOperation({ summary: "Схема формы (опционально ?version=N — pin из revisions)" })
+  @ApiQuery({ name: "version", required: false })
+  async getOne(@Param("id") id: string, @Query("version") versionRaw?: string) {
+    const db = await getDb();
+    const version =
+      versionRaw != null && versionRaw !== "" ? Number(versionRaw) : undefined;
+    if (version != null && Number.isFinite(version)) {
+      const { loadFormSchemaAtVersion } = await import("../../../server/src/spreadsheet.js");
+      const schema = await loadFormSchemaAtVersion(db, id, version);
+      if (!schema) throw new NotFoundException({ error: "Form not found" });
+      return schema;
+    }
+    const schema = await loadFormSchema(db, id);
     if (!schema) throw new NotFoundException({ error: "Form not found" });
     return schema;
   }
@@ -201,7 +211,11 @@ export class FormsController {
     if (!body?.rowId || !body?.columnKey) {
       throw new BadRequestException({ error: "rowId and columnKey required" });
     }
-    return upsertCellDefinition(await getDb(), { formId: id, ...body });
+    const db = await getDb();
+    const result = await upsertCellDefinition(db, { formId: id, ...body });
+    const { bumpFormSchemaVersion } = await import("../../../server/src/forms.js");
+    await bumpFormSchemaVersion(db, id, "admin");
+    return result;
   }
 
   @Delete(":id/cell-definitions")

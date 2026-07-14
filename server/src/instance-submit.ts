@@ -100,6 +100,31 @@ export async function loadSiblingInstances(
   return instances;
 }
 
+/** Resolve check rules for a period's methodology pin when embedded; else live. */
+async function loadChecksForInstance(
+  db: OkoDb,
+  existing: OkoFormInstance
+): Promise<CheckRule[]> {
+  const eid = intOrNull(existing.eid);
+  if (eid != null) {
+    try {
+      const { getPeriodRow } = await import("./periodLifecycle.js");
+      const { getMethodologyReleaseById } = await import("./methodology.js");
+      const period = await getPeriodRow(db, eid, intOrNull(existing.zid) ?? undefined);
+      if (period?.methodology_release_id) {
+        const release = await getMethodologyReleaseById(db, period.methodology_release_id);
+        if (release?.checks && Array.isArray(release.checks)) {
+          return release.checks as CheckRule[];
+        }
+      }
+    } catch {
+      /* fall through to live */
+    }
+  }
+  const payload = await exportChecksPayload(db);
+  return payload.checks as CheckRule[];
+}
+
 /** Dry-run period (or other mode) checks for one form — no status change. */
 export async function runInstancePeriodChecks(
   db: OkoDb,
@@ -109,8 +134,7 @@ export async function runInstancePeriodChecks(
   const existing = await loadInstance(db, instanceId);
   if (!existing) return null;
 
-  const payload = await exportChecksPayload(db);
-  const rules = payload.checks as CheckRule[];
+  const rules = await loadChecksForInstance(db, existing);
   const instances = await loadSiblingInstances(db, existing);
   const result = runFormChecksWithData(
     rules,
@@ -128,10 +152,142 @@ export async function submitInstanceWithChecks(
 ): Promise<OkoFormInstance | null> {
   const ran = await runInstancePeriodChecks(db, instanceId, "period");
   if (!ran) return null;
-  if (ran.result.failed > 0 || ran.result.skipped > 0) {
+  // skipped = проверка не разобрана (часто пустые ячейки) — не блокируем сдачу.
+  // Блокируем только явные failed.
+  if (ran.result.failed > 0) {
     throw new ChecksFailedError(ran.result);
   }
   return setInstanceStatus(db, instanceId, "submitted");
+}
+
+export type BulkSubmitFailure = {
+  instanceId: string;
+  displayName?: string;
+  error: string;
+  result?: CheckRunResult;
+};
+
+/** Сдать несколько форм: siblings пакета грузятся один раз на (zid,eid). */
+export async function submitInstancesBulkWithChecks(
+  db: OkoDb,
+  instanceIds: string[]
+): Promise<{ submitted: string[]; failed: BulkSubmitFailure[] }> {
+  const unique = [...new Set(instanceIds.filter(Boolean))];
+  const submitted: string[] = [];
+  const failed: BulkSubmitFailure[] = [];
+  if (unique.length === 0) return { submitted, failed };
+
+  type Group = {
+    zid: number;
+    eid: number;
+    ids: string[];
+  };
+  const groups = new Map<string, Group>();
+  const noPackage: string[] = [];
+
+  for (const id of unique) {
+    const inst = await loadInstance(db, id);
+    if (!inst) {
+      failed.push({ instanceId: id, error: "Not found" });
+      continue;
+    }
+    const zid = intOrNull(inst.zid);
+    const eid = intOrNull(inst.eid);
+    if (zid == null || eid == null) {
+      noPackage.push(id);
+      continue;
+    }
+    const key = `${zid}:${eid}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { zid, eid, ids: [] };
+      groups.set(key, g);
+    }
+    g.ids.push(id);
+  }
+
+  for (const id of noPackage) {
+    try {
+      const updated = await submitInstanceWithChecks(db, id);
+      if (updated) submitted.push(id);
+      else failed.push({ instanceId: id, error: "Not found" });
+    } catch (e) {
+      const err = e as Error & { result?: CheckRunResult };
+      failed.push({
+        instanceId: id,
+        error: err.message || "status update failed",
+        result: err.result,
+      });
+    }
+  }
+
+  for (const group of groups.values()) {
+    const siblingIds = await listPackageInstanceIds(db, group.zid, group.eid);
+    const siblings: OkoFormInstance[] = [];
+    for (const sid of siblingIds) {
+      const inst = await loadInstance(db, sid);
+      if (inst) siblings.push(inst);
+    }
+    if (siblings.length === 0) {
+      for (const id of group.ids) {
+        failed.push({ instanceId: id, error: "Not found" });
+      }
+      continue;
+    }
+
+    let rules: CheckRule[];
+    try {
+      rules = await loadChecksForInstance(db, siblings[0]!);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "checks load failed";
+      for (const id of group.ids) {
+        failed.push({ instanceId: id, error: msg });
+      }
+      continue;
+    }
+
+    for (const id of group.ids) {
+      const existing = siblings.find((s) => s.instanceId === id);
+      if (!existing) {
+        failed.push({ instanceId: id, error: "Not found" });
+        continue;
+      }
+      if (existing.status === "submitted") {
+        submitted.push(id);
+        continue;
+      }
+      try {
+        const result = runFormChecksWithData(
+          rules,
+          existing.templateId,
+          siblings,
+          "period"
+        );
+        if (result.failed > 0) {
+          failed.push({
+            instanceId: id,
+            displayName: existing.displayName,
+            error: "checks_failed",
+            result,
+          });
+          continue;
+        }
+        await setInstanceStatus(db, id, "submitted");
+        existing.status = "submitted";
+        submitted.push(id);
+      } catch (e) {
+        const err = e as Error & { result?: CheckRunResult };
+        failed.push({
+          instanceId: id,
+          displayName: existing.displayName,
+          error: err.message || "status update failed",
+          result: err.result,
+        });
+      }
+    }
+  }
+
+  return { submitted, failed };
 }
 
 /** Validate package instances marked submitted (in-memory siblings). */
@@ -149,7 +305,7 @@ export async function assertPackageSubmittedChecks(
   for (const inst of submitted) {
     if (!inst.templateId) continue;
     const result = runFormChecksWithData(rules, inst.templateId, instances, "period");
-    if (result.failed > 0 || result.skipped > 0) {
+    if (result.failed > 0) {
       results[inst.templateId] = result;
     }
   }

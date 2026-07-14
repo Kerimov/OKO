@@ -12,6 +12,7 @@ import {
   deleteInstance,
   importInstanceFile,
   listInstances,
+  submitInstancesBulk,
 } from "../storage";
 import { useAuth } from "../useAuth";
 import { formatPeriod, formStatusLabel } from "../utils";
@@ -194,7 +195,9 @@ export function MyFormsPage() {
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const selectionBusy = deleting || submitting;
 
   const refresh = async () => {
     setLoading(true);
@@ -383,6 +386,60 @@ export function MyFormsPage() {
     deleteInstances(Array.from(selectedIds), "");
   };
 
+  const handleSubmitSelected = async () => {
+    const drafts = instances.filter(
+      (i) =>
+        selectedIds.has(i.instanceId) && (i.status ?? "draft") !== "submitted"
+    );
+    if (drafts.length === 0) {
+      alert("Среди выбранных нет черновиков для сдачи.");
+      return;
+    }
+    if (
+      !confirm(
+        drafts.length === 1
+          ? `Сдать форму «${drafts[0].displayName}»?\nПосле сдачи редактирование будет недоступно.`
+          : `Сдать ${drafts.length} форм?\nПосле сдачи редактирование будет недоступно.`
+      )
+    ) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await submitInstancesBulk(drafts.map((d) => d.instanceId));
+      await refresh();
+      const nameById = new Map(
+        drafts.map((d) => [d.instanceId, d.displayName || d.templateId])
+      );
+      if (result.failed.length === 0) {
+        clearSelection();
+        alert(
+          result.submitted.length === 1
+            ? "Форма сдана."
+            : `Сдано форм: ${result.submitted.length}.`
+        );
+      } else {
+        const lines = result.failed.slice(0, 12).map((f) => {
+          const label = f.displayName || nameById.get(f.instanceId) || f.instanceId;
+          const detail =
+            f.error === "checks_failed" && f.result
+              ? `проверки (ошибок: ${f.result.failed ?? 0})`
+              : f.error;
+          return `${label}: ${detail}`;
+        });
+        alert(
+          `Сдано: ${result.submitted.length}. Не удалось (${result.failed.length}):\n${lines.join(
+            "\n"
+          )}${result.failed.length > 12 ? "\n…" : ""}`
+        );
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось сдать выбранные формы");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -476,7 +533,7 @@ export function MyFormsPage() {
                 key={inst.instanceId}
                 inst={inst}
                 checked={selectedIds.has(inst.instanceId)}
-                deleting={deleting}
+                deleting={selectionBusy}
                 showPackageIds={adminView}
                 hideOrgLine={hideOrgOnCards}
                 compact={nested || groupByPackage}
@@ -537,7 +594,7 @@ export function MyFormsPage() {
             key={inst.instanceId}
             inst={inst}
             checked={selectedIds.has(inst.instanceId)}
-            deleting={deleting}
+            deleting={selectionBusy}
             showPackageIds={adminView}
             hideOrgLine={hideOrgOnCards}
             onToggle={toggleOne}
@@ -687,8 +744,18 @@ export function MyFormsPage() {
           <>
             <button
               type="button"
+              className="btn btn-primary"
+              disabled={selectionBusy}
+              onClick={handleSubmitSelected}
+            >
+              {submitting
+                ? "Сдача…"
+                : `Сдать выбранные (${selectedCount})`}
+            </button>
+            <button
+              type="button"
               className="btn btn-danger-outline"
-              disabled={deleting}
+              disabled={selectionBusy}
               onClick={handleDeleteSelected}
             >
               {deleting ? "Удаление…" : `Удалить выбранные (${selectedCount})`}
@@ -696,7 +763,7 @@ export function MyFormsPage() {
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={deleting}
+              disabled={selectionBusy}
               onClick={clearSelection}
             >
               Снять выбор
@@ -737,7 +804,7 @@ export function MyFormsPage() {
                 ref={(el) => {
                   if (el) el.indeterminate = someFilteredSelected;
                 }}
-                disabled={deleting}
+                disabled={selectionBusy}
                 onChange={(e) => toggleAllFiltered(e.target.checked)}
               />
               <span>

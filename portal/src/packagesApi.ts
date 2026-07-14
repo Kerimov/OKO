@@ -85,6 +85,7 @@ export async function listOrganizations(): Promise<Organization[]> {
 export async function createOrganization(input: {
   name: string;
   code?: string;
+  parentZid?: number | null;
 }): Promise<Organization> {
   if (isBackendMode()) {
     return apiFetch<Organization>("/api/organizations", {
@@ -99,7 +100,7 @@ export async function createOrganization(input: {
     zid,
     name: input.name.trim(),
     code: input.code?.trim() || null,
-    parentZid: null,
+    parentZid: input.parentZid ?? null,
   };
   orgs.push(org);
   writeLocalOrgs(orgs);
@@ -121,6 +122,7 @@ export async function createPeriod(input: {
   name: string;
   periodStart?: string;
   periodEnd?: string;
+  methodologyReleaseId?: string | null;
 }): Promise<ReportingPeriod> {
   if (isBackendMode()) {
     return apiFetch<ReportingPeriod>("/api/periods", {
@@ -139,10 +141,55 @@ export async function createPeriod(input: {
     periodEnd: input.periodEnd || null,
     quarter: null,
     year: null,
+    periodStatus: "open",
+    methodologyReleaseId: input.methodologyReleaseId ?? null,
   };
   periods.push(period);
   writeLocalPeriods(periods);
   return period;
+}
+
+export async function closePeriod(
+  zid: number,
+  eid: number,
+  opts?: { requireAccepted?: boolean }
+): Promise<{
+  eid: number;
+  zid: number;
+  periodStatus: "closed";
+  closedAt: string;
+}> {
+  return apiFetch(`/api/periods/${eid}/close?zid=${zid}`, {
+    method: "POST",
+    body: JSON.stringify({ requireAccepted: opts?.requireAccepted !== false }),
+  });
+}
+
+export async function reopenPeriod(
+  zid: number,
+  eid: number
+): Promise<{ eid: number; zid: number; periodStatus: "open" }> {
+  return apiFetch(`/api/periods/${eid}/reopen?zid=${zid}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function distributePackagesToChildren(input: {
+  parentZid: number;
+  sourceEid: number;
+  createEmptyPackages?: boolean;
+  childZids?: number[];
+  fallbackAllOthers?: boolean;
+}): Promise<{
+  createdPeriods: number;
+  createdPackages: number;
+  children: Array<{ zid: number; name: string; eid: number; created: number }>;
+}> {
+  return apiFetch("/api/periods/distribute", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function loadWorkContext(): Promise<WorkContext> {
@@ -213,11 +260,12 @@ export async function setPackageWorkflowStatus(
   zid: number,
   eid: number,
   status: PackageWorkflowStatus,
-  comment?: string | null
+  comment?: string | null,
+  force?: boolean
 ): Promise<PackageWorkflow> {
   return apiFetch<PackageWorkflow>("/api/packages/workflow", {
     method: "POST",
-    body: JSON.stringify({ zid, eid, status, comment: comment ?? null }),
+    body: JSON.stringify({ zid, eid, status, comment: comment ?? null, force: force === true }),
   });
 }
 

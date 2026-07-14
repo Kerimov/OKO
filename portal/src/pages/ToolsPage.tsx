@@ -80,6 +80,7 @@ import { prepareRecalcPackage, type RecalcPackageItem } from "../engine/recalcEn
 import {
   applySaldoToTarget,
   compareSaldoByColumns,
+  compareSaldoDetailed,
   countSaldoRulesForForm,
   transferSaldoByColumns,
   transferSaldoDetailed,
@@ -994,12 +995,26 @@ export function ToolsPage() {
     try {
       if (saldoMode === "detailed") {
         if (saldoDryRun) {
+          const cmp = await compareSaldoDetailed(
+            source,
+            target,
+            saldoDetailedType,
+            scoped
+          );
+          setSaldoCompare(cmp);
           setStatus(
-            "«Только проверить» доступно для соответствия форм (графы). Для детальных правил выполните перенос или сверку через проверки формы."
+            cmp.diffs.length === 0
+              ? `Сверка сальдо (детальные ${saldoDetailedType.toUpperCase()}): расхождений нет`
+              : `Сверка сальдо (детальные): ${cmp.diffs.length} ячеек в ${cmp.wouldUpdateRows} строках (данные не изменены)`
           );
           return;
         }
-        const result = await transferSaldoDetailed(source, target, saldoDetailedType);
+        const result = await transferSaldoDetailed(
+          source,
+          target,
+          saldoDetailedType,
+          scoped
+        );
         if (result.applied === 0) {
           setStatus(
             `Правила сальдо (${saldoDetailedType.toUpperCase()}): нет применимых ячеек для ${target.templateId}`
@@ -1010,7 +1025,8 @@ export function ToolsPage() {
         await refresh();
         setSaldoCompare(null);
         setStatus(
-          `Сальдо (детальные правила, ${saldoDetailedType.toUpperCase()}): применено ${result.applied} ячеек`
+          `Сальдо (детальные правила, ${saldoDetailedType.toUpperCase()}): применено ${result.applied} ячеек` +
+            (result.warning ? ` · ${result.warning}` : "")
         );
         return;
       }
@@ -1033,7 +1049,8 @@ export function ToolsPage() {
       await refresh();
       setSaldoCompare(null);
       setStatus(
-        `Сальдо (соответствие форм): ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}`
+        `Сальдо (соответствие форм): ${result.rowsUpdated} строк, графы ${result.columnsCopied.join(", ")}` +
+          (result.warning ? ` · ${result.warning}` : "")
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка переноса сальдо");

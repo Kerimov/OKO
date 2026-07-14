@@ -3,6 +3,16 @@ import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
 import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
 import { deleteInstanceFromDb, saveInstanceCells } from "./instances.js";
+import {
+  assertPeriodWritable,
+  ensurePeriodFormSet,
+  listChildOrganizations,
+  migratePeriodLifecycle,
+  normalizePeriodStatus,
+  resolveActiveMethodologyId,
+  snapshotPeriodFormSet,
+  type PeriodLifecycleStatus,
+} from "./periodLifecycle.js";
 import { saveRashEntries } from "./rash-data.js";
 import type { OkoFormInstance } from "./types.js";
 
@@ -23,6 +33,11 @@ export interface PeriodDto {
   year: number | null;
   packageStatus?: PackageWorkflowStatus;
   packageComment?: string | null;
+  periodStatus?: PeriodLifecycleStatus;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  methodologyReleaseId?: string | null;
+  formSetCount?: number;
 }
 
 export interface WorkContextDto {
@@ -160,6 +175,7 @@ export async function migrateOrgTables(db: OkoDb): Promise<void> {
       await db.exec(`ALTER TABLE periods ADD COLUMN ${name} ${ddl}`);
     }
   }
+  await migratePeriodLifecycle(db);
 }
 
 export async function seedOrganizationsFromSettings(db: OkoDb): Promise<number> {
@@ -239,6 +255,11 @@ function rowToPeriod(row: {
   year: number | null;
   package_status?: string | null;
   package_comment?: string | null;
+  period_status?: string | null;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  methodology_release_id?: string | null;
+  form_set_count?: number | null;
 }): PeriodDto {
   return {
     eid: row.eid,
@@ -250,6 +271,11 @@ function rowToPeriod(row: {
     year: row.year,
     packageStatus: normalizePackageWorkflowStatus(row.package_status),
     packageComment: row.package_comment ?? null,
+    periodStatus: normalizePeriodStatus(row.period_status),
+    closedAt: row.closed_at ?? null,
+    closedBy: row.closed_by ?? null,
+    methodologyReleaseId: row.methodology_release_id ?? null,
+    formSetCount: row.form_set_count != null ? Number(row.form_set_count) : undefined,
   };
 }
 
@@ -289,14 +315,46 @@ export async function setPackageWorkflow(
     comment?: string | null;
     actor?: string | null;
     isAdmin?: boolean;
+    force?: boolean;
   }
 ): Promise<PackageWorkflowDto> {
+  await assertPeriodWritable(db, eid, zid, { force: input.force === true });
   const current = await loadPackageWorkflow(db, zid, eid);
   if (
     !canTransitionPackageStatus(current.status, input.status, input.isAdmin === true)
   ) {
-    throw new Error(`Недопустимый переход статуса: ${current.status} → ${input.status}`);
+    const err = new Error(
+      `Недопустимый переход статуса: ${current.status} → ${input.status}`
+    );
+    (err as Error & { status: number }).status = 400;
+    throw err;
   }
+
+  if (
+    (input.status === "submitted" || input.status === "accepted") &&
+    input.force !== true
+  ) {
+    const completeness = await getPackageCompleteness(db, zid, eid);
+    const formSet = await ensurePeriodFormSet(db, eid);
+    const required = formSet.length > 0 ? formSet.length : completeness.total;
+    if (completeness.filled < required) {
+      const err = new Error(
+        `Комплект неполон: заведено ${completeness.filled} из ${required} форм. Нажмите «Завести пустые формы» или дозаполните комплект.`
+      );
+      (err as Error & { status: number }).status = 400;
+      throw err;
+    }
+    // Package «на проверку» — достаточно заведённых форм.
+    // «Принять» — все формы должны быть сданы по отдельности.
+    if (input.status === "accepted" && completeness.submitted < required) {
+      const err = new Error(
+        `Нельзя принять: сдано форм ${completeness.submitted} из ${required} (черновиков: ${completeness.draft}). Сдайте каждую форму в «Мои формы», затем примите комплект.`
+      );
+      (err as Error & { status: number }).status = 400;
+      throw err;
+    }
+  }
+
   const now = new Date().toISOString();
   const comment =
     input.comment !== undefined ? input.comment : current.comment;
@@ -347,13 +405,14 @@ export async function createOrganization(
 }
 
 export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]> {
+  const select = `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end, p.quarter, p.year,
+              p.package_status, p.package_comment,
+              p.period_status, p.closed_at, p.closed_by, p.methodology_release_id,
+              (SELECT COUNT(*) FROM period_form_set pfs WHERE pfs.eid = p.eid) AS form_set_count
+       FROM periods p`;
   if (zid) {
     const rows = (await db
-      .prepare(
-        `SELECT eid, zid, name, period_start, period_end, quarter, year,
-                package_status, package_comment
-         FROM periods WHERE zid = ? ORDER BY period_start DESC, eid DESC`
-      )
+      .prepare(`${select} WHERE p.zid = ? ORDER BY p.period_start DESC, p.eid DESC`)
       .all(zid)) as Array<{
       eid: number;
       zid: number;
@@ -364,15 +423,16 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
       year: number | null;
       package_status: string | null;
       package_comment: string | null;
+      period_status: string | null;
+      closed_at: string | null;
+      closed_by: string | null;
+      methodology_release_id: string | null;
+      form_set_count: number | null;
     }>;
     return rows.map(rowToPeriod);
   }
   const rows = (await db
-    .prepare(
-      `SELECT eid, zid, name, period_start, period_end, quarter, year,
-              package_status, package_comment
-       FROM periods ORDER BY zid, period_start DESC, eid DESC`
-    )
+    .prepare(`${select} ORDER BY p.zid, p.period_start DESC, p.eid DESC`)
     .all()) as Array<{
     eid: number;
     zid: number;
@@ -383,6 +443,11 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
     year: number | null;
     package_status: string | null;
     package_comment: string | null;
+    period_status: string | null;
+    closed_at: string | null;
+    closed_by: string | null;
+    methodology_release_id: string | null;
+    form_set_count: number | null;
   }>;
   return rows.map(rowToPeriod);
 }
@@ -396,6 +461,7 @@ export async function createPeriod(
     periodEnd?: string;
     quarter?: number;
     year?: number;
+    methodologyReleaseId?: string | null;
   }
 ): Promise<PeriodDto> {
   const org = await db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(input.zid);
@@ -405,10 +471,17 @@ export async function createPeriod(
     m: number;
   };
   const eid = max.m + 1;
+  const methodologyId =
+    input.methodologyReleaseId !== undefined
+      ? input.methodologyReleaseId
+      : await resolveActiveMethodologyId(db);
+
   await db
     .prepare(
-      `INSERT INTO periods (eid, zid, name, period_start, period_end, quarter, year)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO periods (
+         eid, zid, name, period_start, period_end, quarter, year,
+         period_status, methodology_release_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
     )
     .run(
       eid,
@@ -417,8 +490,12 @@ export async function createPeriod(
       dateOrNull(input.periodStart),
       dateOrNull(input.periodEnd),
       input.quarter ?? null,
-      input.year ?? null
+      input.year ?? null,
+      methodologyId
     );
+
+  const formSetCount = await snapshotPeriodFormSet(db, eid);
+
   return {
     eid,
     zid: input.zid,
@@ -427,6 +504,10 @@ export async function createPeriod(
     periodEnd: dateOrNull(input.periodEnd),
     quarter: input.quarter ?? null,
     year: input.year ?? null,
+    packageStatus: "draft",
+    periodStatus: "open",
+    methodologyReleaseId: methodologyId,
+    formSetCount,
   };
 }
 
@@ -521,6 +602,20 @@ export async function getPackageCompleteness(
   eid: number
 ): Promise<PackageCompletenessDto> {
   const catalog = await exportCatalog(db);
+  const formSet = await ensurePeriodFormSet(db, eid);
+  const catalogById = new Map(catalog.forms.map((f) => [f.id, f]));
+  const forms =
+    formSet.length > 0
+      ? formSet.map((f) => {
+          const cat = catalogById.get(f.formId);
+          return {
+            id: f.formId,
+            title: cat?.title ?? f.formId,
+            category: cat?.category ?? "",
+          };
+        })
+      : catalog.forms.map((f) => ({ id: f.id, title: f.title, category: f.category }));
+
   const instances = (await db
     .prepare(
       `SELECT instance_id, template_id, display_name, status, updated_at
@@ -551,7 +646,7 @@ export async function getPackageCompleteness(
 
   let draft = 0;
   let submitted = 0;
-  const items: PackageCompletenessItem[] = catalog.forms.map((f) => {
+  const items: PackageCompletenessItem[] = forms.map((f) => {
     const hit = latestByTemplate.get(f.id);
     if (hit?.status === "submitted") submitted++;
     else if (hit) draft++;
@@ -664,6 +759,7 @@ export async function deleteReportPackage(
   zid: number,
   eid: number
 ): Promise<DeletePackageResult> {
+  await assertPeriodWritable(db, eid, zid);
   const period = (await db
     .prepare("SELECT 1 FROM periods WHERE eid = ? AND zid = ?")
     .get(eid, zid)) as { 1: number } | undefined;
@@ -696,6 +792,8 @@ export async function createReportPackage(
   zid: number,
   eid: number
 ): Promise<CreatePackageResult> {
+  await assertPeriodWritable(db, eid, zid);
+
   const org = (await db
     .prepare("SELECT name FROM organizations WHERE zid = ?")
     .get(zid)) as { name: string } | undefined;
@@ -708,7 +806,7 @@ export async function createReportPackage(
     | undefined;
   if (!period) throw new Error("Period not found");
 
-  const catalog = await exportCatalog(db);
+  const formSet = await ensurePeriodFormSet(db, eid);
   const existing = await existingTemplatesForPackage(db, zid, eid);
   const now = new Date().toISOString();
   const instanceIds: string[] = [];
@@ -729,12 +827,12 @@ export async function createReportPackage(
   })();
 
   await db.transaction(async (tx) => {
-    for (const form of catalog.forms) {
-      if (existing.has(form.id)) {
+    for (const entry of formSet) {
+      if (existing.has(entry.formId)) {
         skipped++;
         continue;
       }
-      const schema = await loadFormSchema(tx, form.id);
+      const schema = await loadFormSchema(tx, entry.formId);
       if (!schema) {
         skipped++;
         continue;
@@ -743,6 +841,7 @@ export async function createReportPackage(
       const signatures: Record<string, string> = {};
       for (const name of schema.signatures) signatures[name] = "";
 
+      const schemaVersion = entry.schemaVersion || schema.schemaVersion || 1;
       const inst: OkoFormInstance = {
         instanceId: randomUUID(),
         templateId: schema.id,
@@ -750,6 +849,7 @@ export async function createReportPackage(
         displayName: defaultDisplayName(schema.id, schema.title, org.name),
         zid,
         eid,
+        templateSchemaVersion: schemaVersion,
         meta: {
           organization: org.name,
           enterpriseCode,
@@ -770,7 +870,132 @@ export async function createReportPackage(
     }
   });
 
-  return { created, skipped, total: catalog.forms.length, instanceIds };
+  return { created, skipped, total: formSet.length, instanceIds };
+}
+
+export async function distributePackagesToChildren(
+  db: OkoDb,
+  parentZid: number,
+  sourceEid: number,
+  opts?: {
+    createEmptyPackages?: boolean;
+    /** Explicit target orgs; if omitted — children by parent_zid. */
+    childZids?: number[];
+    /** If no children: use all other organizations. */
+    fallbackAllOthers?: boolean;
+  }
+): Promise<{
+  parentZid: number;
+  sourceEid: number;
+  createdPeriods: number;
+  createdPackages: number;
+  children: Array<{
+    zid: number;
+    name: string;
+    eid: number;
+    created: number;
+    skipped: number;
+  }>;
+}> {
+  const source = (await db
+    .prepare(
+      `SELECT name, period_start, period_end, quarter, year, methodology_release_id
+       FROM periods WHERE zid = ? AND eid = ?`
+    )
+    .get(parentZid, sourceEid)) as
+    | {
+        name: string;
+        period_start: string | null;
+        period_end: string | null;
+        quarter: number | null;
+        year: number | null;
+        methodology_release_id: string | null;
+      }
+    | undefined;
+  if (!source) throw new Error("Source period not found");
+
+  const sourceForms = await ensurePeriodFormSet(db, sourceEid);
+
+  let children: Array<{ zid: number; name: string }> = [];
+  if (opts?.childZids?.length) {
+    const placeholders = opts.childZids.map(() => "?").join(",");
+    children = (await db
+      .prepare(
+        `SELECT zid, name FROM organizations
+         WHERE zid IN (${placeholders}) AND zid <> ?
+         ORDER BY name`
+      )
+      .all(...opts.childZids, parentZid)) as Array<{ zid: number; name: string }>;
+  } else {
+    children = await listChildOrganizations(db, parentZid);
+    if (children.length === 0 && opts?.fallbackAllOthers) {
+      children = (await db
+        .prepare(
+          `SELECT zid, name FROM organizations WHERE zid <> ? ORDER BY name`
+        )
+        .all(parentZid)) as Array<{ zid: number; name: string }>;
+    }
+  }
+
+  if (children.length === 0) {
+    const err = new Error(
+      "Нет организаций для раздачи: укажите parent_zid у дочерних или раздайте всем остальным org"
+    );
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const result: Array<{
+    zid: number;
+    name: string;
+    eid: number;
+    created: number;
+    skipped: number;
+  }> = [];
+  let createdPackages = 0;
+
+  for (const child of children) {
+    const period = await createPeriod(db, {
+      zid: child.zid,
+      name: source.name,
+      periodStart: dateToString(source.period_start) || undefined,
+      periodEnd: dateToString(source.period_end) || undefined,
+      quarter: source.quarter ?? undefined,
+      year: source.year ?? undefined,
+      methodologyReleaseId: source.methodology_release_id,
+    });
+    await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(period.eid);
+    const ins = db.prepare(
+      `INSERT INTO period_form_set (eid, form_id, schema_version) VALUES (?, ?, ?)`
+    );
+    for (const f of sourceForms) {
+      await ins.run(period.eid, f.formId, f.schemaVersion);
+    }
+
+    let created = 0;
+    let skipped = 0;
+    if (opts?.createEmptyPackages !== false) {
+      const pkg = await createReportPackage(db, child.zid, period.eid);
+      created = pkg.created;
+      skipped = pkg.skipped;
+      createdPackages++;
+    }
+    result.push({
+      zid: child.zid,
+      name: child.name,
+      eid: period.eid,
+      created,
+      skipped,
+    });
+  }
+
+  return {
+    parentZid,
+    sourceEid,
+    createdPeriods: result.length,
+    createdPackages,
+    children: result,
+  };
 }
 
 async function findInstanceByTemplate(
@@ -797,6 +1022,7 @@ export async function importReportPackage(
   overwrite: boolean,
   templateIds?: string[]
 ): Promise<ImportPackageResult> {
+  await assertPeriodWritable(db, targetEid, targetZid);
   const org = (await db
     .prepare("SELECT name FROM organizations WHERE zid = ?")
     .get(targetZid)) as { name: string } | undefined;

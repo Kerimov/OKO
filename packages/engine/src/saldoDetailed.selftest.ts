@@ -66,4 +66,29 @@ const g = applySaldoDetailedRules(source, target, [ruleNoFlags], "g");
 if (g.applied !== 1 || g.rows[0].B !== 77) fail("apply-g", `got ${JSON.stringify(g)}`);
 ok("apply-g");
 
+const conditionalRule: SaldoDetailedRule = { ...ruleNoFlags, conditional: true };
+const skipped = applySaldoDetailedRules(source, target, [conditionalRule], "t", {
+  includeConditional: false,
+});
+if (skipped.applied !== 0) fail("conditional-skip", "expected 0");
+ok("conditional-skip");
+
+const other = baseInst("other", [{ num: "1110", B: 42 }]);
+other.templateId = "N01_02";
+const cross: SaldoDetailedRule = {
+  ...ruleNoFlags,
+  sourceForm: "N01_02",
+  sourceRow: 1110,
+  sourceColumn: "B",
+  targetRow: 1110,
+  targetColumn: "B",
+};
+const crossApply = applySaldoDetailedRules(source, target, [cross], "t", {
+  resolveSourceForm: (id) => (id === "N01_02" ? other : null),
+});
+if (crossApply.applied !== 1 || crossApply.rows[0].B !== 42) {
+  fail("cross-form", JSON.stringify(crossApply));
+}
+ok("cross-form");
+
 console.log("saldoDetailed.selftest: all passed");

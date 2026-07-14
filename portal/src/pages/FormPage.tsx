@@ -116,11 +116,14 @@ export function FormPage() {
   const admin = !auth.authRequired || auth.role === "admin";
   const formsBackLabel = formsListBackLabel(auth);
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
-  const isLocked = instanceStatus === "submitted" && !admin;
+  const [periodClosed, setPeriodClosed] = useState(false);
+  const isLocked =
+    (instanceStatus === "submitted" && !admin) || periodClosed;
 
   useEffect(() => {
     if (!instanceId) return;
     setError("");
+    setPeriodClosed(false);
     loadInstance(instanceId).then((inst) => {
       if (!inst) {
         setError("Форма не найдена. Возможно, она была удалена.");
@@ -132,7 +135,17 @@ export function FormPage() {
       setRows(inst.rows);
       setSignatures(inst.signatures ?? {});
 
-      loadSchema(inst.templateId)
+      if (inst.zid != null && inst.eid != null) {
+        void import("../packagesApi")
+          .then(({ listPeriods }) => listPeriods(inst.zid!))
+          .then((periods) => {
+            const p = periods.find((x) => x.eid === inst.eid);
+            setPeriodClosed(p?.periodStatus === "closed");
+          })
+          .catch(() => setPeriodClosed(false));
+      }
+
+      loadSchema(inst.templateId, inst.templateSchemaVersion)
         .then(setSchema)
         .catch((e) => setError(e.message));
 
@@ -321,9 +334,9 @@ export function FormPage() {
   );
 
   useEffect(() => {
-    if (!schema || !rashData || kontrMode || rashEntries.length === 0) return;
+    if (!schema || !rashData || kontrMode || rashEntries.length === 0 || isLocked) return;
     setRows((prev) => syncAllRashToRows(schema.id, prev, rashEntries, rashData.rules));
-  }, [schema?.id, rashData, kontrMode, rashEntries]);
+  }, [schema?.id, rashData, kontrMode, rashEntries, isLocked]);
 
   const kontrRefA1Name = useMemo(() => {
     if (!schema || !rashData) return null;
@@ -912,7 +925,7 @@ export function FormPage() {
               Сдать форму
             </button>
           )}
-          {instanceStatus === "submitted" && admin && (
+          {instanceStatus === "submitted" && admin && !periodClosed && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -931,7 +944,14 @@ export function FormPage() {
       {status && <div className="status-bar">{status}</div>}
       {isLocked && (
         <div className="status-bar status-locked">
-          Форма сдана и доступна только для просмотра. Для правок обратитесь к администратору.
+          {periodClosed
+            ? "Период закрыт — форма только для просмотра."
+            : "Форма сдана и доступна только для просмотра. Для правок обратитесь к администратору."}
+        </div>
+      )}
+      {periodClosed && instanceStatus === "submitted" && admin && (
+        <div className="tools-hint">
+          Период закрыт: даже admin не может править без переоткрытия периода.
         </div>
       )}
       <CheckResultsPanel result={checkResult} loading={checking} />

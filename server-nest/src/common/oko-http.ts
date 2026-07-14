@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   InternalServerErrorException,
@@ -18,11 +19,24 @@ export function rethrowAsHttp(e: unknown, fallback = "Request failed"): never {
         : { error: err.message || "Unprocessable Entity", result: err.result, results: (err as { results?: unknown }).results };
     throw new UnprocessableEntityException(body);
   }
+  if (err.status === 400) {
+    throw new BadRequestException({ error: err.message || "Bad Request" });
+  }
   if (e instanceof HttpException) {
     throw e;
   }
+  // Domain validation messages → 400 (not opaque 500)
+  const msg = err.message || fallback;
+  if (
+    /неполон|не все|недопустимый|period is closed|не найден|not found|already closed|закрыт|нельзя принять|комплект/i.test(
+      msg
+    )
+  ) {
+    throw new BadRequestException({ error: msg, message: msg });
+  }
   throw new InternalServerErrorException({
-    error: err.message || fallback,
+    error: msg,
+    message: msg,
   });
 }
 

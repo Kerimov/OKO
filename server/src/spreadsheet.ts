@@ -258,3 +258,41 @@ export async function saveTemplateRevision(
     )
     .run(formId, schemaVersion, JSON.stringify(snapshot), actor ?? null);
 }
+
+export async function loadTemplateRevision(
+  db: OkoDb,
+  formId: string,
+  schemaVersion: number
+): Promise<unknown | null> {
+  const row = (await db
+    .prepare(
+      `SELECT snapshot_json FROM form_template_revisions
+       WHERE form_id = ? AND schema_version = ?
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(formId, schemaVersion)) as { snapshot_json: string } | undefined;
+  if (!row?.snapshot_json) return null;
+  try {
+    return JSON.parse(row.snapshot_json);
+  } catch {
+    return null;
+  }
+}
+
+/** Load schema at pinned version (revision snapshot) or latest live schema. */
+export async function loadFormSchemaAtVersion(
+  db: OkoDb,
+  formId: string,
+  schemaVersion?: number | null
+): Promise<import("./forms.js").FormSchemaDto | null> {
+  const { loadFormSchema } = await import("./forms.js");
+  if (schemaVersion == null) return loadFormSchema(db, formId);
+  const snap = await loadTemplateRevision(db, formId, schemaVersion);
+  if (snap && typeof snap === "object" && (snap as { id?: string }).id) {
+    return snap as import("./forms.js").FormSchemaDto;
+  }
+  const live = await loadFormSchema(db, formId);
+  if (live && (live.schemaVersion ?? 1) === schemaVersion) return live;
+  // Fallback: still return live if pin missing (legacy instances).
+  return live;
+}

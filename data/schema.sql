@@ -23,7 +23,18 @@ CREATE TABLE IF NOT EXISTS periods (
     package_comment TEXT,
     status_updated_at TEXT,
     status_updated_by TEXT,
+    period_status TEXT DEFAULT 'open',
+    closed_at TEXT,
+    closed_by TEXT,
+    methodology_release_id TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS period_form_set (
+    eid INTEGER NOT NULL,
+    form_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (eid, form_id)
 );
 
 -- Form template registry (FormCorrespondence)
