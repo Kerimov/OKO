@@ -27,6 +27,7 @@ import {
   listInstanceSummaries,
   loadInstance,
   migratePortalPayloadsToCells,
+  patchInstanceCells,
   setInstanceStatus,
   upsertInstance,
   upsertInstancesBatch,
@@ -45,6 +46,7 @@ import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
+  InstanceCellPatchDto,
   InstanceMigrateDto,
   InstanceRashPutDto,
   InstanceRunChecksDto,
@@ -212,6 +214,38 @@ export class InstancesController {
     }
   }
 
+  @Patch(":id/cells")
+  @ApiOperation({ summary: "Пакетное обновление ячеек (без полной перезаписи формы)" })
+  async patchCells(
+    @Req() req: OkoRequest,
+    @Param("id") id: string,
+    @Body() body: InstanceCellPatchDto
+  ) {
+    try {
+      const existing = await loadInstance(await getDb(), id);
+      if (!existing) throw new NotFoundException({ error: "Not found" });
+      assertOrgInstanceAccess(req, existing);
+      assertInstanceEditable(existing, req.apiRole === "admin");
+      if (!Array.isArray(body.cells) || body.cells.length === 0) {
+        throw new BadRequestException({ error: "cells required" });
+      }
+      const actor = req.apiUser?.username;
+      return await patchInstanceCells(
+        await getDb(),
+        id,
+        body.cells.map((c) => ({
+          rowNo: Number(c.rowNo),
+          columnKey: String(c.columnKey),
+          value: c.value,
+        })),
+        actor,
+        body.expectedRevision
+      );
+    } catch (e) {
+      rethrowAsHttp(e, "patch cells failed");
+    }
+  }
+
   @Patch(":id/status")
   @ApiOperation({ summary: "Сменить статус draft / submitted (submitted — после period-проверок)" })
   async patchStatus(
@@ -311,7 +345,7 @@ export class InstancesController {
   @Put(":id/rash")
   @ApiOperation({ summary: "Сохранить расшифровку экземпляра" })
   async putRash(
-    @Req() req: Request,
+    @Req() req: OkoRequest,
     @Param("id") id: string,
     @Body() body: InstanceRashPutDto
   ) {
@@ -322,6 +356,7 @@ export class InstancesController {
     }
     try {
       assertOrgInstanceAccess(req, existing);
+      assertInstanceEditable(existing, req.apiRole === "admin");
     } catch (e) {
       rethrowAsHttp(e);
     }

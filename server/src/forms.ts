@@ -934,3 +934,185 @@ export function suggestNextColumnKey(existing: string[]): string {
   }
   return `X${existing.length + 1}`;
 }
+
+function rewriteColumnToken(text: string, formId: string, from: string, to: string): string {
+  if (!text) return text;
+  const esc = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const formEsc = formId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let out = text;
+  // Form-qualified refs: N01_1.B / N01_1,B
+  out = out.replace(new RegExp(`(${formEsc})([.,])(${esc})\\b`, "gi"), `$1$2${to}`);
+  // Bare column letter when unique letter-key (A1-style in formulas)
+  if (/^[A-Z]+$/i.test(from) && /^[A-Z]+$/i.test(to)) {
+    out = out.replace(new RegExp(`\\b${esc}(?=\\d)`, "gi"), to);
+  }
+  return out;
+}
+
+/**
+ * Rename a form column key and cascade into domain tables + cell definitions.
+ */
+export async function cascadeRenameColumnKey(
+  db: OkoDb,
+  formId: string,
+  fromKey: string,
+  toKey: string
+): Promise<{
+  formId: string;
+  fromKey: string;
+  toKey: string;
+  updated: Record<string, number>;
+}> {
+  const from = fromKey.trim();
+  const to = toKey.trim();
+  if (!from || !to) throw new Error("fromKey and toKey required");
+  if (from === to) {
+    return { formId, fromKey: from, toKey: to, updated: {} };
+  }
+  if (/^(num|name|code)$/i.test(from) || /^(num|name|code)$/i.test(to)) {
+    throw new Error("Системные графы num/name/code переименовывать нельзя");
+  }
+
+  const schema = await loadFormSchema(db, formId);
+  if (!schema) throw new Error("Form not found");
+  if (!schema.columns.some((c) => c.key === from)) {
+    throw new Error(`Column ${from} not found`);
+  }
+  if (schema.columns.some((c) => c.key === to)) {
+    throw new Error(`Column ${to} already exists`);
+  }
+
+  const updated: Record<string, number> = {};
+
+  await db.transaction(async (tx) => {
+    const col = await tx
+      .prepare(
+        `UPDATE form_columns SET column_key = ? WHERE form_id = ? AND column_key = ?`
+      )
+      .run(to, formId, from);
+    updated.columns = Number(col.changes ?? 0);
+
+    try {
+      const cells = await tx
+        .prepare(
+          `UPDATE form_cell_definitions SET column_key = ? WHERE form_id = ? AND column_key = ?`
+        )
+        .run(to, formId, from);
+      updated.cellDefinitions = Number(cells.changes ?? 0);
+
+      const formulaRows = (await tx
+        .prepare(
+          `SELECT row_id, column_key, formula_a1, formula_stable
+           FROM form_cell_definitions WHERE form_id = ?`
+        )
+        .all(formId)) as Array<{
+        row_id: string;
+        column_key: string;
+        formula_a1: string | null;
+        formula_stable: string | null;
+      }>;
+      const updFormula = tx.prepare(
+        `UPDATE form_cell_definitions
+         SET formula_a1 = ?, formula_stable = ?
+         WHERE form_id = ? AND row_id = ? AND column_key = ?`
+      );
+      let formulaRewrites = 0;
+      for (const row of formulaRows) {
+        const a1 = row.formula_a1
+          ? rewriteColumnToken(row.formula_a1, formId, from, to)
+          : null;
+        const st = row.formula_stable
+          ? rewriteColumnToken(row.formula_stable, formId, from, to)
+          : null;
+        if (a1 !== row.formula_a1 || st !== row.formula_stable) {
+          await updFormula.run(a1, st, formId, row.row_id, row.column_key);
+          formulaRewrites++;
+        }
+      }
+      updated.formulaRewrites = formulaRewrites;
+    } catch {
+      updated.cellDefinitions = 0;
+    }
+
+    try {
+      const rash = await tx
+        .prepare(
+          `UPDATE rash_placements SET column_key = ? WHERE form_id = ? AND UPPER(column_key) = UPPER(?)`
+        )
+        .run(to, formId, from);
+      updated.rashPlacements = Number(rash.changes ?? 0);
+    } catch {
+      updated.rashPlacements = 0;
+    }
+
+    try {
+      const saldoT = await tx
+        .prepare(
+          `UPDATE saldo_rules SET target_column = ? WHERE target_form = ? AND UPPER(target_column) = UPPER(?)`
+        )
+        .run(to, formId, from);
+      const saldoS = await tx
+        .prepare(
+          `UPDATE saldo_rules SET source_column = ? WHERE source_form = ? AND UPPER(source_column) = UPPER(?)`
+        )
+        .run(to, formId, from);
+      updated.saldo = Number(saldoT.changes ?? 0) + Number(saldoS.changes ?? 0);
+    } catch {
+      updated.saldo = 0;
+    }
+
+    try {
+      const map = await tx
+        .prepare(
+          `UPDATE excel_mappings SET form_column = ? WHERE form_name = ? AND UPPER(form_column) = UPPER(?)`
+        )
+        .run(to, formId, from);
+      updated.excelMappings = Number(map.changes ?? 0);
+    } catch {
+      updated.excelMappings = 0;
+    }
+
+    try {
+      const recalc = await tx
+        .prepare(
+          `UPDATE recalc_rules SET column_key = ? WHERE form_id = ? AND UPPER(column_key) = UPPER(?)`
+        )
+        .run(to, formId, from);
+      updated.recalc = Number(recalc.changes ?? 0);
+    } catch {
+      updated.recalc = 0;
+    }
+
+    try {
+      const checks = (await tx
+        .prepare(`SELECT number, expression, expression_alt FROM check_rules`)
+        .all()) as Array<{
+        number: number;
+        expression: string;
+        expression_alt: string | null;
+      }>;
+      const upd = tx.prepare(
+        `UPDATE check_rules SET expression = ?, expression_alt = ? WHERE number = ?`
+      );
+      let n = 0;
+      for (const c of checks) {
+        if (!c.expression.includes(formId) && !(c.expression_alt ?? "").includes(formId)) {
+          continue;
+        }
+        const nextExpr = rewriteColumnToken(c.expression, formId, from, to);
+        const nextAlt = c.expression_alt
+          ? rewriteColumnToken(c.expression_alt, formId, from, to)
+          : null;
+        if (nextExpr !== c.expression || nextAlt !== c.expression_alt) {
+          await upd.run(nextExpr, nextAlt, c.number);
+          n++;
+        }
+      }
+      updated.checks = n;
+    } catch {
+      updated.checks = 0;
+    }
+  });
+
+  return { formId, fromKey: from, toKey: to, updated };
+}

@@ -35,6 +35,7 @@ export interface ReferencesTabProps {
     checksums?: MethodologyChecksums | null;
     history?: MethodologyRelease[];
     onSnapshot: () => void;
+    onDryRun?: () => void;
     onRollback?: (id: string) => void;
   };
 }
@@ -83,6 +84,17 @@ export function ReferencesTab({
           >
             Снапшот и активировать
           </button>
+          {methodology.onDryRun && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={methodology.onDryRun}
+              style={{ marginLeft: "0.5rem" }}
+            >
+              Dry-run checksums
+            </button>
+          )}
           {methodology.history && methodology.history.length > 0 && (
             <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
               <table className="form-table" style={{ minWidth: "28rem" }}>

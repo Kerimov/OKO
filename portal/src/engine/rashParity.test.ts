@@ -7,13 +7,20 @@ import {
   buildRashCellSlots,
   defaultKontrShowFilter,
   effectiveOrgType,
+  effectiveRashFormula,
   filterKontrByShow,
+  kontrInsertIndex,
+  looksLikeRashTotalFormula,
   numVal,
+  parseRefFilter,
   rashSlotVisible,
+  syncAllRashToRows,
   syncRashToParentRow,
+  validateCellRash,
   validateKontrAmountPolicy,
   validateUnknownKontrName,
 } from "./rashEngine";
+import { refOptionsForSpec, type RashRefsData } from "./rashRefs";
 import type { RowRashIndexData } from "./rowRashIndex";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -193,5 +200,120 @@ describe("t_ras parity", () => {
       "B"
     );
     expect(issue?.message).toContain("справочнике");
+  });
+});
+
+describe("rash P0/P1 fixes", () => {
+  it("flags mandatory empty rash when parent value exceeds threshold", () => {
+    const rule = rashData.rules.find((r) => r.kod === 51112);
+    expect(rule).toBeTruthy();
+    if (!rule) return;
+
+    const columns = [
+      { key: "num", label: "№", type: "text" as const },
+      { key: "name", label: "Наименование", type: "text" as const },
+      { key: "B", label: "B", type: "number" as const },
+      { key: "M", label: "M", type: "number" as const },
+    ];
+    const rows: RowData[] = [{ num: "20", name: "Нефть", B: "100", M: "100" }];
+    const data: RashRulesData = {
+      version: "test",
+      total: 1,
+      rules: [rule],
+      addsum: [],
+      thresholds,
+    };
+    const issues = validateCellRash(
+      "N05_11",
+      rows,
+      columns,
+      [],
+      data,
+      rowIndex as RowRashIndexData,
+      []
+    );
+    expect(issues.some((i) => i.message.includes("Требуется расшифровка"))).toBe(true);
+  });
+
+  it("does not put classifier numeric codes into allowedTypes", () => {
+    const country = parseRefFilter("Страна/31,32,RU");
+    expect(country?.allowedTypes).toEqual([]);
+    expect(country?.allowedCodes).toEqual(["31", "32", "RU"]);
+
+    const kontr = parseRefFilter("Контрагент/1, 2, 101");
+    expect(kontr?.allowedTypes).toEqual([1, 2]);
+    expect(kontr?.allowedCodes).toEqual(["101"]);
+  });
+
+  it("filters ref options by numeric allowedCodes", () => {
+    const refs: RashRefsData = {
+      version: "1",
+      byName: {
+        Регион: [
+          { kod: "31", value: "A" },
+          { kod: "32", value: "B" },
+          { kod: "99", value: "C" },
+        ],
+      },
+    };
+    const opts = refOptionsForSpec(refs, "Регион/31,32");
+    expect(opts.map((o) => o.kod)).toEqual(["31", "32"]);
+  });
+
+  it("syncs multi-column rashes without dropping by parentRowNo:kod alone", () => {
+    const rule = {
+      kod: 90001,
+      name: "T01",
+      totalFormula: null as string | null,
+    };
+    const rows: RowData[] = [{ num: "10", name: "x", B: 0, C: 0 }];
+    const rashEntries: FormRashEntry[] = [
+      {
+        formId: "T01",
+        parentRowNo: 10,
+        columnKey: "B",
+        rashKod: 90001,
+        lineNo: 0,
+        kontrName: "A",
+        values: { B: 5 },
+      },
+      {
+        formId: "T01",
+        parentRowNo: 10,
+        columnKey: "C",
+        rashKod: 90001,
+        lineNo: 0,
+        kontrName: "A",
+        values: { C: 7 },
+      },
+    ];
+    const synced = syncAllRashToRows("T01", rows, rashEntries, [rule as never]);
+    expect(numVal(synced[0].B)).toBe(5);
+    expect(numVal(synced[0].C)).toBe(7);
+  });
+
+  it("ignores prose totalFormula (kod 121 style)", () => {
+    expect(looksLikeRashTotalFormula("Не расшифровывается")).toBe(false);
+    expect(effectiveRashFormula({
+      kod: 121,
+      name: "x",
+      totalFormula: "см. методику",
+    } as never)).toBeNull();
+    expect(effectiveRashFormula({
+      kod: 1,
+      name: "x",
+      totalFormula: "M=B+C+D",
+    } as never)).toBe("M=B+C+D");
+  });
+
+  it("inserts kontr row after parent group, not at end of form", () => {
+    const rows: RowData[] = [
+      { num: "1", name: "Parent A" },
+      { num: "", name: "Child A1" },
+      { num: "2", name: "Parent B" },
+      { num: "", name: "Child B1" },
+    ];
+    expect(kontrInsertIndex(rows, 0)).toBe(2);
+    expect(kontrInsertIndex(rows, 2)).toBe(4);
   });
 });

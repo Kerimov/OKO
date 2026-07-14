@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../apiClient";
-import { loadSchema } from "../api";
+import { loadSchema, listFormCellDefinitions } from "../api";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { FormTable } from "../components/FormTable";
 import { RashEditorModal } from "../components/RashEditorModal";
@@ -9,6 +9,11 @@ import { hasRashRules, isKontrForm } from "../constants";
 import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
 import { failedCellsForForm } from "../engine/cellErrors";
 import { exportFormToExcel } from "../engine/exportExcel";
+import {
+  listXlsxSheetNames,
+  previewXlsxFormImport,
+  type XlsxImportPreview,
+} from "../engine/importExcel";
 import {
   buildRashCellSlots,
   countRashRulesForForm,
@@ -34,10 +39,12 @@ import {
   deleteInstance,
   exportInstance,
   importInstanceFile,
+  isBackendMode,
   loadAllInstances,
   loadInstance,
   loadKontrAgents,
   loadRashEntries,
+  patchInstanceCells,
   saveInstance,
   saveRashEntries,
   setInstanceStatus,
@@ -56,6 +63,7 @@ import type {
 import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListBackLabel } from "../formsListLabels";
+import { makeRowId } from "@oko/spreadsheet";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -77,6 +85,12 @@ export function FormPage() {
   const [error, setError] = useState("");
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [importingXlsx, setImportingXlsx] = useState(false);
+  const [xlsxPreview, setXlsxPreview] = useState<XlsxImportPreview | null>(null);
+  const [xlsxSheetNames, setXlsxSheetNames] = useState<string[]>([]);
+  const [xlsxBuffer, setXlsxBuffer] = useState<ArrayBuffer | null>(null);
+  const [xlsxSheet, setXlsxSheet] = useState("");
+  const [cellFormulas, setCellFormulas] = useState<Map<string, string>>(new Map());
   const [recalcing, setRecalcing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
@@ -94,6 +108,7 @@ export function FormPage() {
   const [recalcRuleCount, setRecalcRuleCount] = useState<number | null>(null);
   const recalcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const xlsxRef = useRef<HTMLInputElement>(null);
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
   const rashMode = hasRashRules(rashRuleCount ?? 0);
@@ -160,6 +175,46 @@ export function FormPage() {
       .catch(() => setRecalcRuleCount(null));
   }, [schema]);
 
+  useEffect(() => {
+    if (!schema) {
+      setCellFormulas(new Map());
+      return;
+    }
+    void listFormCellDefinitions(schema.id)
+      .then((defs) => {
+        const map = new Map<string, string>();
+        const byRowId = new Map(
+          schema.rows.map((r, i) => [
+            makeRowId(schema.id, String(r.num ?? ""), i),
+            i,
+          ] as const)
+        );
+        for (const d of defs) {
+          if (!d.formulaA1) continue;
+          const idx = byRowId.get(d.rowId);
+          if (idx != null) map.set(`${idx}:${d.columnKey}`, d.formulaA1);
+          const num = d.rowId.includes(":")
+            ? d.rowId.slice(d.rowId.indexOf(":") + 1)
+            : "";
+          if (num) map.set(`${num}:${d.columnKey}`, d.formulaA1);
+        }
+        setCellFormulas(map);
+      })
+      .catch(() => setCellFormulas(new Map()));
+  }, [schema]);
+
+  const rowKinds = useMemo(() => {
+    if (!schema) return undefined;
+    const byNum = new Map(
+      schema.rows.map((r) => [String(r.num ?? "").trim(), r.kind] as const)
+    );
+    return rows.map((row) => {
+      const n = String(row.num ?? "").trim();
+      if (n && byNum.has(n)) return byNum.get(n) ?? "data";
+      return "data" as const;
+    });
+  }, [schema, rows]);
+
   const handleRowsChange = useCallback(
     (next: RowData[]) => {
       setRows(next);
@@ -188,15 +243,72 @@ export function FormPage() {
       overrides?: Partial<Pick<OkoFormInstance, "displayName" | "rows" | "meta" | "signatures">>
     ) => {
       if (!instance || !schema) return null;
+      const nextRows = overrides?.rows ?? rows;
       const updated: OkoFormInstance = {
         ...instance,
         displayName: overrides?.displayName ?? displayName,
         meta: overrides?.meta ?? meta,
-        rows: overrides?.rows ?? rows,
+        rows: nextRows,
         signatures: overrides?.signatures ?? signatures,
         rashEntries,
         updatedAt: new Date().toISOString(),
       };
+
+      const keys = overrides ? Object.keys(overrides) : [];
+      const rowsOnlyPatch =
+        isBackendMode() &&
+        overrides?.rows != null &&
+        keys.length === 1 &&
+        keys[0] === "rows";
+
+      if (rowsOnlyPatch) {
+        const cells: Array<{
+          rowNo: number;
+          columnKey: string;
+          value?: string | number | null;
+        }> = [];
+        const prevByNum = new Map(
+          instance.rows.map((r, i) => [String(r.num ?? "").trim() || `i${i}`, r])
+        );
+        nextRows.forEach((neu, i) => {
+          const rowNoRaw = String(neu.num ?? "").trim();
+          const parsed = parseInt(rowNoRaw, 10);
+          const rowNo =
+            Number.isFinite(parsed) && parsed !== 0 ? parsed : 900_000_000 + i;
+          const old = prevByNum.get(rowNoRaw || `i${i}`) ?? instance.rows[i] ?? {};
+          for (const key of Object.keys({ ...old, ...neu })) {
+            if (key === "num" || key === "name" || key === "code" || key === "account") {
+              continue;
+            }
+            const ov = old[key];
+            const nv = neu[key];
+            if (String(ov ?? "") === String(nv ?? "")) continue;
+            cells.push({
+              rowNo,
+              columnKey: key,
+              value: nv === undefined ? null : (nv as string | number | null),
+            });
+          }
+        });
+        if (cells.length > 0) {
+          try {
+            const res = await patchInstanceCells(
+              instance.instanceId,
+              cells,
+              instance.revision
+            );
+            const patched = {
+              ...updated,
+              revision: res.revision,
+            };
+            setInstance(patched);
+            return patched;
+          } catch {
+            /* fall through to full save */
+          }
+        }
+      }
+
       await saveInstance(updated);
       setInstance(updated);
       return updated;
@@ -341,6 +453,25 @@ export function FormPage() {
 
   const handleSubmitForm = async () => {
     if (!instance || instanceStatus === "submitted") return;
+    if (rashMode && rashData && schema) {
+      const issues = validateAllRash(
+        schema.id,
+        rows,
+        schema.columns,
+        rashEntries,
+        rashData,
+        rowRashIndex ?? undefined,
+        kontrAgents
+      );
+      const errors = issues.filter((i) => i.severity === "error");
+      if (errors.length > 0) {
+        setRashIssues(issues);
+        setStatus(
+          `Сдача заблокирована: ${errors.length} ошибок расшифровки. Исправьте и повторите.`
+        );
+        return;
+      }
+    }
     if (!confirm("Сдать форму? После сдачи редактирование будет недоступно (только администратор сможет вернуть в черновик).")) {
       return;
     }
@@ -539,6 +670,66 @@ export function FormPage() {
     e.target.value = "";
   };
 
+  const handleXlsxPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !schema) return;
+    setImportingXlsx(true);
+    setError("");
+    try {
+      const buf = await file.arrayBuffer();
+      const names = await listXlsxSheetNames(buf);
+      setXlsxBuffer(buf);
+      setXlsxSheetNames(names);
+      const sheet = names[0] ?? "";
+      setXlsxSheet(sheet);
+      const preview = await previewXlsxFormImport({
+        buffer: buf,
+        schema,
+        currentRows: rows,
+        sheetName: sheet || undefined,
+      });
+      setXlsxPreview(preview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка чтения Excel");
+      setXlsxPreview(null);
+      setXlsxBuffer(null);
+    } finally {
+      setImportingXlsx(false);
+    }
+  };
+
+  const refreshXlsxPreview = async (sheetName: string) => {
+    if (!xlsxBuffer || !schema) return;
+    setXlsxSheet(sheetName);
+    setImportingXlsx(true);
+    try {
+      const preview = await previewXlsxFormImport({
+        buffer: xlsxBuffer,
+        schema,
+        currentRows: rows,
+        sheetName: sheetName || undefined,
+      });
+      setXlsxPreview(preview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка предпросмотра Excel");
+    } finally {
+      setImportingXlsx(false);
+    }
+  };
+
+  const applyXlsxImport = async () => {
+    if (!xlsxPreview || isLocked) return;
+    setRows(xlsxPreview.proposedRows);
+    await persist({ rows: xlsxPreview.proposedRows });
+    setStatus(
+      `Импорт Excel: лист «${xlsxPreview.sheetName}», строк ${xlsxPreview.matchedRows}, изменений ${xlsxPreview.diffs.length}`
+    );
+    setXlsxPreview(null);
+    setXlsxBuffer(null);
+    setTimeout(() => setStatus(""), 5000);
+  };
+
   if (error) {
     return (
       <div className="form-page">
@@ -599,6 +790,22 @@ export function FormPage() {
             Импорт
           </button>
           <input ref={fileRef} type="file" accept=".json" hidden onChange={handleImport} />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={isLocked || importingXlsx}
+            onClick={() => xlsxRef.current?.click()}
+            title="Импорт значений из .xlsx (предпросмотр)"
+          >
+            {importingXlsx ? "Excel…" : "Импорт Excel"}
+          </button>
+          <input
+            ref={xlsxRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            hidden
+            onChange={(e) => void handleXlsxPick(e)}
+          />
           <button
             type="button"
             className="btn btn-primary"
@@ -795,8 +1002,11 @@ export function FormPage() {
       <FormTable
         columns={schema.columns}
         rows={rows}
+        formId={schema.id}
         onChange={handleRowsChange}
         allowAddRows={schema.allowAddRows || kontrMode}
+        rowKinds={rowKinds}
+        cellFormulas={cellFormulas}
         kontrMode={kontrMode}
         kontrAgents={kontrAgents}
         kontrRefA1Name={kontrRefA1Name}
@@ -808,6 +1018,98 @@ export function FormPage() {
         rashReadonlyCells={rashReadonlyCells}
         onRashOpen={rashMode && !isLocked ? openRashModal : undefined}
       />
+
+      {xlsxPreview && (
+        <div className="rash-modal-backdrop" onClick={() => setXlsxPreview(null)}>
+          <div
+            className="rash-modal xlsx-import-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="rash-modal-header">
+              <h2>Импорт из Excel</h2>
+              <button type="button" className="btn-icon" onClick={() => setXlsxPreview(null)}>
+                ×
+              </button>
+            </header>
+            <p className="tools-hint">
+              Лист: <strong>{xlsxPreview.sheetName}</strong> · совпало строк:{" "}
+              {xlsxPreview.matchedRows} · отличий: {xlsxPreview.diffs.length}
+              . Макросы и внешние ссылки не выполняются.
+            </p>
+            {xlsxSheetNames.length > 1 && (
+              <label>
+                Лист
+                <select
+                  value={xlsxSheet}
+                  onChange={(e) => void refreshXlsxPreview(e.target.value)}
+                >
+                  {xlsxSheetNames.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {xlsxPreview.warnings.length > 0 && (
+              <ul className="rash-validation">
+                {xlsxPreview.warnings.slice(0, 8).map((w, i) => (
+                  <li key={i} className="warn">
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <table className="checks-table">
+              <thead>
+                <tr>
+                  <th>Стр.</th>
+                  <th>Графа</th>
+                  <th>Было</th>
+                  <th>Excel</th>
+                  <th>Чт.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {xlsxPreview.diffs.slice(0, 60).map((d, i) => (
+                  <tr key={i}>
+                    <td>{d.rowNo}</td>
+                    <td>{d.columnKey}</td>
+                    <td>{String(d.formValue)}</td>
+                    <td>{String(d.excelValue)}</td>
+                    <td>{d.readonly ? "да" : ""}</td>
+                  </tr>
+                ))}
+                {xlsxPreview.diffs.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>Отличий нет</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div className="toolbar-actions" style={{ marginTop: "1rem" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={isLocked || xlsxPreview.diffs.every((d) => d.readonly)}
+                onClick={() => void applyXlsxImport()}
+              >
+                Применить
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setXlsxPreview(null);
+                  setXlsxBuffer(null);
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rashData && (
         <RashEditorModal

@@ -159,6 +159,21 @@ export async function snapshotMethodology(version?: string): Promise<Methodology
   });
 }
 
+export async function dryRunMethodology(opts?: {
+  checksums?: MethodologyChecksums;
+  parts?: Record<string, unknown>;
+}): Promise<{
+  active: MethodologyRelease | null;
+  proposed: MethodologyChecksums;
+  diff: Array<{ key: string; left: string | null; right: string | null; same: boolean }>;
+  wouldChange: boolean;
+}> {
+  return apiFetch("/api/methodology/dry-run", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
 export async function activateMethodology(
   release: MethodologyRelease
 ): Promise<MethodologyRelease> {

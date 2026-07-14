@@ -35,3 +35,22 @@ export class InstanceMigrateDto {
   @IsOptional()
   settings?: Record<string, string>;
 }
+
+export class InstanceCellPatchDto {
+  @ApiProperty({
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        rowNo: { type: "number" },
+        columnKey: { type: "string" },
+        value: {},
+      },
+    },
+  })
+  cells!: Array<{ rowNo: number; columnKey: string; value?: string | number | null }>;
+
+  @ApiPropertyOptional({ description: "Optimistic concurrency token" })
+  @IsOptional()
+  expectedRevision?: number;
+}

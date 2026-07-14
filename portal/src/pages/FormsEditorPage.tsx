@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   archiveForm,
   createForm,
+  deleteFormCellDefinition,
   fetchFormDependencies,
+  listFormCellDefinitions,
   loadCatalog,
   loadSchema,
   previewFormsImport,
   reimportFormsFromJson,
+  renameFormColumn,
+  saveFormCellDefinition,
   saveFormSchema,
+  type FormCellDefinitionDto,
 } from "../api";
 import { FormTable } from "../components/FormTable";
+import {
+  FormsWorkbenchInspector,
+  type FormsWorkbenchSelection,
+} from "../components/FormsWorkbenchInspector";
 import type { FormCatalog, FormColumn, FormRowTemplate, FormSchema } from "../types";
 import { buildInitialRows } from "../utils";
 import { isBackendMode } from "../storage";
@@ -24,20 +33,44 @@ import {
   suggestNextColumnKey,
   validateFormSchema,
 } from "./formsEditor/validateDraft";
+import {
+  a1FormulaToStable,
+  makeRowId,
+  schemaToSheetColumns,
+  schemaToSheetRows,
+} from "@oko/spreadsheet";
 
-type Tab = "meta" | "columns" | "rows" | "deps" | "preview";
+type Tab = "meta" | "columns" | "rows" | "deps" | "preview" | "grid";
+
+const FORMS_LIST_HIDDEN_KEY = "oko-forms-editor-list-hidden";
+
+function readFormsListHidden(): boolean {
+  try {
+    return localStorage.getItem(FORMS_LIST_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function FormsEditorPage() {
   const backend = isBackendMode();
   const access = useAdminAccess();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [catalog, setCatalog] = useState<FormCatalog | null>(null);
-  const [formId, setFormId] = useState("");
+  const [formId, setFormId] = useState(() => searchParams.get("form") ?? "");
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [savedFp, setSavedFp] = useState("");
-  const [tab, setTab] = useState<Tab>("meta");
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get("tab");
+    if (t === "columns" || t === "rows" || t === "deps" || t === "preview" || t === "grid" || t === "meta") {
+      return t;
+    }
+    return "meta";
+  });
   const [search, setSearch] = useState("");
   const [rowSearch, setRowSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [listHidden, setListHidden] = useState(readFormsListHidden);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -59,6 +92,17 @@ export function FormsEditorPage() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [cellDefs, setCellDefs] = useState<FormCellDefinitionDto[]>([]);
+  const [cellDefsBusy, setCellDefsBusy] = useState(false);
+  const [gridSelection, setGridSelection] = useState<FormsWorkbenchSelection | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FORMS_LIST_HIDDEN_KEY, listHidden ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [listHidden]);
 
   const dirty = useMemo(() => {
     if (!schema || !savedFp) return false;
@@ -104,15 +148,65 @@ export function FormsEditorPage() {
         } catch {
           setDeps(null);
         }
+        try {
+          setCellDefs(await listFormCellDefinitions(id));
+        } catch {
+          setCellDefs([]);
+        }
+      } else {
+        setCellDefs([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки формы");
       setSchema(null);
       setDeps(null);
+      setCellDefs([]);
     } finally {
       setLoading(false);
     }
   }, [backend]);
+
+  const handleFormulaCommit = async (info: {
+    rowIndex: number;
+    columnKey: string;
+    formula: string;
+  }) => {
+    if (!schema || !backend) {
+      setStatus("Сохранение формул ячеек требует API-сервер");
+      return;
+    }
+    const row = schema.rows[info.rowIndex];
+    if (!row) return;
+    const rowId = makeRowId(schema.id, String(row.num ?? ""), info.rowIndex);
+    const columns = schemaToSheetColumns({
+      id: schema.id,
+      title: schema.title,
+      columns: schema.columns,
+    });
+    const sheetRows = schemaToSheetRows({
+      id: schema.id,
+      title: schema.title,
+      columns: schema.columns,
+      rows: schema.rows,
+    });
+    const formulaStable = a1FormulaToStable(info.formula, columns, sheetRows);
+    setCellDefsBusy(true);
+    try {
+      const next = await saveFormCellDefinition(schema.id, {
+        rowId,
+        columnKey: info.columnKey,
+        formulaA1: info.formula,
+        formulaStable,
+        readonly: true,
+      });
+      setCellDefs(next);
+      setStatus(`Формула сохранена: ${info.columnKey} · ${rowId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось сохранить формулу ячейки");
+    } finally {
+      setCellDefsBusy(false);
+    }
+  };
 
   useEffect(() => {
     void loadCatalogList();
@@ -121,6 +215,40 @@ export function FormsEditorPage() {
   useEffect(() => {
     if (formId) void loadForm(formId);
   }, [formId, loadForm]);
+
+  // Deep-link: /admin/forms?form=N02_2&tab=deps
+  useEffect(() => {
+    const form = searchParams.get("form");
+    const t = searchParams.get("tab") as Tab | null;
+    if (form && form !== formId) {
+      setFormId(form);
+    }
+    if (
+      t === "meta" ||
+      t === "columns" ||
+      t === "rows" ||
+      t === "deps" ||
+      t === "preview" ||
+      t === "grid"
+    ) {
+      setTab(t);
+    }
+    // Only react to URL changes from outside (inspector links), not every formId write.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!formId) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("form", formId);
+        next.set("tab", tab);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [formId, tab, setSearchParams]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -259,12 +387,27 @@ export function FormsEditorPage() {
               Object.entries(d.totals)
                 .map(([k, v]) => `${k}: ${v}`)
                 .join(", ") +
-              `\n\nПереименовать в ${nextKey}? Ссылки не обновятся автоматически.`
+              `\n\nПереименовать в ${nextKey} с каскадным обновлением ссылок?`
           );
           if (!ok) return;
         }
-      } catch {
-        /* ignore */
+        const result = await renameFormColumn(schema.id, prev.key, nextKey);
+        updateColumn(idx, { key: nextKey });
+        setCellDefs(await listFormCellDefinitions(schema.id));
+        setDeps(await fetchFormDependencies(schema.id));
+        const summary = Object.entries(result.updated)
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => `${k}: ${n}`)
+          .join(", ");
+        setStatus(
+          summary
+            ? `Переименовано ${prev.key} → ${nextKey} (${summary})`
+            : `Переименовано ${prev.key} → ${nextKey}`
+        );
+        return;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Ошибка переименования");
+        return;
       }
     }
     updateColumn(idx, { key: nextKey });
@@ -398,6 +541,15 @@ export function FormsEditorPage() {
           </p>
         </div>
         <div className="checks-actions">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            aria-label={listHidden ? "Показать список форм" : "Скрыть список форм"}
+            title={listHidden ? "Показать список форм" : "Скрыть список форм"}
+            onClick={() => setListHidden((v) => !v)}
+          >
+            Список
+          </button>
           {backend && (
             <>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(true)}>
@@ -437,8 +589,20 @@ export function FormsEditorPage() {
       {error && <div className="error-box">{error}</div>}
       {dirty && <div className="status-bar warn-bar">Есть несохранённые изменения</div>}
 
-      <div className="forms-editor-layout">
-        <aside className="forms-sidebar">
+      <div className={`forms-editor-layout${listHidden ? " list-hidden" : ""}`}>
+        <aside className={`forms-sidebar${listHidden ? " hidden" : ""}`} aria-hidden={listHidden}>
+          <div className="forms-sidebar-head">
+            <span className="forms-sidebar-head-title">Формы</span>
+            <button
+              type="button"
+              className="btn-icon forms-sidebar-hide"
+              aria-label="Скрыть список форм"
+              title="Скрыть список форм"
+              onClick={() => setListHidden(true)}
+            >
+              ◂
+            </button>
+          </div>
           <input
             type="search"
             className="search-input"
@@ -484,6 +648,7 @@ export function FormsEditorPage() {
                     ["meta", "Свойства"],
                     ["columns", `Графы (${schema.columns.length})`],
                     ["rows", `Строки (${schema.rows.length})`],
+                    ["grid", "Сетка"],
                     ["deps", "Зависимости"],
                     ["preview", "Просмотр"],
                   ] as const
@@ -950,6 +1115,109 @@ export function FormsEditorPage() {
                 </section>
               )}
 
+              {tab === "grid" && (
+                <section className="tools-section">
+                  <h2>Визуальный конструктор сетки</h2>
+                  <p className="tools-hint">
+                    Excel-подобная сетка шаблона: выделение, клавиатура, формульная строка.
+                    Введите <code>=SUM(...)</code> / <code>=B1+C1</code> и нажмите Enter — формула
+                    сохранится в <code>form_cell_definitions</code>.
+                  </p>
+                  <div className="forms-workbench">
+                    <div className="forms-workbench-grid">
+                      <FormTable
+                        columns={schema.columns.filter((c) => !c.hidden)}
+                        rows={previewRows}
+                        formId={schema.id}
+                        onChange={() => undefined}
+                        allowAddRows={false}
+                        designerMode
+                        onFormulaCommit={(info) => void handleFormulaCommit(info)}
+                        onSelectionChange={setGridSelection}
+                      />
+                    </div>
+                    <FormsWorkbenchInspector
+                      formId={schema.id}
+                      selection={gridSelection}
+                      cellDefs={cellDefs}
+                      backend={backend}
+                      onOpenDeps={() => setTab("deps")}
+                      onDeleteCellDef={(rowId, columnKey) => {
+                        void (async () => {
+                          try {
+                            await deleteFormCellDefinition(schema.id, rowId, columnKey);
+                            setCellDefs(await listFormCellDefinitions(schema.id));
+                            setStatus(`Удалено определение ${rowId}:${columnKey}`);
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Ошибка удаления");
+                          }
+                        })();
+                      }}
+                    />
+                  </div>
+                  {cellDefsBusy && <p className="muted">Сохранение формулы…</p>}
+                  {cellDefs.length > 0 && (
+                    <div style={{ marginTop: "1rem" }}>
+                      <h3>Определения ячеек ({cellDefs.length})</h3>
+                      <table className="checks-table">
+                        <thead>
+                          <tr>
+                            <th>rowId</th>
+                            <th>Графа</th>
+                            <th>Формула A1</th>
+                            <th>Чт.</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cellDefs.slice(0, 100).map((d) => (
+                            <tr key={`${d.rowId}:${d.columnKey}`}>
+                              <td className="mono-input">{d.rowId}</td>
+                              <td>{d.columnKey}</td>
+                              <td>
+                                <code>{d.formulaA1 ?? "—"}</code>
+                              </td>
+                              <td>{d.readonly ? "да" : ""}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-icon"
+                                  title="Удалить"
+                                  onClick={() => {
+                                    void (async () => {
+                                      try {
+                                        await deleteFormCellDefinition(
+                                          schema.id,
+                                          d.rowId,
+                                          d.columnKey
+                                        );
+                                        setCellDefs(await listFormCellDefinitions(schema.id));
+                                      } catch (e) {
+                                        setError(
+                                          e instanceof Error ? e.message : "Ошибка удаления"
+                                        );
+                                      }
+                                    })();
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <ul className="rash-validation" style={{ marginTop: "0.75rem" }}>
+                    <li className="warn">
+                      Whitelist: SUM, IF, AND/OR, ROUND, ABS, MIN/MAX, COUNT/COUNTA, AVERAGE,
+                      DATE/YEAR/MONTH/DAY. Запрещены WEBSERVICE, INDIRECT, OFFSET, NOW…
+                    </li>
+                  </ul>
+                </section>
+              )}
+
               {tab === "deps" && (
                 <section className="tools-section">
                   <h2>Зависимости {schema.id}</h2>
@@ -1007,9 +1275,17 @@ export function FormsEditorPage() {
                     columns={schema.columns.filter((c) => !c.hidden)}
                     rows={previewRows}
                     onChange={() => undefined}
+                    formId={schema.id}
                     allowAddRows={schema.allowAddRows}
                     readOnly
+                    designerMode
                   />
+                  <p className="tools-hint">
+                    Конструктор: на вкладке «Графы» задайте formula / align / decimals; на «Строки» —
+                    kind/level. Живая Excel-подобная сетка (выделение, стрелки, формульная строка)
+                    доступна при заполнении формы. Per-cell формулы — API{" "}
+                    <code>/api/forms/:id/cell-definitions</code>.
+                  </p>
                 </section>
               )}
             </>

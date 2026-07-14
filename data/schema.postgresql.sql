@@ -111,6 +111,63 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_form_instances_package_tpl
   ON form_instances (zid, eid, template_id)
   WHERE zid IS NOT NULL AND eid IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS form_cell_definitions (
+    id              SERIAL PRIMARY KEY,
+    form_id         TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
+    row_id          TEXT NOT NULL,
+    column_key      TEXT NOT NULL,
+    formula_a1      TEXT,
+    formula_stable  TEXT,
+    readonly        INTEGER DEFAULT 0,
+    style_json      TEXT,
+    validation_json TEXT,
+    number_format   TEXT,
+    help_text       TEXT,
+    UNIQUE(form_id, row_id, column_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cell_defs_form ON form_cell_definitions(form_id);
+
+CREATE TABLE IF NOT EXISTS form_template_revisions (
+    id              SERIAL PRIMARY KEY,
+    form_id         TEXT NOT NULL REFERENCES form_templates(form_id) ON DELETE CASCADE,
+    schema_version  INTEGER NOT NULL,
+    snapshot_json   TEXT NOT NULL,
+    actor           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_form_revisions ON form_template_revisions(form_id, schema_version);
+
+CREATE TABLE IF NOT EXISTS cell_change_log (
+    id          SERIAL PRIMARY KEY,
+    instance_id TEXT NOT NULL,
+    row_no      INTEGER NOT NULL,
+    column_key  TEXT NOT NULL,
+    old_value   TEXT,
+    new_value   TEXT,
+    actor       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cell_change_instance ON cell_change_log(instance_id, created_at);
+
+CREATE TABLE IF NOT EXISTS recalc_rules (
+    id              SERIAL PRIMARY KEY,
+    form_id         TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    row_no          INTEGER,
+    column_key      TEXT,
+    formula         TEXT,
+    sign            TEXT,
+    source_row      INTEGER,
+    columns         TEXT,
+    source_columns  TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_recalc_form ON recalc_rules(form_id, sort_order);
+
 CREATE TABLE IF NOT EXISTS check_rules (
     number          INTEGER PRIMARY KEY,
     expression      TEXT NOT NULL,

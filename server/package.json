@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:selftest": "tsx src/sessionPolicy.selftest.ts && tsx src/aggregationSafety.selftest.ts",
+    "test:selftest": "tsx src/sessionPolicy.selftest.ts && tsx src/aggregationSafety.selftest.ts && tsx src/spreadsheetModel.selftest.ts",
     "migrate:dry-run": "tsx src/migrateDryRun.ts"
   },
   "dependencies": {

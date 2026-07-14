@@ -15,6 +15,7 @@ import {
   activateMethodologyRelease,
   buildChecksums,
   compareMethodologyReleases,
+  dryRunMethodology,
   getMethodologyRelease,
   listMethodologyReleases,
   rollbackMethodologyRelease,
@@ -57,6 +58,26 @@ export class MethodologyController {
       left?.trim() || null,
       right.trim()
     );
+  }
+
+  @Post("dry-run")
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: "Dry-run методологии: сравнить checksums с активным релизом без записи",
+  })
+  async dryRun(
+    @Body()
+    body: {
+      version?: string;
+      checksums?: Record<string, string>;
+      parts?: Record<string, unknown>;
+    }
+  ) {
+    try {
+      return await dryRunMethodology(await getDb(), body);
+    } catch (e) {
+      rethrowAsHttp(e, "dry-run failed");
+    }
   }
 
   @Post("activate")

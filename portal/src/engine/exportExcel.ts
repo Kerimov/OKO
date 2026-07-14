@@ -26,12 +26,35 @@ function applyMappings(
     excelColumn: number | string | null;
     formColumn: string | null;
     formRow: number | null;
+    addText?: string | null;
   }>,
-  rows: RowData[]
+  rows: RowData[],
+  meta?: FormMeta
 ): void {
   for (const m of mappings) {
-    if (m.formRow == null || !m.formColumn || m.excelRow == null || m.excelColumn == null)
+    // Metadata mappings (org / period) — formRow may be null.
+    if (m.formRow == null) {
+      if (m.excelRow == null || m.excelColumn == null) continue;
+      const col = String(m.formColumn ?? "").toLowerCase();
+      let val: string | number = m.addText ?? "";
+      if (meta) {
+        if (col === "org" || col === "organization") val = meta.organization;
+        else if (col === "per_rep" || col === "period" || col === "period_end")
+          val = meta.periodEnd || meta.periodStart;
+        else if (col === "period_start") val = meta.periodStart;
+        else if (col === "date()" || col === "date")
+          val = new Date().toISOString().slice(0, 10);
+        else if (col === "unit") val = meta.unit;
+        else if (m.addText) val = m.addText;
+        else continue;
+      } else if (!m.addText) {
+        continue;
+      }
+      if (val === "") continue;
+      setWorksheetCell(ws, Math.round(m.excelRow), m.excelColumn, val);
       continue;
+    }
+    if (!m.formColumn || m.excelRow == null || m.excelColumn == null) continue;
     const val = rowValue(rows, m.formRow, m.formColumn);
     if (val === "") continue;
     setWorksheetCell(ws, Math.round(m.excelRow), m.excelColumn, val);
@@ -54,7 +77,8 @@ function writeBlankWorkbook(
   schema: FormSchema,
   meta: FormMeta,
   rows: RowData[],
-  mappings: Awaited<ReturnType<typeof loadExcelExport>>["mappings"]
+  mappings: Awaited<ReturnType<typeof loadExcelExport>>["mappings"],
+  cellFormulas?: Map<string, string>
 ): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   if (mappings.length === 0) {
@@ -64,13 +88,22 @@ function writeBlankWorkbook(
     ws.addRow([]);
     ws.addRow(schema.columns.map((c) => c.label));
     rows.forEach((row, i) => {
-      ws.addRow(
-        schema.columns.map((col) => {
-          if (col.key === "num") return row.num ?? i + 1;
-          return row[col.key] ?? "";
-        })
-      );
+      const values = schema.columns.map((col) => {
+        if (col.key === "num") return row.num ?? i + 1;
+        const formulaKey = `${String(row.num ?? "").trim()}:${col.key}`;
+        const f = cellFormulas?.get(formulaKey) ?? cellFormulas?.get(`${i}:${col.key}`);
+        if (f?.trim().startsWith("=") && col.readonly) {
+          return { formula: f.replace(/^=/, "") };
+        }
+        return row[col.key] ?? "";
+      });
+      ws.addRow(values);
     });
+    // Freeze label columns when present.
+    const freezeAt = schema.columns.findIndex((c) => c.frozen);
+    if (freezeAt >= 0) {
+      ws.views = [{ state: "frozen", xSplit: freezeAt + 1, ySplit: 4 }];
+    }
     return wb;
   }
 
@@ -84,7 +117,7 @@ function writeBlankWorkbook(
 
   for (const [sheetName, sheetMaps] of bySheet) {
     const ws = wb.addWorksheet(safeSheetName(sheetName));
-    applyMappings(ws, sheetMaps, rows);
+    applyMappings(ws, sheetMaps, rows, meta);
   }
   return wb;
 }
@@ -94,10 +127,12 @@ export async function exportFormToExcel(options: {
   displayName: string;
   meta: FormMeta;
   rows: RowData[];
+  /** Optional A1 formulas keyed `rowNo:columnKey` or `rowIndex:columnKey`. */
+  cellFormulas?: Map<string, string>;
   /** Desktop/Electron: avoid <a download> which reloads the webview */
   saveAs?: (fileName: string, data: Uint8Array) => void | Promise<void>;
 }): Promise<void> {
-  const { schema, displayName, meta, rows, saveAs } = options;
+  const { schema, displayName, meta, rows, cellFormulas, saveAs } = options;
   const data = await loadExcelExport();
   const mappings = data.mappings.filter((m) => m.formName === schema.id);
 
@@ -115,10 +150,10 @@ export async function exportFormToExcel(options: {
     }
     for (const [sheetName, sheetMaps] of bySheet) {
       const ws = wb.getWorksheet(sheetName);
-      if (ws) applyMappings(ws, sheetMaps, rows);
+      if (ws) applyMappings(ws, sheetMaps, rows, meta);
     }
   } else {
-    wb = writeBlankWorkbook(schema, meta, rows, mappings);
+    wb = writeBlankWorkbook(schema, meta, rows, mappings, cellFormulas);
   }
 
   const fileName = sanitizeExcelFilename(`${schema.id}_${displayName}`) + ".xlsx";
@@ -151,7 +186,7 @@ export async function exportPackageToExcel(
       }
       for (const [sheetName, sheetMaps] of bySheet) {
         const ws = wb.getWorksheet(sheetName);
-        if (ws) applyMappings(ws, sheetMaps, inst.rows);
+        if (ws) applyMappings(ws, sheetMaps, inst.rows, inst.meta);
       }
     }
   } else {
