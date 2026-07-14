@@ -16,7 +16,7 @@ import {
   getRashRulesForForm,
   numVal,
   rashColumnsForRule,
-  rashSlotKey,
+  rashGroupKey,
   syncAllRashToRows,
   syncRashToParentRow,
   type RashCellSlot,
@@ -246,6 +246,12 @@ export function FormPage() {
       .catch(() => setKontrAgents([]));
   }, [rashMode, schema]);
 
+  // Like Access after reopening a form: re-apply t_ras sums onto parent cells.
+  useEffect(() => {
+    if (!schema || !rashData || kontrMode || rashEntries.length === 0) return;
+    setRows((prev) => syncAllRashToRows(schema.id, prev, rashEntries, rashData.rules));
+  }, [schema?.id, rashData, kontrMode, rashEntries]);
+
   const handleRowsChange = useCallback(
     (next: RowData[]) => {
       setRows(next);
@@ -318,7 +324,7 @@ export function FormPage() {
     if (!schema) return map;
     for (const e of rashEntries) {
       if (e.formId !== schema.id) continue;
-      const key = rashSlotKey(String(e.parentRowNo), e.columnKey ?? "", e.rashKod);
+      const key = rashGroupKey(e.parentRowNo, e.rashKod);
       map.set(key, (map.get(key) ?? 0) + 1);
     }
     return map;
@@ -330,7 +336,7 @@ export function FormPage() {
     for (const slot of rashSlots) {
       const cols = effectiveRashFormula(slot.rule)
         ? rashColumnsForRule(slot.rule)
-        : [slot.columnKey];
+        : [slot.displayColumnKey ?? slot.columnKey];
       for (const col of cols) {
         set.add(`${slot.rowNum}:${col}`);
       }
@@ -342,34 +348,43 @@ export function FormPage() {
     (slot: RashCellSlot, rowIndex: number) => {
       if (!schema || isLocked) return;
       const row = rows[rowIndex];
+      const placementColumns = [
+        ...new Set(
+          rashSlots
+            .filter(
+              (s) => s.rowNum === slot.rowNum && s.rashKod === slot.rashKod
+            )
+            .map((s) => s.displayColumnKey ?? s.columnKey)
+        ),
+      ];
       setRashModal({
         formId: schema.id,
         parentRowNo: parseInt(slot.rowNum, 10),
         parentRowIndex: rowIndex,
-        columnKey: slot.columnKey,
+        columnKey: slot.displayColumnKey ?? slot.columnKey,
         rashKod: slot.rashKod,
         rule: slot.rule,
         parentLabel: String(row.name ?? slot.rowNum),
         parentValue:
           slot.pattern === "total" && effectiveRashFormula(slot.rule)
             ? evaluateTotalFormula(effectiveRashFormula(slot.rule)!, row)
-            : numVal(row[slot.columnKey]),
+            : numVal(row[slot.displayColumnKey ?? slot.columnKey]),
+        placementColumns,
       });
     },
-    [schema, rows, isLocked]
+    [schema, rows, isLocked, rashSlots]
   );
 
   const handleRashSave = useCallback(
     async (newLines: FormRashEntry[]) => {
       if (!rashModal || !schema || !instance) return;
-      const { formId, parentRowNo, rashKod, columnKey, parentRowIndex } = rashModal;
+      const { formId, parentRowNo, rashKod, parentRowIndex } = rashModal;
       const rest = rashEntries.filter(
         (e) =>
           !(
             e.formId === formId &&
             e.parentRowNo === parentRowNo &&
-            e.rashKod === rashKod &&
-            (e.columnKey == null || e.columnKey === columnKey)
+            e.rashKod === rashKod
           )
       );
       const tagged = newLines.map((e, i) => ({
@@ -377,7 +392,7 @@ export function FormPage() {
         formId,
         parentRowNo,
         rashKod,
-        columnKey,
+        columnKey: null,
         lineNo: i,
       }));
       const nextEntries = [...rest, ...tagged];
@@ -392,6 +407,9 @@ export function FormPage() {
           rashKod,
           rashModal.rule
         );
+        if (autoRecalc && recalcRuleCount && recalcRuleCount > 0) {
+          nextRows = await window.oko.recalcForm(schema.id, nextRows);
+        }
         setRows(nextRows);
         await persist({ rows: nextRows, rashEntries: nextEntries });
       } else {
@@ -401,7 +419,17 @@ export function FormPage() {
       setStatus("Расшифровка сохранена");
       setTimeout(() => setStatus(""), 3000);
     },
-    [rashModal, schema, instance, rashEntries, rows, kontrMode, persist]
+    [
+      rashModal,
+      schema,
+      instance,
+      rashEntries,
+      rows,
+      kontrMode,
+      persist,
+      autoRecalc,
+      recalcRuleCount,
+    ]
   );
 
   const rashModalEntries = useMemo(() => {
@@ -410,8 +438,7 @@ export function FormPage() {
       rashEntries,
       schema.id,
       rashModal.parentRowNo,
-      rashModal.rashKod,
-      rashModal.columnKey
+      rashModal.rashKod
     );
   }, [rashEntries, rashModal, schema]);
 
@@ -955,6 +982,7 @@ export function FormPage() {
                   rule: rashModal.rule,
                   parentLabel: rashModal.parentLabel,
                   parentValue: rashModal.parentValue,
+                  placementColumns: rashModal.placementColumns,
                 }
               : null
           }
