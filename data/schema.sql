@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS periods (
     period_end   DATE,
     quarter     INTEGER,
     year        INTEGER,
+    package_status TEXT DEFAULT 'draft',
+    package_comment TEXT,
+    status_updated_at TEXT,
+    status_updated_by TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -31,6 +35,12 @@ CREATE TABLE IF NOT EXISTS form_templates (
     saldo_yellow TEXT,
     saldo_red   TEXT,
     saldo_blue  TEXT,
+    saldo_green TEXT,
+    saldo_yellow_corr TEXT,
+    saldo_red_corr TEXT,
+    saldo_blue_corr TEXT,
+    reorg_update TEXT,
+    reorg_update_2 TEXT,
     sort_order  REAL,
     pdf_file    TEXT,
     allow_add_rows INTEGER DEFAULT 0,
@@ -102,6 +112,9 @@ CREATE INDEX IF NOT EXISTS idx_cells_instance ON form_cell_values(instance_id);
 CREATE INDEX IF NOT EXISTS idx_cells_lookup ON form_cell_values(instance_id, row_no, column_key);
 CREATE INDEX IF NOT EXISTS idx_instances_template ON form_instances(template_id);
 CREATE INDEX IF NOT EXISTS idx_instances_period ON form_instances(period_start, period_end);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_form_instances_package_tpl
+  ON form_instances (zid, eid, template_id)
+  WHERE zid IS NOT NULL AND eid IS NOT NULL;
 
 -- Validation rules (a_tblchecks)
 CREATE TABLE IF NOT EXISTS check_rules (
@@ -277,3 +290,42 @@ CREATE TABLE IF NOT EXISTS agg_list (
 
 CREATE INDEX IF NOT EXISTS idx_agg_parent ON agg_list(parent_zid);
 CREATE INDEX IF NOT EXISTS idx_agg_child ON agg_list(child_zid);
+
+CREATE TABLE IF NOT EXISTS agg_corr_sets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_zid  INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    corr_zid    INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    source_eid  INTEGER NOT NULL REFERENCES periods(eid),
+    label       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(corr_zid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
+
+-- Quarantine for ReportPackage uploads before accept
+CREATE TABLE IF NOT EXISTS package_inbox (
+    id TEXT PRIMARY KEY,
+    received_at TEXT NOT NULL,
+    actor TEXT,
+    filename TEXT,
+    sha256 TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'received',
+    pkg_zid INTEGER,
+    pkg_eid INTEGER,
+    organization TEXT,
+    period_start TEXT,
+    period_end TEXT,
+    target_zid INTEGER,
+    target_eid INTEGER,
+    validation_errors TEXT NOT NULL DEFAULT '[]',
+    warnings TEXT NOT NULL DEFAULT '[]',
+    instance_count INTEGER NOT NULL DEFAULT 0,
+    accepted_at TEXT,
+    rejected_reason TEXT,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_package_inbox_status ON package_inbox(status, received_at);
+CREATE INDEX IF NOT EXISTS idx_package_inbox_sha ON package_inbox(sha256);
