@@ -10,13 +10,14 @@ import {
   addsumInputType,
   defaultKontrShowFilter,
   effectiveRashFormula,
+  entryLineTotal,
   filterKontrByShow,
   getAddsumForRule,
   getRashNumericColumns,
   kontrShowOptionsForRule,
-  numVal,
   parseRefFilter,
   parseTotalColumn,
+  sumRashSubformTotal,
 } from "../engine/rashEngine";
 import {
   refItemLabel,
@@ -37,6 +38,8 @@ export interface RashEditorModalProps {
     rule: RashRule;
     parentLabel: string;
     parentValue: number;
+    /** Columns of this kod on the parent row (Access multi-column attachment). */
+    placementColumns?: string[];
   } | null;
   entries: FormRashEntry[];
   formColumns: FormColumn[];
@@ -53,24 +56,12 @@ function emptyEntry(
   return {
     formId: ctx.formId,
     parentRowNo: ctx.parentRowNo,
-    columnKey: ctx.columnKey,
+    columnKey: null,
     rashKod: ctx.rashKod,
     lineNo,
     kontrName: "",
     values: {},
   };
-}
-
-function filterModalEntries(
-  entries: FormRashEntry[],
-  ctx: NonNullable<RashEditorModalProps["context"]>
-): FormRashEntry[] {
-  return entries.filter(
-    (e) =>
-      e.parentRowNo === ctx.parentRowNo &&
-      e.rashKod === ctx.rashKod &&
-      (!e.columnKey || !ctx.columnKey || e.columnKey === ctx.columnKey)
-  );
 }
 
 export function RashEditorModal({
@@ -106,12 +97,12 @@ export function RashEditorModal({
       setSeeded(false);
       return;
     }
-    setDraft(filterModalEntries(initialEntries, context));
+    // Same kod on B/C/D shares one t_ras set — do not re-seed when only columnKey changes.
+    setDraft(initialEntries);
     setSeeded(true);
     setShowFilter(defaultKontrShowFilter(context.rule.refA1Name));
-    // Seed only when the modal opens / target cell changes — not on every parent re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional seed key
-  }, [open, context?.formId, context?.parentRowNo, context?.rashKod, context?.columnKey]);
+  }, [open, context?.formId, context?.parentRowNo, context?.rashKod]);
 
   const filteredAgents = useMemo(() => {
     if (!context) return kontrAgents;
@@ -120,11 +111,17 @@ export function RashEditorModal({
 
   const rashColumns = useMemo(() => {
     if (!context) return [];
-    return getRashNumericColumns(context.rule, formColumns, addsum);
+    return getRashNumericColumns(
+      context.rule,
+      formColumns,
+      addsum,
+      context.placementColumns
+    );
   }, [context, formColumns, addsum]);
 
   const formula = context ? effectiveRashFormula(context.rule) : null;
-  const sumCol = parseTotalColumn(formula) ?? context?.columnKey ?? "";
+  const totalCol = parseTotalColumn(formula);
+  const sumCol = totalCol ?? context?.columnKey ?? "";
 
   const attrA2 = context ? parseRefFilter(context.rule.refA2Name) : null;
   const attrA3 = context ? parseRefFilter(context.rule.refA3Name) : null;
@@ -199,7 +196,7 @@ export function RashEditorModal({
     setWorking(draft.filter((_, i) => i !== idx));
   };
 
-  const total = working.reduce((s, e) => s + numVal(e.values[sumCol]), 0);
+  const total = sumRashSubformTotal(working, context.rule, sumCol || context.columnKey);
 
   const handleClose = () => {
     setDraft([]);
@@ -210,7 +207,7 @@ export function RashEditorModal({
   const handleSave = () => {
     const cleaned = draft
       .filter((e) => e.kontrName?.trim() || Object.keys(e.values).length > 0)
-      .map((e, i) => ({ ...e, lineNo: i }));
+      .map((e, i) => ({ ...e, lineNo: i, columnKey: null }));
     onSave(cleaned);
     setDraft([]);
     setSeeded(false);
@@ -281,6 +278,10 @@ export function RashEditorModal({
     return "text";
   };
 
+  const totalLabel = totalCol
+    ? formColumns.find((c) => c.key === totalCol)?.label ?? "Итог"
+    : null;
+
   return (
     <div className="rash-modal-backdrop" role="presentation" onClick={handleClose}>
       <div
@@ -309,11 +310,23 @@ export function RashEditorModal({
 
         <div className="rash-modal-summary">
           <span>
-            Итог на форме формируется из суммы расшифровки по гр.{" "}
-            <strong>{sumCol}</strong>
+            {totalCol ? (
+              <>
+                Итог на форме: сумма по формуле{" "}
+                <strong>
+                  {totalCol}
+                  {formula ? ` (${formula})` : ""}
+                </strong>
+              </>
+            ) : (
+              <>
+                Итоги граф расшифровки переносятся в соответствующие графы формы
+              </>
+            )}
           </span>
           <span>
-            Сумма в подформе: <strong>{total}</strong>
+            Сумма в подформе
+            {totalCol ? ` (${totalCol})` : ""}: <strong>{total}</strong>
           </span>
         </div>
 
@@ -356,81 +369,95 @@ export function RashEditorModal({
                     <span className="col-label">{c.label}</span>
                   </th>
                 ))}
+                {totalCol && (
+                  <th title={totalLabel ?? "Итог"} className="rash-total-col">
+                    <span className="col-letter">{totalCol}</span>
+                    <span className="col-label">{totalLabel ?? "Итог"}</span>
+                  </th>
+                )}
                 {!readOnly && <th className="actions-col" />}
               </tr>
             </thead>
             <tbody>
-              {working.map((line, idx) => (
-                <tr key={idx}>
-                  <td>
-                    {readOnly ? (
-                      line.kontrName
-                    ) : (
-                      <KontrInput
-                        value={line.kontrName ?? ""}
-                        listId={listId}
-                        agents={filteredAgents}
-                        orgTypes={kontrOrgTypes}
-                        placeholder="Контрагент…"
-                        onChange={(v) => {
-                          updateLine(idx, { kontrName: v });
-                          const agent = filteredAgents.find((k) => k.name === v);
-                          if (agent) pickKontr(idx, agent);
-                        }}
-                        onPick={(agent) => pickKontr(idx, agent)}
-                      />
-                    )}
-                  </td>
-                  {attrA2 && (
+              {working.map((line, idx) => {
+                const lineTotal = entryLineTotal(line, context.rule);
+                return (
+                  <tr key={idx}>
                     <td>
-                      {renderRefAttr(line.attrA2, refA2Options, listA2Id, (v) =>
-                        updateLine(idx, { attrA2: v })
-                      )}
-                    </td>
-                  )}
-                  {attrA3 && (
-                    <td>
-                      {renderRefAttr(line.attrA3, refA3Options, listA3Id, (v) =>
-                        updateLine(idx, { attrA3: v })
-                      )}
-                    </td>
-                  )}
-                  {attrA4 && (
-                    <td>
-                      {renderRefAttr(line.attrA4, refA4Options, listA4Id, (v) =>
-                        updateLine(idx, { attrA4: v })
-                      )}
-                    </td>
-                  )}
-                  {rashColumns.map((c) => (
-                    <td key={c.key}>
                       {readOnly ? (
-                        String(line.values[c.key] ?? "")
+                        line.kontrName
                       ) : (
-                        <input
-                          type={htmlTypeForCol(c)}
-                          inputMode={inputModeForCol(c)}
-                          className={c.type === "number" ? "num-input" : undefined}
-                          value={String(line.values[c.key] ?? "")}
-                          onChange={(e) => updateValue(idx, c.key, e.target.value, c.type)}
+                        <KontrInput
+                          value={line.kontrName ?? ""}
+                          listId={listId}
+                          agents={filteredAgents}
+                          orgTypes={kontrOrgTypes}
+                          placeholder="Контрагент…"
+                          onChange={(v) => {
+                            updateLine(idx, { kontrName: v });
+                            const agent = filteredAgents.find((k) => k.name === v);
+                            if (agent) pickKontr(idx, agent);
+                          }}
+                          onPick={(agent) => pickKontr(idx, agent)}
                         />
                       )}
                     </td>
-                  ))}
-                  {!readOnly && (
-                    <td className="actions-col">
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        onClick={() => removeLine(idx)}
-                        title="Удалить строку"
-                      >
-                        ×
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
+                    {attrA2 && (
+                      <td>
+                        {renderRefAttr(line.attrA2, refA2Options, listA2Id, (v) =>
+                          updateLine(idx, { attrA2: v })
+                        )}
+                      </td>
+                    )}
+                    {attrA3 && (
+                      <td>
+                        {renderRefAttr(line.attrA3, refA3Options, listA3Id, (v) =>
+                          updateLine(idx, { attrA3: v })
+                        )}
+                      </td>
+                    )}
+                    {attrA4 && (
+                      <td>
+                        {renderRefAttr(line.attrA4, refA4Options, listA4Id, (v) =>
+                          updateLine(idx, { attrA4: v })
+                        )}
+                      </td>
+                    )}
+                    {rashColumns.map((c) => (
+                      <td key={c.key}>
+                        {readOnly ? (
+                          String(line.values[c.key] ?? "")
+                        ) : (
+                          <input
+                            type={htmlTypeForCol(c)}
+                            inputMode={inputModeForCol(c)}
+                            className={c.type === "number" ? "num-input" : undefined}
+                            value={String(line.values[c.key] ?? "")}
+                            onChange={(e) => updateValue(idx, c.key, e.target.value, c.type)}
+                          />
+                        )}
+                      </td>
+                    ))}
+                    {totalCol && (
+                      <td className="rash-total-col num-input">
+                        {lineTotal == null || Number.isNaN(lineTotal) ? "" : lineTotal}
+                      </td>
+                    )}
+                    {!readOnly && (
+                      <td className="actions-col">
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => removeLine(idx)}
+                          title="Удалить строку"
+                        >
+                          ×
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

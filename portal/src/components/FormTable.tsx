@@ -7,6 +7,7 @@ import {
   kontrInsertIndex,
   kontrShowOptionsForRule,
   rashSlotKey,
+  rashGroupKey,
   rashSlotVisible,
 } from "../engine/rashEngine";
 import { cellErrorKey } from "../engine/cellErrors";
@@ -361,8 +362,12 @@ function LegacyFormTable({
                 const rashCount =
                   rashSlot && rashEntryCounts
                     ? rashEntryCounts.get(
+                        rashGroupKey(rashSlot.rowNum, rashSlot.rashKod)
+                      ) ??
+                      rashEntryCounts.get(
                         rashSlotKey(rashSlot.rowNum, rashSlot.columnKey, rashSlot.rashKod)
-                      ) ?? 0
+                      ) ??
+                      0
                     : 0;
 
                 const rashVisible =

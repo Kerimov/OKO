@@ -1598,6 +1598,14 @@ input[type="checkbox"] {
   overflow: auto;
 }
 
+.rash-modal-table td.rash-total-col,
+.rash-modal-table th.rash-total-col {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .rash-modal-hint {
   margin: 0.65rem 0 0;
   font-size: 0.85rem;

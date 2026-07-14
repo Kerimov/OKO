@@ -56,6 +56,8 @@ export interface RashEditorContext {
   rule: RashRule;
   parentLabel: string;
   parentValue: number;
+  /** All form columns sharing this kod on the parent row. */
+  placementColumns?: string[];
 }
 
 let cachedData: RashRulesData | null = null;
@@ -367,26 +369,27 @@ export function addsumInputType(fldType: string | null | undefined): RashAddsumI
 export function getRashNumericColumns(
   rule: RashRule,
   formColumns: FormColumn[],
-  addsum: RashAddsum[]
+  addsum: RashAddsum[],
+  placementColumns?: string[]
 ): FormColumn[] {
   const keys = new Set<string>();
   const formula = effectiveRashFormula(rule);
+  const totalCol = parseTotalColumn(formula);
   if (formula) {
-    const compact = formula.replace(/\s/g, "");
-    const eq = compact.indexOf("=");
-    const rhs = eq >= 0 ? compact.slice(eq + 1) : compact;
-    for (const m of rhs.matchAll(/([A-ZА-Я])/gi)) {
-      keys.add(m[1].toUpperCase());
+    for (const col of parseFormulaColumns(formula)) {
+      if (col !== totalCol) keys.add(col);
     }
-    const totalCol = parseTotalColumn(formula);
-    if (totalCol) keys.add(totalCol);
+  } else if (placementColumns && placementColumns.length > 0) {
+    for (const col of placementColumns) {
+      if (col && col !== "num") keys.add(col);
+    }
   } else {
     for (const col of formColumns) {
       if (col.type === "number" && !["num"].includes(col.key)) keys.add(col.key);
     }
   }
   const cols: FormColumn[] = [];
-  for (const key of keys) {
+  for (const key of [...keys].sort()) {
     const found = formColumns.find((c) => c.key === key);
     if (found) cols.push(found);
   }
@@ -400,6 +403,77 @@ export function getRashNumericColumns(
     });
   }
   return cols;
+}
+
+/** Access t_ras: one detail set per form/row/kod — not per opened letter. */
+export function rashGroupKey(rowNum: string | number, rashKod: number): string {
+  return `${rowNum}:${rashKod}`;
+}
+
+function canMergeRashLines(a: FormRashEntry, b: FormRashEntry): boolean {
+  // Only collapse legacy letter-scoped clones (B-save vs C-save), never two real lines.
+  if (!a.columnKey || !b.columnKey) return false;
+  if (a.columnKey === b.columnKey) return false;
+  if (String(a.kontrId ?? "") !== String(b.kontrId ?? "")) return false;
+  if ((a.kontrName?.trim() || "") !== (b.kontrName?.trim() || "")) return false;
+  for (const key of Object.keys(a.values)) {
+    if (key.startsWith("_addsum_")) continue;
+    if (!(key in b.values)) continue;
+    if (String(a.values[key] ?? "") !== String(b.values[key] ?? "")) return false;
+  }
+  return true;
+}
+
+/**
+ * Entries for one Access subform (form/row/kod).
+ * `columnKey` is ignored: opening B/C/D shares the same t_ras set.
+ * Legacy per-letter duplicates are merged only when values don't conflict.
+ */
+export function entriesForRash(
+  all: FormRashEntry[],
+  formId: string,
+  parentRowNo: number,
+  rashKod: number,
+  _columnKey?: string | null
+): FormRashEntry[] {
+  void _columnKey;
+  const matched = all.filter(
+    (e) =>
+      e.formId === formId &&
+      e.parentRowNo === parentRowNo &&
+      e.rashKod === rashKod
+  );
+  const merged: FormRashEntry[] = [];
+  for (const e of matched) {
+    const idx = merged.findIndex((m) => canMergeRashLines(m, e));
+    if (idx < 0) {
+      merged.push({
+        ...e,
+        values: { ...e.values },
+      });
+      continue;
+    }
+    const prev = merged[idx];
+    merged[idx] = {
+      ...prev,
+      values: { ...prev.values, ...e.values },
+      attrA2: prev.attrA2 || e.attrA2,
+      attrA3: prev.attrA3 || e.attrA3,
+      attrA4: prev.attrA4 || e.attrA4,
+      inn: prev.inn || e.inn,
+      kpp: prev.kpp || e.kpp,
+    };
+  }
+  return merged.map((e, i) => ({ ...e, lineNo: i, columnKey: null }));
+}
+
+export function entryLineTotal(
+  entry: FormRashEntry,
+  rule: RashRule
+): number | null {
+  const formula = effectiveRashFormula(rule);
+  if (!formula) return null;
+  return evaluateTotalFormula(formula, { ...entry.values });
 }
 
 export function evaluateTotalFormula(
@@ -540,8 +614,11 @@ export function rashSlotVisible(
   thresholds: RashThresholds,
   rashEntryCounts?: Map<string, number>
 ): boolean {
-  const key = rashSlotKey(slot.rowNum, slot.columnKey, slot.rashKod);
-  if ((rashEntryCounts?.get(key) ?? 0) > 0) return true;
+  const groupKey = rashGroupKey(slot.rowNum, slot.rashKod);
+  if ((rashEntryCounts?.get(groupKey) ?? 0) > 0) return true;
+  // Legacy maps keyed by full slot key
+  const legacyKey = rashSlotKey(slot.rowNum, slot.columnKey, slot.rashKod);
+  if ((rashEntryCounts?.get(legacyKey) ?? 0) > 0) return true;
   const displayCol = slot.displayColumnKey ?? slot.columnKey;
   if (Math.abs(numVal(row[displayCol])) >= thresholds.level1) return true;
   const formula = effectiveRashFormula(slot.rule);
@@ -654,20 +731,26 @@ export function sumRashEntries(
   return sum;
 }
 
-export function entriesForRash(
-  all: FormRashEntry[],
-  formId: string,
-  parentRowNo: number,
-  rashKod: number,
-  columnKey?: string | null
-): FormRashEntry[] {
-  return all.filter(
-    (e) =>
-      e.formId === formId &&
-      e.parentRowNo === parentRowNo &&
-      e.rashKod === rashKod &&
-      (columnKey == null || !e.columnKey || e.columnKey === columnKey)
-  );
+/**
+ * Display total for the rash modal (same logic as syncRashToParentRow):
+ * sum each formula component across lines, then evaluate rItogo; otherwise sum fallbackCol.
+ */
+export function sumRashSubformTotal(
+  entries: FormRashEntry[],
+  rule: RashRule,
+  fallbackColumnKey: string
+): number {
+  const formula = effectiveRashFormula(rule);
+  if (formula) {
+    const totalCol = parseTotalColumn(formula);
+    const patch: RowData = {};
+    for (const col of parseFormulaColumns(formula)) {
+      if (col === totalCol) continue;
+      patch[col] = sumRashEntries(entries, col);
+    }
+    return evaluateTotalFormula(formula, patch);
+  }
+  return sumRashEntries(entries, fallbackColumnKey);
 }
 
 function severityForLevel(level: 0 | 1 | 2 | 3): "error" | "warning" {
@@ -865,7 +948,7 @@ export function validateCellRash(
   const seen = new Set<string>();
 
   for (const slot of slots) {
-    const dedupeKey = `${slot.rowNum}:${slot.rashKod}:${slot.columnKey}`;
+    const dedupeKey = rashGroupKey(slot.rowNum, slot.rashKod);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
@@ -878,8 +961,7 @@ export function validateCellRash(
       rashEntries,
       formId,
       parseInt(slot.rowNum, 10),
-      slot.rashKod,
-      slot.columnKey
+      slot.rashKod
     );
 
     const formula = effectiveRashFormula(slot.rule);
@@ -1077,8 +1159,8 @@ export function syncAllRashToRows(
   const seen = new Set<string>();
   for (const e of rashEntries) {
     if (e.formId !== formId) continue;
-    // Include columnKey so multi-column rashes on the same row/kod are all applied.
-    const key = `${e.parentRowNo}:${e.rashKod}:${e.columnKey ?? ""}`;
+    // One t_ras group per row+kod (Access); ignore legacy per-columnKey splits.
+    const key = rashGroupKey(e.parentRowNo, e.rashKod);
     if (seen.has(key)) continue;
     seen.add(key);
     const rule = formRules.find((r) => r.kod === e.rashKod);

@@ -16,6 +16,9 @@ import {
   rashSlotVisible,
   syncAllRashToRows,
   syncRashToParentRow,
+  sumRashSubformTotal,
+  entriesForRash,
+  entryLineTotal,
   validateCellRash,
   validateKontrAmountPolicy,
   validateUnknownKontrName,
@@ -290,6 +293,67 @@ describe("rash P0/P1 fixes", () => {
     const synced = syncAllRashToRows("T01", rows, rashEntries, [rule as never]);
     expect(numVal(synced[0].B)).toBe(5);
     expect(numVal(synced[0].C)).toBe(7);
+  });
+
+  it("sumRashSubformTotal uses formula components, not empty total column", () => {
+    const rule = {
+      kod: 51112,
+      name: "N05_11",
+      totalFormula: "M=B+C+D",
+    };
+    const entries: FormRashEntry[] = [
+      {
+        formId: "N05_11",
+        parentRowNo: 1,
+        columnKey: "B",
+        rashKod: 51112,
+        lineNo: 0,
+        kontrName: "A",
+        values: { B: 10, C: 20, D: 5 },
+      },
+      {
+        formId: "N05_11",
+        parentRowNo: 1,
+        columnKey: "B",
+        rashKod: 51112,
+        lineNo: 1,
+        kontrName: "B",
+        values: { B: 1, C: 2, D: 3 },
+      },
+    ];
+    // Naive sum of M would be 0; Access-style total is (10+1)+(20+2)+(5+3)=41
+    expect(sumRashSubformTotal(entries, rule as never, "M")).toBe(41);
+  });
+
+  it("entriesForRash merges legacy per-column saves for same kontr", () => {
+    const entries: FormRashEntry[] = [
+      {
+        formId: "N02_2",
+        parentRowNo: 10,
+        columnKey: "B",
+        rashKod: 224,
+        lineNo: 0,
+        kontrName: "Арктика N",
+        values: { B: 1, C: 2 },
+      },
+      {
+        formId: "N02_2",
+        parentRowNo: 10,
+        columnKey: "C",
+        rashKod: 224,
+        lineNo: 0,
+        kontrName: "Арктика N",
+        values: { C: 2, D: 3 },
+      },
+    ];
+    const merged = entriesForRash(entries, "N02_2", 10, 224, "C");
+    expect(merged).toHaveLength(1);
+    expect(numVal(merged[0].values.B)).toBe(1);
+    expect(numVal(merged[0].values.C)).toBe(2);
+    expect(numVal(merged[0].values.D)).toBe(3);
+    expect(
+      entryLineTotal(merged[0], { kod: 224, name: "x", totalFormula: "M=B+C+D" } as never)
+    ).toBe(6);
   });
 
   it("ignores prose totalFormula (kod 121 style)", () => {
