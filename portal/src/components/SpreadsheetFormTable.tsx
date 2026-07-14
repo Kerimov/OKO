@@ -231,22 +231,36 @@ export function SpreadsheetFormTable({
     if (editing) inputRef.current?.focus({ preventScroll: true });
   }, [editing]);
 
+  const selectionNotifyRef = useRef<{
+    rowIndex: number;
+    columnKey: string;
+    rowNo: string;
+  } | null>(null);
+
   useEffect(() => {
     if (!onSelectionChange) return;
-    if (!active) {
-      onSelectionChange(null);
+    const col = active ? visibleCols[active.c] : undefined;
+    const next =
+      active && col
+        ? {
+            rowIndex: active.r,
+            columnKey: col.key,
+            rowNo: String(rows[active.r]?.num ?? "").trim(),
+          }
+        : null;
+    const prev = selectionNotifyRef.current;
+    if (
+      (prev == null && next == null) ||
+      (prev != null &&
+        next != null &&
+        prev.rowIndex === next.rowIndex &&
+        prev.columnKey === next.columnKey &&
+        prev.rowNo === next.rowNo)
+    ) {
       return;
     }
-    const col = visibleCols[active.c];
-    if (!col) {
-      onSelectionChange(null);
-      return;
-    }
-    onSelectionChange({
-      rowIndex: active.r,
-      columnKey: col.key,
-      rowNo: String(rows[active.r]?.num ?? "").trim(),
-    });
+    selectionNotifyRef.current = next;
+    onSelectionChange(next);
   }, [active, onSelectionChange, rows, visibleCols]);
 
   useEffect(() => {
@@ -260,7 +274,7 @@ export function SpreadsheetFormTable({
     const v = formula?.trim()
       ? formula
       : String(rows[active.r]?.[col.key] ?? "");
-    setFormulaBar(v);
+    setFormulaBar((prev) => (prev === v ? prev : v));
   }, [active, rows, visibleCols, cellFormulas]);
 
   const copySelection = async () => {

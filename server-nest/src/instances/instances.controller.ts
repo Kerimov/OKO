@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -23,6 +24,7 @@ import {
   assertInstanceEditable,
   buildEvalSnapshotFromDb,
   deleteInstanceFromDb,
+  findInstanceIdByPackageTemplate,
   getInstanceStorageStats,
   listInstanceSummaries,
   loadInstance,
@@ -183,9 +185,36 @@ export class InstancesController {
       }
       const inst = enforceOrgInstanceWrite(req, body);
       if (!inst.status) inst.status = "draft";
+
+      // Package scope: only one form per template. If another instance already
+      // occupies (zid, eid, template_id), reject with its id instead of opaque DB error.
+      if (inst.zid != null && inst.eid != null && inst.templateId) {
+        const occupied = await findInstanceIdByPackageTemplate(
+          db,
+          inst.zid,
+          inst.eid,
+          inst.templateId
+        );
+        if (occupied && occupied !== inst.instanceId) {
+          throw new ConflictException({
+            error: `В комплекте уже есть форма ${inst.templateId}`,
+            existingInstanceId: occupied,
+            code: "uq_form_instances_package_tpl",
+          });
+        }
+      }
+
       await upsertInstance(db, inst);
       return inst;
     } catch (e) {
+      if (e instanceof HttpException) throw e;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/uq_form_instances_package_tpl/i.test(msg)) {
+        throw new ConflictException({
+          error: "В комплекте уже есть эта форма (организация + период + шаблон)",
+          code: "uq_form_instances_package_tpl",
+        });
+      }
       rethrowAsHttp(e, "save failed");
     }
   }

@@ -594,6 +594,12 @@ export function buildRashCellSlots(
       continue;
     }
 
+    // Form already has explicit placements: unbound rows must not get invented «…» buttons.
+    if (formMeta && Object.keys(formMeta).length > 0) {
+      continue;
+    }
+
+    // Legacy fallback only when the form has no placement index at all.
     const rowRules = getRashRulesForRow(formRules, formId, num);
     const rulesForRow = rowRules.length ? rowRules : formRules.filter((r) => !r.refRows);
     for (const rule of rulesForRow) {
@@ -1145,6 +1151,11 @@ export function syncRashToParentRow(
     for (const col of formulaCols) patch[col] = 0;
   }
 
+  if (Object.keys(patch).length === 0) return rows;
+  const changed = Object.entries(patch).some(
+    ([k, v]) => String(row[k] ?? "") !== String(v ?? "")
+  );
+  if (!changed) return rows;
   return rows.map((r, i) => (i === rowIndex ? { ...r, ...patch } : r));
 }
 

@@ -7,7 +7,7 @@ import type {
   FormRashEntry,
 } from "./types";
 import { buildInitialRows } from "./utils";
-import { apiFetch } from "./apiClient";
+import { apiFetch, ApiError } from "./apiClient";
 import { initAuth } from "./auth";
 
 const INDEX_KEY = "oko-instances-index";
@@ -50,20 +50,44 @@ function writeIndexLocal(list: InstanceSummary[]): void {
   localStorage.setItem(INDEX_KEY, JSON.stringify(list));
 }
 
-function summaryFromInstance(inst: OkoFormInstance): InstanceSummary {
+function ensureInstanceMeta(inst: OkoFormInstance): OkoFormInstance {
+  const meta = inst.meta ?? {
+    organization: "",
+    enterpriseCode: "1@1",
+    periodStart: "",
+    periodEnd: "",
+    unit: "тыс.руб.",
+  };
   return {
-    instanceId: inst.instanceId,
-    templateId: inst.templateId,
-    templateTitle: inst.templateTitle,
-    displayName: inst.displayName,
-    organization: inst.meta.organization,
-    periodStart: inst.meta.periodStart,
-    periodEnd: inst.meta.periodEnd,
-    zid: inst.zid ?? null,
-    eid: inst.eid ?? null,
+    ...inst,
+    meta: {
+      organization: meta.organization ?? "",
+      enterpriseCode: meta.enterpriseCode ?? "1@1",
+      periodStart: meta.periodStart ?? "",
+      periodEnd: meta.periodEnd ?? "",
+      unit: meta.unit ?? "тыс.руб.",
+    },
+    rows: Array.isArray(inst.rows) ? inst.rows : [],
+    signatures: inst.signatures ?? {},
     status: inst.status ?? "draft",
-    createdAt: inst.createdAt,
-    updatedAt: inst.updatedAt,
+  };
+}
+
+function summaryFromInstance(inst: OkoFormInstance): InstanceSummary {
+  const safe = ensureInstanceMeta(inst);
+  return {
+    instanceId: safe.instanceId,
+    templateId: safe.templateId,
+    templateTitle: safe.templateTitle,
+    displayName: safe.displayName,
+    organization: safe.meta.organization,
+    periodStart: safe.meta.periodStart,
+    periodEnd: safe.meta.periodEnd,
+    zid: safe.zid ?? null,
+    eid: safe.eid ?? null,
+    status: safe.status ?? "draft",
+    createdAt: safe.createdAt,
+    updatedAt: safe.updatedAt,
   };
 }
 
@@ -98,7 +122,8 @@ async function migrateLocalToBackend(): Promise<void> {
         return null;
       }
     })
-    .filter((i): i is OkoFormInstance => i !== null);
+    .filter((i): i is OkoFormInstance => i !== null)
+    .map(ensureInstanceMeta);
 
   if (instances.length === 0 && !localStorage.getItem(GLOBAL_META)) {
     localStorage.setItem(MIGRATED_KEY, "1");
@@ -177,6 +202,14 @@ export async function createInstance(schema: FormSchema): Promise<OkoFormInstanc
       periodStart = period.periodStart ?? periodStart;
       periodEnd = period.periodEnd ?? periodEnd;
     }
+
+    // DB: unique (zid, eid, template_id) — open existing form instead of inserting a duplicate.
+    const inPackage = await listInstances({ zid: work.zid, eid: work.eid });
+    const hit = inPackage.find((s) => s.templateId === schema.id);
+    if (hit) {
+      const existing = await loadInstance(hit.instanceId);
+      if (existing) return existing;
+    }
   }
 
   const meta: FormMeta = {
@@ -209,7 +242,11 @@ export async function createInstance(schema: FormSchema): Promise<OkoFormInstanc
 }
 
 export async function saveInstance(instance: OkoFormInstance): Promise<void> {
-  instance.updatedAt = new Date().toISOString();
+  const normalized = ensureInstanceMeta({
+    ...instance,
+    updatedAt: new Date().toISOString(),
+  });
+  Object.assign(instance, normalized);
 
   if (!useBackend) {
     localStorage.setItem(
@@ -233,10 +270,25 @@ export async function saveInstance(instance: OkoFormInstance): Promise<void> {
       body: JSON.stringify(instance),
     });
   } else {
-    await apiFetch("/api/instances", {
-      method: "POST",
-      body: JSON.stringify(instance),
-    });
+    try {
+      await apiFetch("/api/instances", {
+        method: "POST",
+        body: JSON.stringify(instance),
+      });
+    } catch (e) {
+      // Another form for same package+template already exists.
+      if (e instanceof ApiError && e.status === 409) {
+        const body = e.body as { existingInstanceId?: string };
+        if (body?.existingInstanceId) {
+          const occupied = await loadInstance(body.existingInstanceId);
+          if (occupied) {
+            Object.assign(instance, occupied);
+            return;
+          }
+        }
+      }
+      throw e;
+    }
   }
 }
 

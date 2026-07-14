@@ -2756,3 +2756,70 @@ a:hover {
 }
 
 
+
+/* --- Admin classifiers (/admin/refs) --- */
+.refs-admin {
+  display: grid;
+  grid-template-columns: minmax(14rem, 22rem) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.refs-admin-list {
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: var(--surface, #fff);
+}
+.refs-dir-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.refs-dir-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  gap: 0.15rem;
+}
+.refs-dir-item:hover,
+.refs-dir-item.active {
+  background: rgba(15, 76, 129, 0.08);
+}
+.refs-dir-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.refs-dir-meta {
+  font-size: 0.78rem;
+  color: var(--muted, #667085);
+}
+.refs-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.refs-detail-header h2 {
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .refs-admin {
+    grid-template-columns: 1fr;
+  }
+  .refs-admin-list {
+    position: static;
+    max-height: 16rem;
+  }
+}

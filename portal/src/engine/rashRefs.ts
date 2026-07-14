@@ -33,7 +33,14 @@ export async function loadRashRefs(): Promise<RashRefsData> {
       "./refsPackage"
     );
     const loans = await loadEffectiveLoansNzs();
-    cached = applyLoansNzsToRashRefs(base, loans);
+    base = applyLoansNzsToRashRefs(base, loans);
+  } catch {
+    /* keep base */
+  }
+  try {
+    const { loadRefsOverlay, applyRefsOverlay } = await import("./refsOverlay");
+    const overlay = await loadRefsOverlay();
+    cached = applyRefsOverlay(base, overlay);
   } catch {
     cached = base;
   }

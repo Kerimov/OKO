@@ -170,7 +170,7 @@ export function Layout() {
           { to: "/admin/saldo", label: "Сальдо", isActive: (p) => p === "/admin/saldo" },
           { to: "/admin/excel", label: "Маппинг Excel", isActive: (p) => p === "/admin/excel" },
           { to: "/admin/rash", label: "Расшифровки", isActive: (p) => p === "/admin/rash" },
-          { to: "/admin/kontr", label: "Контрагенты", isActive: (p) => p === "/admin/kontr" },
+          { to: "/admin/refs", label: "Справочники", isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr" },
           {
             to: "/admin/aggregation",
             label: "Агрегация",

@@ -25,8 +25,14 @@ export function parseRefSpec(
   name: string | null | undefined,
   title: string | null | undefined
 ): RefSpecDraft {
+  // Unused A2–A4 slots must stay empty — do not invent kind «Контрагент».
+  if (!name?.trim()) {
+    return { ...emptyRefSpec(""), title: title?.trim() || "" };
+  }
   const parsed = parseRefFilter(name);
-  if (!parsed) return emptyRefSpec();
+  if (!parsed) {
+    return { ...emptyRefSpec(""), title: title?.trim() || "" };
+  }
   const known = (REF_KINDS as readonly string[]).includes(parsed.kind);
   return {
     kind: known ? parsed.kind : "Прочее",

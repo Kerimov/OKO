@@ -21,6 +21,7 @@ import {
   type RashRule,
 } from "../api";
 import { clearRowRashIndexCache } from "../engine/rowRashIndex";
+import { clearRashCache } from "../engine/rashEngine";
 import { parseTotalColumn } from "../engine/rashEngine";
 import type { FormCatalog, FormSchema, RashAddsum, RashThresholds } from "../types";
 import { isBackendMode } from "../storage";
@@ -347,6 +348,7 @@ export function RashEditorPage() {
         forceConflicts,
       });
       clearRowRashIndexCache();
+      clearRashCache();
       setDraft(saved.rule);
       setRefs(refsFromRule(saved.rule));
       setFormula(parseFormulaDraft(saved.rule.totalFormula));
@@ -402,6 +404,7 @@ export function RashEditorPage() {
     try {
       await deleteRashRule(selected.kod);
       clearRowRashIndexCache();
+      clearRashCache();
       await handleNew();
       setStatus("Удалено");
       await loadPage();
@@ -428,10 +431,12 @@ export function RashEditorPage() {
     try {
       if (importPreview.kind === "rules") {
         const { reimported } = await reimportRashFromJson();
+        clearRashCache();
         setStatus(`Импортировано правил: ${reimported}`);
       } else {
         const { reimported } = await reimportRashPlacementsFromJson();
         clearRowRashIndexCache();
+        clearRashCache();
         setStatus(`Импортировано привязок: ${reimported}`);
       }
       setImportPreview(null);
@@ -1397,7 +1402,11 @@ function RashLivePreview({
 }) {
   const formulaStr = buildFormulaString(formula);
   const dims = refs
-    .map((r, i) => ({ title: r.title || r.kind || `A${i + 1}`, name: buildRefName(r) }))
+    .map((r, i) => ({
+      key: `a${i + 1}`,
+      title: r.title || r.kind || `A${i + 1}`,
+      name: buildRefName(r),
+    }))
     .filter((d) => d.name);
   return (
     <div>
@@ -1410,7 +1419,7 @@ function RashLivePreview({
           <thead>
             <tr>
               {dims.map((d) => (
-                <th key={d.title}>{d.title}</th>
+                <th key={d.key}>{d.title}</th>
               ))}
               {(formula.rawMode
                 ? []
@@ -1427,7 +1436,7 @@ function RashLivePreview({
           <tbody>
             <tr>
               {dims.map((d) => (
-                <td key={d.title} className="muted">
+                <td key={d.key} className="muted">
                   {d.name}
                 </td>
               ))}
