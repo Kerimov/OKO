@@ -10,9 +10,15 @@ import {
   listPeriods,
   loadWorkContext,
   saveWorkContext,
+  setPackageWorkflowStatus,
 } from "../packagesApi";
-import type { Organization, PackageCompleteness, ReportingPeriod } from "../types";
-import { formatPeriod, formStatusLabel } from "../utils";
+import type {
+  Organization,
+  PackageCompleteness,
+  PackageWorkflowStatus,
+  ReportingPeriod,
+} from "../types";
+import { formatPeriod, formStatusLabel, packageWorkflowLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
 
@@ -35,6 +41,7 @@ export function PackagePage() {
   const [newPeriodName, setNewPeriodName] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
+  const [workflowComment, setWorkflowComment] = useState("");
 
   const selectedOrg = useMemo(
     () => orgs.find((o) => o.zid === zid),
@@ -204,6 +211,49 @@ export function PackagePage() {
     }
   };
 
+  const handleWorkflow = async (next: PackageWorkflowStatus) => {
+    if (zid === "" || eid === "") return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const wf = await setPackageWorkflowStatus(
+        zid,
+        eid,
+        next,
+        workflowComment.trim() || null
+      );
+      setWorkflowComment("");
+      await refreshCompleteness(zid, eid);
+      setStatus(`Статус комплекта: ${packageWorkflowLabel(wf.status)}`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка смены статуса");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const wf = completeness?.workflow?.status ?? "draft";
+  const workflowActions = useMemo(() => {
+    const all: Array<{ status: PackageWorkflowStatus; label: string; adminOnly?: boolean }> = [
+      { status: "submitted", label: "Сдать на проверку" },
+      { status: "returned", label: "Вернуть", adminOnly: true },
+      { status: "corrected", label: "Исправлен" },
+      { status: "accepted", label: "Принять", adminOnly: true },
+      { status: "draft", label: "В черновик" },
+    ];
+    const allowed: Record<string, PackageWorkflowStatus[]> = {
+      draft: ["submitted"],
+      submitted: ["returned", "accepted"],
+      returned: ["corrected", "draft"],
+      corrected: ["submitted"],
+      accepted: ["returned"],
+    };
+    return all.filter(
+      (a) =>
+        (allowed[wf] ?? []).includes(a.status) && (admin || !a.adminOnly)
+    );
+  }, [wf, admin]);
+
   const missing = completeness?.items.filter((i) => !i.filled) ?? [];
 
   if (loading) {
@@ -341,9 +391,38 @@ export function PackagePage() {
             </span>
           </h2>
           <p className="tools-hint">
-            Черновики: <strong>{completeness.draft}</strong> · Сдано:{" "}
+            Черновики форм: <strong>{completeness.draft}</strong> · Сдано форм:{" "}
             <strong>{completeness.submitted}</strong>
+            {" · "}
+            Статус комплекта:{" "}
+            <strong>{packageWorkflowLabel(completeness.workflow?.status)}</strong>
+            {completeness.workflow?.comment ? ` — ${completeness.workflow.comment}` : ""}
           </p>
+          <div className="tools-grid" style={{ marginBottom: "0.75rem" }}>
+            <label>
+              Комментарий к статусу
+              <input
+                value={workflowComment}
+                onChange={(e) => setWorkflowComment(e.target.value)}
+                placeholder="Необязательно"
+              />
+            </label>
+          </div>
+          {workflowActions.length > 0 && (
+            <div className="toolbar-actions" style={{ marginBottom: "0.75rem" }}>
+              {workflowActions.map((a) => (
+                <button
+                  key={a.status}
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy}
+                  onClick={() => void handleWorkflow(a.status)}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="completeness-bar">
             <div
               className="completeness-fill"

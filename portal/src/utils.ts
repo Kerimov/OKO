@@ -41,6 +41,23 @@ export function formStatusLabel(status?: "draft" | "submitted"): string {
   return status === "submitted" ? "Сдано" : "Черновик";
 }
 
+export function packageWorkflowLabel(
+  status?: "draft" | "submitted" | "returned" | "corrected" | "accepted"
+): string {
+  switch (status) {
+    case "submitted":
+      return "Сдан на проверку";
+    case "returned":
+      return "Возвращён";
+    case "corrected":
+      return "Исправлен";
+    case "accepted":
+      return "Принят";
+    default:
+      return "Черновик";
+  }
+}
+
 export function categoryLabel(
   categories: Record<string, string>,
   cat: string
