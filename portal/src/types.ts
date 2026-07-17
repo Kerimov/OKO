@@ -98,6 +98,7 @@ export interface FormRashEntry {
   attrA2?: string | null;
   attrA3?: string | null;
   attrA4?: string | null;
+  templateRowKey?: string | null;
   values: Record<string, string | number>;
 }
 
@@ -252,6 +253,24 @@ export interface RashRule {
   refA3Title?: string | null;
   refA4Name?: string | null;
   refA4Title?: string | null;
+  isActive?: boolean;
+}
+
+export type RashModalRowMode = "dynamic" | "fixed" | "mixed";
+
+export interface RashModalSettings {
+  rowMode: RashModalRowMode;
+}
+
+export interface RashModalRow {
+  id?: number;
+  kod: number;
+  rowKey: string;
+  label: string;
+  sort: number;
+  required: boolean;
+  sourceFormId?: string | null;
+  sourceRowNo?: string | null;
 }
 
 export interface RashAddsum {
@@ -260,6 +279,7 @@ export interface RashAddsum {
   sort: number;
   sumTitle: string;
   fldType: string;
+  required?: boolean;
 }
 
 export interface RashThresholds {
@@ -276,6 +296,9 @@ export interface RashRulesData {
   rules: RashRule[];
   addsum: RashAddsum[];
   thresholds: RashThresholds;
+  /** Layout by rule kod (from API export); absent in static JSON fallback. */
+  modalSettings?: Record<string, RashModalSettings>;
+  modalRows?: RashModalRow[];
 }
 
 /** @deprecated используйте OkoFormInstance */

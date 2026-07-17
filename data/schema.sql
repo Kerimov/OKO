@@ -268,7 +268,8 @@ CREATE TABLE IF NOT EXISTS rash_rules (
     ref_a3_name     TEXT,
     ref_a3_title    TEXT,
     ref_a4_name     TEXT,
-    ref_a4_title    TEXT
+    ref_a4_title    TEXT,
+    is_active       INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS rash_addsum (
@@ -276,7 +277,8 @@ CREATE TABLE IF NOT EXISTS rash_addsum (
     kod         INTEGER NOT NULL REFERENCES rash_rules(kod) ON DELETE CASCADE,
     sort_order  INTEGER NOT NULL DEFAULT 0,
     sum_title   TEXT NOT NULL,
-    fld_type    TEXT NOT NULL DEFAULT 'Сумма'
+    fld_type    TEXT NOT NULL DEFAULT 'Сумма',
+    required    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_rash_addsum_kod ON rash_addsum(kod);
@@ -294,6 +296,27 @@ CREATE TABLE IF NOT EXISTS rash_placements (
 CREATE INDEX IF NOT EXISTS idx_rash_placements_kod ON rash_placements(kod);
 CREATE INDEX IF NOT EXISTS idx_rash_placements_form ON rash_placements(form_id);
 
+CREATE TABLE IF NOT EXISTS rash_modal_settings (
+    kod       INTEGER PRIMARY KEY REFERENCES rash_rules(kod) ON DELETE CASCADE,
+    row_mode  TEXT NOT NULL DEFAULT 'dynamic'
+      CHECK (row_mode IN ('dynamic', 'fixed', 'mixed'))
+);
+
+CREATE TABLE IF NOT EXISTS rash_modal_rows (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kod             INTEGER NOT NULL REFERENCES rash_rules(kod) ON DELETE CASCADE,
+    row_key         TEXT NOT NULL,
+    label           TEXT NOT NULL,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    required        INTEGER NOT NULL DEFAULT 0,
+    source_form_id  TEXT,
+    source_row_no   TEXT,
+    UNIQUE (kod, row_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rash_modal_rows_kod
+  ON rash_modal_rows(kod, sort_order);
+
 -- Rash entry facts (t_ras analog)
 CREATE TABLE IF NOT EXISTS form_rash_entries (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,6 +333,7 @@ CREATE TABLE IF NOT EXISTS form_rash_entries (
     attr_a2         TEXT,
     attr_a3         TEXT,
     attr_a4         TEXT,
+    template_row_key TEXT,
     values_json     TEXT NOT NULL DEFAULT '{}'
 );
 

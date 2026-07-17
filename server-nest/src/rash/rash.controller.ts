@@ -23,9 +23,13 @@ import {
   getRashRuleUsage,
   getRashStats,
   getRashThresholds,
+  getRashModalSettings,
+  listPlacementsByForm,
   listPlacementsByKod,
   listRashAddsum,
+  listRashModalRows,
   listRashRules,
+  previewRashBundleStructure,
   previewPlacementsReimport,
   previewRashRulesReimport,
   reimportPlacementsFromJson,
@@ -38,6 +42,9 @@ import {
   suggestNextRashKod,
   upsertRashRule,
   type RashAddsumDto,
+  type RashFormAdditionDto,
+  type RashModalRowDto,
+  type RashModalSettingsDto,
   type RashPlacementDto,
   type RashRuleDto,
   type RashThresholdsDto,
@@ -173,6 +180,10 @@ export class RashController {
       rule: RashRuleDto;
       addsum?: RashAddsumDto[];
       placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
+      modalSettings?: RashModalSettingsDto;
+      modalRows?: RashModalRowDto[];
+      formAdditions?: RashFormAdditionDto[];
+      createMissingFormParts?: boolean;
       forceConflicts?: boolean;
     }
   ) {
@@ -186,10 +197,45 @@ export class RashController {
           conflicts,
         });
       }
+      const structurePreview = (e as { structurePreview?: unknown }).structurePreview;
+      if (structurePreview) {
+        throw new ConflictException({
+          error: e instanceof Error ? e.message : "missing form structure",
+          structurePreview,
+        });
+      }
       throw new BadRequestException({
         error: e instanceof Error ? e.message : "bundle save failed",
       });
     }
+  }
+
+  @Post("bundle/preview")
+  @UseGuards(AdminGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: "Проверить отсутствующие строки/графы перед сохранением" })
+  async previewBundle(
+    @Body()
+    body: {
+      placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
+      formAdditions?: RashFormAdditionDto[];
+    }
+  ) {
+    return previewRashBundleStructure(
+      await getDb(),
+      body.placements ?? [],
+      body.formAdditions ?? []
+    );
+  }
+
+  @Get("placements/by-form")
+  @ApiOperation({ summary: "Все привязки для формы (для конструктора)" })
+  @ApiQuery({ name: "formId", required: true })
+  async placementsByForm(@Query("formId") formId?: string) {
+    if (!formId?.trim()) {
+      throw new BadRequestException({ error: "formId required" });
+    }
+    return listPlacementsByForm(await getDb(), formId);
   }
 
   @Get(":kod/addsum")
@@ -276,6 +322,8 @@ export class RashController {
       ...rule,
       addsum: await listRashAddsum(await getDb(), kod),
       placements: await listPlacementsByKod(await getDb(), kod),
+      modalSettings: await getRashModalSettings(await getDb(), kod),
+      modalRows: await listRashModalRows(await getDb(), kod),
     };
   }
 

@@ -1,11 +1,15 @@
 import type { OkoDb } from "../oko-db.js";
 import { uniquePackageTemplateMigration } from "./001_unique_package_template.js";
 import { spreadsheetCellModelMigration } from "./002_spreadsheet_cell_model.js";
+import { rashConstructorLayoutMigration } from "./003_rash_constructor_layout.js";
+import { rashAddsumRequiredMigration } from "./004_rash_addsum_required.js";
 import type { Migration } from "./types.js";
 
 export const NUMBERED_MIGRATIONS: Migration[] = [
   uniquePackageTemplateMigration,
   spreadsheetCellModelMigration,
+  rashConstructorLayoutMigration,
+  rashAddsumRequiredMigration,
 ];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {

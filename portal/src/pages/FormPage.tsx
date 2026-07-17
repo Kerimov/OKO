@@ -25,6 +25,8 @@ import {
   numVal,
   rashColumnsForRule,
   rashGroupKey,
+  resolveRashModalRows,
+  resolveRashModalSettings,
   syncAllRashToRows,
   syncRashToParentRow,
   validateAllRash,
@@ -1229,6 +1231,14 @@ export function FormPage() {
           kontrAgents={kontrAgents}
           rashRefs={rashRefs}
           readOnly={isLocked}
+          modalSettings={
+            rashModal
+              ? resolveRashModalSettings(rashData, rashModal.rashKod)
+              : undefined
+          }
+          modalRows={
+            rashModal ? resolveRashModalRows(rashData, rashModal.rashKod) : undefined
+          }
         />
       )}
 

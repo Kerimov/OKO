@@ -2561,7 +2561,77 @@ a:hover {
 
 /* Конструктор расшифровок */
 .rash-constructor-layout {
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .rash-constructor-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rash-rule-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: min(70vh, 720px);
+  overflow: auto;
+}
+
+.rash-rule-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  color: inherit;
+  width: 100%;
+}
+
+.rash-rule-card:hover {
+  border-color: var(--accent, #2f6fed);
+}
+
+.rash-rule-card.selected {
+  border-color: var(--accent, #2f6fed);
+  box-shadow: inset 3px 0 0 var(--accent, #2f6fed);
+  background: var(--frozen-bg, #f4f6fa);
+}
+
+.rash-rule-card-title {
+  font-size: 0.92rem;
+}
+
+.rash-rule-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  color: var(--muted, #666);
+}
+
+.rash-constructor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.rash-constructor-header h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+}
+
+.rash-dirty-indicator {
+  margin-left: 0.5rem;
+  color: #8a5a00;
+  font-size: 0.85rem;
 }
 
 .rash-tab-row,
@@ -2571,6 +2641,154 @@ a:hover {
   gap: 0.35rem;
   margin-bottom: 0.75rem;
   align-items: center;
+}
+
+.rash-constructor-navigation {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.rash-constructor-savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  background: var(--surface, #fff);
+  border-top: 1px solid var(--border, #ddd);
+  z-index: 2;
+}
+
+.rash-mode-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.rash-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--surface, #fff);
+}
+
+.rash-mode-card.selected {
+  border-color: var(--accent, #2f6fed);
+  background: var(--frozen-bg, #f4f6fa);
+}
+
+.rash-mode-card span {
+  font-size: 0.8rem;
+  color: var(--muted, #666);
+}
+
+.rash-binding-grid-wrap {
+  overflow: auto;
+  max-height: 420px;
+  margin: 0.5rem 0 1rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+}
+
+.rash-binding-grid {
+  width: auto;
+  table-layout: fixed;
+}
+
+.rash-binding-grid th,
+.rash-binding-grid td {
+  text-align: center;
+  white-space: nowrap;
+  width: 3rem;
+  min-width: 3rem;
+}
+
+.rash-binding-grid td:first-child,
+.rash-binding-grid th:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--surface, #fff);
+  z-index: 1;
+  width: 26rem;
+  min-width: 16rem;
+  max-width: 26rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.rash-binding-selected {
+  background: #e8f0ff;
+}
+
+.rash-binding-conflict {
+  background: #fff4d6;
+}
+
+.rash-binding-conflict-link {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: #8a5a00;
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 0.15rem;
+}
+
+.rash-binding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.rash-binding-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+}
+
+.rash-preview-embed .rash-modal {
+  position: relative;
+  inset: auto;
+  transform: none;
+  max-width: 100%;
+  max-height: none;
+  box-shadow: none;
+  border: 1px solid var(--border, #ddd);
+}
+
+.rash-preview-summary {
+  margin-bottom: 0.75rem;
+}
+
+.rash-fixed-row td:first-child {
+  font-weight: 600;
+}
+
+.btn-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent, #2f6fed);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font: inherit;
 }
 
 .rash-validation {

@@ -2,6 +2,9 @@ import type {
   FormCatalog,
   FormSchema,
   RashAddsum,
+  RashModalRow,
+  RashModalRowMode,
+  RashModalSettings,
   RashRule,
   RashRulesData,
   RashThresholds,
@@ -686,7 +689,15 @@ export interface RashListResponse {
   total: number;
   limit: number;
   offset: number;
-  items: RashRule[];
+  items: RashListItem[];
+}
+
+export interface RashListItem extends RashRule {
+  formIds: string[];
+  placementCount: number;
+  addsumCount: number;
+  rowMode: RashModalRowMode;
+  fixedRowCount: number;
 }
 
 export async function fetchRashPage(params: {
@@ -732,10 +743,17 @@ export async function saveRashThresholds(thresholds: RashThresholds): Promise<Ra
   return res.json();
 }
 
-export async function fetchRashRule(kod: number) {
+export interface RashRuleBundle extends RashRule {
+  addsum: RashAddsum[];
+  placements: RashPlacement[];
+  modalSettings: RashModalSettings;
+  modalRows: RashModalRow[];
+}
+
+export async function fetchRashRule(kod: number): Promise<RashRuleBundle> {
   const res = await apiFetchRaw(`/api/rash/${kod}`);
   if (!res.ok) throw new Error("Not found");
-  return res.json() as Promise<RashRule & { addsum: RashAddsum[] }>;
+  return res.json();
 }
 
 export async function saveRashRule(rule: RashRule) {
@@ -792,6 +810,13 @@ export async function fetchRashPlacements(kod: number) {
   return res.json() as Promise<RashPlacement[]>;
 }
 
+export async function fetchRashPlacementsByForm(formId: string) {
+  const sp = new URLSearchParams({ formId });
+  const res = await apiFetchRaw(`/api/rash/placements/by-form?${sp}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<RashPlacement[]>;
+}
+
 export async function saveRashPlacements(
   kod: number,
   items: Array<Omit<RashPlacement, "kod"> & { kod?: number }>
@@ -821,6 +846,10 @@ export async function saveRashBundle(payload: {
   rule: RashRule;
   addsum: RashAddsum[];
   placements: Array<Omit<RashPlacement, "kod"> & { kod?: number }>;
+  modalSettings: RashModalSettings;
+  modalRows: RashModalRow[];
+  formAdditions?: RashFormAddition[];
+  createMissingFormParts?: boolean;
   forceConflicts?: boolean;
 }) {
   const res = await apiFetchRaw("/api/rash/bundle", {
@@ -830,7 +859,11 @@ export async function saveRashBundle(payload: {
   });
   if (!res.ok) {
     const text = await res.text();
-    let parsed: { error?: string; conflicts?: RashPlacement[] } | null = null;
+    let parsed: {
+      error?: string;
+      conflicts?: RashPlacement[];
+      structurePreview?: RashBundleStructurePreview;
+    } | null = null;
     try {
       parsed = JSON.parse(text) as { error?: string; conflicts?: RashPlacement[] };
     } catch {
@@ -843,16 +876,21 @@ export async function saveRashBundle(payload: {
         columnKey: string;
         existingKod: number;
       }>;
+      structurePreview?: RashBundleStructurePreview;
     };
     if (parsed && "conflicts" in (parsed as object)) {
       err.conflicts = (parsed as { conflicts: typeof err.conflicts }).conflicts;
     }
+    if (parsed?.structurePreview) err.structurePreview = parsed.structurePreview;
     throw err;
   }
   return res.json() as Promise<{
     rule: RashRule;
     addsum: RashAddsum[];
     placements: RashPlacement[];
+    modalSettings: RashModalSettings;
+    modalRows: RashModalRow[];
+    structurePreview: RashBundleStructurePreview;
     conflicts: Array<{
       formId: string;
       rowNo: string;
@@ -860,6 +898,30 @@ export async function saveRashBundle(payload: {
       existingKod: number;
     }>;
   }>;
+}
+
+export interface RashFormAddition {
+  formId: string;
+  rows?: Array<{ num: string; name?: string }>;
+  columns?: Array<{ key: string; label?: string; type?: "text" | "number" }>;
+}
+
+export interface RashBundleStructurePreview {
+  missingRows: Array<{ formId: string; rowNo: string; name: string }>;
+  missingColumns: Array<{ formId: string; columnKey: string; label: string }>;
+}
+
+export async function previewRashBundleStructure(payload: {
+  placements: Array<Omit<RashPlacement, "kod"> & { kod?: number }>;
+  formAdditions?: RashFormAddition[];
+}): Promise<RashBundleStructurePreview> {
+  const res = await apiFetchRaw("/api/rash/bundle/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export async function fetchRashUsage(kod: number) {

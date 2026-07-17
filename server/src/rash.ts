@@ -2,6 +2,14 @@ import fs from "fs";
 import path from "path";
 import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
+import {
+  bumpFormSchemaVersion,
+  loadFormSchema,
+  replaceFormColumns,
+  replaceFormRows,
+  type FormColumnDto,
+  type FormRowDto,
+} from "./forms.js";
 
 export interface RashRuleRow {
   kod: number;
@@ -17,6 +25,7 @@ export interface RashRuleRow {
   ref_a3_title: string | null;
   ref_a4_name: string | null;
   ref_a4_title: string | null;
+  is_active: number;
 }
 
 export interface RashAddsumRow {
@@ -25,6 +34,7 @@ export interface RashAddsumRow {
   sort_order: number;
   sum_title: string;
   fld_type: string;
+  required: number;
 }
 
 export interface RashRuleDto {
@@ -41,6 +51,7 @@ export interface RashRuleDto {
   refA3Title?: string | null;
   refA4Name?: string | null;
   refA4Title?: string | null;
+  isActive?: boolean;
 }
 
 export interface RashAddsumDto {
@@ -49,6 +60,32 @@ export interface RashAddsumDto {
   sort: number;
   sumTitle: string;
   fldType: string;
+  required?: boolean;
+}
+
+export type RashModalRowMode = "dynamic" | "fixed" | "mixed";
+
+export interface RashModalSettingsDto {
+  rowMode: RashModalRowMode;
+}
+
+export interface RashModalRowDto {
+  id?: number;
+  kod: number;
+  rowKey: string;
+  label: string;
+  sort: number;
+  required: boolean;
+  sourceFormId?: string | null;
+  sourceRowNo?: string | null;
+}
+
+export interface RashListItemDto extends RashRuleDto {
+  formIds: string[];
+  placementCount: number;
+  addsumCount: number;
+  rowMode: RashModalRowMode;
+  fixedRowCount: number;
 }
 
 export interface RashThresholdsDto {
@@ -119,6 +156,7 @@ function rowToDto(row: RashRuleRow): RashRuleDto {
     refA3Title: row.ref_a3_title,
     refA4Name: row.ref_a4_name,
     refA4Title: row.ref_a4_title,
+    isActive: row.is_active !== 0,
   };
 }
 
@@ -137,6 +175,7 @@ function dtoToRow(dto: RashRuleDto): RashRuleRow {
     ref_a3_title: dto.refA3Title ?? null,
     ref_a4_name: dto.refA4Name ?? null,
     ref_a4_title: dto.refA4Title ?? null,
+    is_active: dto.isActive === false ? 0 : 1,
   };
 }
 
@@ -147,6 +186,7 @@ function addsumRowToDto(row: RashAddsumRow): RashAddsumDto {
     sort: row.sort_order,
     sumTitle: row.sum_title,
     fldType: row.fld_type,
+    required: row.required !== 0,
   };
 }
 
@@ -199,13 +239,13 @@ async function importPayload(
       `INSERT INTO rash_rules (
       kod, name, note, ref_rows, total_formula,
       ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
-      ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const insertAddsum = tx.prepare(
-      `INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type)
-     VALUES (?, ?, ?, ?)`
+      `INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type, required)
+     VALUES (?, ?, ?, ?, ?)`
     );
 
     await tx.exec("DELETE FROM rash_addsum");
@@ -225,11 +265,18 @@ async function importPayload(
         r.ref_a3_name,
         r.ref_a3_title,
         r.ref_a4_name,
-        r.ref_a4_title
+        r.ref_a4_title,
+        r.is_active
       );
     }
     for (const item of data.addsum) {
-      await insertAddsum.run(item.kod, item.sort, item.sumTitle, item.fldType);
+      await insertAddsum.run(
+        item.kod,
+        item.sort,
+        item.sumTitle,
+        item.fldType,
+        item.required ? 1 : 0
+      );
     }
     if (data.thresholds) {
       const upsert = tx.prepare(
@@ -297,7 +344,7 @@ export async function exportRashPayload(db: OkoDb) {
       .prepare(
         `SELECT kod, name, note, ref_rows, total_formula,
                 ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
-                ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
+                ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title, is_active
          FROM rash_rules ORDER BY kod`
       )
       .all()) as RashRuleRow[]
@@ -306,10 +353,17 @@ export async function exportRashPayload(db: OkoDb) {
   const addsum = (
     (await db
       .prepare(
-        "SELECT id, kod, sort_order, sum_title, fld_type FROM rash_addsum ORDER BY kod, sort_order"
+        "SELECT id, kod, sort_order, sum_title, fld_type, required FROM rash_addsum ORDER BY kod, sort_order"
       )
       .all()) as RashAddsumRow[]
   ).map(addsumRowToDto);
+
+  const modalSettings: Record<string, RashModalSettingsDto> = {};
+  const modalRows: RashModalRowDto[] = [];
+  for (const rule of rules) {
+    modalSettings[String(rule.kod)] = await getRashModalSettings(db, rule.kod);
+    modalRows.push(...(await listRashModalRows(db, rule.kod)));
+  }
 
   return {
     version: "1.0",
@@ -317,6 +371,8 @@ export async function exportRashPayload(db: OkoDb) {
     total: rules.length,
     rules,
     addsum,
+    modalSettings,
+    modalRows,
     thresholds: await getRashThresholds(db),
   };
 }
@@ -357,16 +413,37 @@ export async function listRashRules(db: OkoDb, options: ListRashRulesOptions = {
 
   const rows = (await db
     .prepare(
-      `SELECT kod, name, note, ref_rows, total_formula,
-              ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
-              ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
-       FROM rash_rules ${where}
-       ORDER BY kod DESC
+      `SELECT r.kod, r.name, r.note, r.ref_rows, r.total_formula,
+              r.ref_a1_name, r.ref_a1_title, r.ref_a2_name, r.ref_a2_title,
+              r.ref_a3_name, r.ref_a3_title, r.ref_a4_name, r.ref_a4_title, r.is_active,
+              (SELECT COUNT(*) FROM rash_placements p WHERE p.kod = r.kod) AS placement_count,
+              (SELECT COUNT(*) FROM rash_addsum a WHERE a.kod = r.kod) AS addsum_count,
+              (SELECT COUNT(*) FROM rash_modal_rows mr WHERE mr.kod = r.kod) AS fixed_row_count,
+              COALESCE((SELECT row_mode FROM rash_modal_settings ms WHERE ms.kod = r.kod), 'dynamic') AS row_mode,
+              COALESCE((SELECT STRING_AGG(DISTINCT p.form_id, ',') FROM rash_placements p WHERE p.kod = r.kod), '') AS form_ids
+       FROM rash_rules r ${where}
+       ORDER BY r.kod DESC
        LIMIT ? OFFSET ?`
     )
-    .all(...params, limit, offset)) as RashRuleRow[];
+    .all(...params, limit, offset)) as Array<
+    RashRuleRow & {
+      placement_count: number;
+      addsum_count: number;
+      fixed_row_count: number;
+      row_mode: RashModalRowMode;
+      form_ids: string;
+    }
+  >;
 
-  return { total, limit, offset, items: rows.map(rowToDto) };
+  const items: RashListItemDto[] = rows.map((row) => ({
+    ...rowToDto(row),
+    formIds: row.form_ids ? row.form_ids.split(",").filter(Boolean).sort() : [],
+    placementCount: Number(row.placement_count ?? 0),
+    addsumCount: Number(row.addsum_count ?? 0),
+    fixedRowCount: Number(row.fixed_row_count ?? 0),
+    rowMode: row.row_mode ?? "dynamic",
+  }));
+  return { total, limit, offset, items };
 }
 
 export async function getRashRule(db: OkoDb, kod: number): Promise<RashRuleDto | null> {
@@ -374,7 +451,7 @@ export async function getRashRule(db: OkoDb, kod: number): Promise<RashRuleDto |
     .prepare(
       `SELECT kod, name, note, ref_rows, total_formula,
               ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
-              ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
+              ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title, is_active
        FROM rash_rules WHERE kod = ?`
     )
     .get(kod)) as RashRuleRow | undefined;
@@ -384,10 +461,94 @@ export async function getRashRule(db: OkoDb, kod: number): Promise<RashRuleDto |
 export async function listRashAddsum(db: OkoDb, kod: number): Promise<RashAddsumDto[]> {
   const rows = (await db
     .prepare(
-      "SELECT id, kod, sort_order, sum_title, fld_type FROM rash_addsum WHERE kod = ? ORDER BY sort_order"
+      "SELECT id, kod, sort_order, sum_title, fld_type, required FROM rash_addsum WHERE kod = ? ORDER BY sort_order"
     )
     .all(kod)) as RashAddsumRow[];
   return rows.map(addsumRowToDto);
+}
+
+export async function getRashModalSettings(
+  db: OkoDb,
+  kod: number
+): Promise<RashModalSettingsDto> {
+  const row = (await db
+    .prepare("SELECT row_mode FROM rash_modal_settings WHERE kod = ?")
+    .get(kod)) as { row_mode: RashModalRowMode } | undefined;
+  return { rowMode: row?.row_mode ?? "dynamic" };
+}
+
+export async function listRashModalRows(
+  db: OkoDb,
+  kod: number
+): Promise<RashModalRowDto[]> {
+  const rows = (await db
+    .prepare(
+      `SELECT id, kod, row_key, label, sort_order, required, source_form_id, source_row_no
+       FROM rash_modal_rows WHERE kod = ? ORDER BY sort_order, id`
+    )
+    .all(kod)) as Array<{
+    id: number;
+    kod: number;
+    row_key: string;
+    label: string;
+    sort_order: number;
+    required: number;
+    source_form_id: string | null;
+    source_row_no: string | null;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    kod: row.kod,
+    rowKey: row.row_key,
+    label: row.label,
+    sort: row.sort_order,
+    required: row.required !== 0,
+    sourceFormId: row.source_form_id,
+    sourceRowNo: row.source_row_no,
+  }));
+}
+
+export async function replaceRashModalLayout(
+  db: OkoDb,
+  kod: number,
+  settings: RashModalSettingsDto,
+  rows: RashModalRowDto[]
+): Promise<{ settings: RashModalSettingsDto; rows: RashModalRowDto[] }> {
+  const rowMode: RashModalRowMode = ["fixed", "mixed"].includes(settings.rowMode)
+    ? settings.rowMode
+    : "dynamic";
+  await db
+    .prepare(
+      `INSERT INTO rash_modal_settings (kod, row_mode) VALUES (?, ?)
+       ON CONFLICT(kod) DO UPDATE SET row_mode = excluded.row_mode`
+    )
+    .run(kod, rowMode);
+  await db.prepare("DELETE FROM rash_modal_rows WHERE kod = ?").run(kod);
+  const insert = db.prepare(
+    `INSERT INTO rash_modal_rows (
+       kod, row_key, label, sort_order, required, source_form_id, source_row_no
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const seen = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    const item = rows[i];
+    const rowKey = item.rowKey.trim();
+    if (!rowKey || seen.has(rowKey)) continue;
+    seen.add(rowKey);
+    await insert.run(
+      kod,
+      rowKey,
+      item.label.trim() || rowKey,
+      item.sort ?? i,
+      item.required ? 1 : 0,
+      item.sourceFormId?.trim() || null,
+      item.sourceRowNo?.trim() || null
+    );
+  }
+  return {
+    settings: { rowMode },
+    rows: await listRashModalRows(db, kod),
+  };
 }
 
 export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashRuleDto> {
@@ -397,8 +558,8 @@ export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashR
       `INSERT INTO rash_rules (
       kod, name, note, ref_rows, total_formula,
       ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
-      ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(kod) DO UPDATE SET
       name = excluded.name,
       note = excluded.note,
@@ -411,7 +572,8 @@ export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashR
       ref_a3_name = excluded.ref_a3_name,
       ref_a3_title = excluded.ref_a3_title,
       ref_a4_name = excluded.ref_a4_name,
-      ref_a4_title = excluded.ref_a4_title`
+      ref_a4_title = excluded.ref_a4_title,
+      is_active = excluded.is_active`
     )
     .run(
       r.kod,
@@ -426,7 +588,8 @@ export async function upsertRashRule(db: OkoDb, dto: RashRuleDto): Promise<RashR
       r.ref_a3_name,
       r.ref_a3_title,
       r.ref_a4_name,
-      r.ref_a4_title
+      r.ref_a4_title,
+      r.is_active
     );
   return dto;
 }
@@ -449,11 +612,17 @@ export async function replaceRashAddsum(
   return db.transaction(async (tx) => {
     await tx.prepare("DELETE FROM rash_addsum WHERE kod = ?").run(kod);
     const insert = tx.prepare(
-      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type) VALUES (?, ?, ?, ?)"
+      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type, required) VALUES (?, ?, ?, ?, ?)"
     );
     const sorted = [...items].sort((a, b) => a.sort - b.sort);
     for (const [i, item] of sorted.entries()) {
-      await insert.run(kod, item.sort ?? i, item.sumTitle, item.fldType || "Сумма");
+      await insert.run(
+        kod,
+        item.sort ?? i,
+        item.sumTitle,
+        item.fldType || "Сумма",
+        item.required ? 1 : 0
+      );
     }
     return listRashAddsum(tx, kod);
   });
@@ -534,6 +703,31 @@ export async function reimportPlacementsFromJson(db: OkoDb): Promise<number> {
     await tx.exec("DELETE FROM rash_placements");
     return insertPlacements(tx, flattenRowRashIndex(data));
   });
+}
+
+export async function listPlacementsByForm(
+  db: OkoDb,
+  formId: string
+): Promise<RashPlacementDto[]> {
+  const fid = formId.trim();
+  if (!fid) return [];
+  const rows = (await db
+    .prepare(
+      `SELECT form_id, row_no, column_key, kod FROM rash_placements
+       WHERE form_id = ? ORDER BY row_no, column_key, kod`
+    )
+    .all(fid)) as Array<{
+    form_id: string;
+    row_no: string;
+    column_key: string;
+    kod: number;
+  }>;
+  return rows.map((row) => ({
+    formId: row.form_id,
+    rowNo: String(row.row_no),
+    columnKey: row.column_key ?? "",
+    kod: row.kod,
+  }));
 }
 
 export async function listPlacementsByKod(db: OkoDb, kod: number): Promise<RashPlacementDto[]> {
@@ -627,6 +821,105 @@ export interface RashPlacementConflict {
   existingKod: number;
 }
 
+export interface RashFormAdditionDto {
+  formId: string;
+  rows?: Array<{ num: string; name?: string }>;
+  columns?: Array<{ key: string; label?: string; type?: "text" | "number" }>;
+}
+
+export interface RashBundleStructurePreview {
+  missingRows: Array<{ formId: string; rowNo: string; name: string }>;
+  missingColumns: Array<{ formId: string; columnKey: string; label: string }>;
+}
+
+export async function previewRashBundleStructure(
+  db: OkoDb,
+  placements: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>,
+  additions: RashFormAdditionDto[] = []
+): Promise<RashBundleStructurePreview> {
+  const byForm = new Map(additions.map((item) => [item.formId, item]));
+  const missingRows: RashBundleStructurePreview["missingRows"] = [];
+  const missingColumns: RashBundleStructurePreview["missingColumns"] = [];
+  const seenRows = new Set<string>();
+  const seenCols = new Set<string>();
+
+  for (const placement of placements) {
+    const formId = placement.formId?.trim();
+    const rowNo = String(placement.rowNo ?? "").trim();
+    const columnKey = normalizeColumnKey(placement.columnKey);
+    if (!formId || !rowNo) continue;
+    const schema = await loadFormSchema(db, formId);
+    if (!schema) throw new Error(`Форма ${formId} не найдена`);
+    const requested = byForm.get(formId);
+    if (!schema.rows.some((row) => String(row.num ?? "").trim() === rowNo)) {
+      const key = `${formId}:${rowNo}`;
+      if (!seenRows.has(key)) {
+        const draft = requested?.rows?.find((row) => row.num.trim() === rowNo);
+        missingRows.push({
+          formId,
+          rowNo,
+          name: draft?.name?.trim() || `Новая строка ${rowNo}`,
+        });
+        seenRows.add(key);
+      }
+    }
+    if (
+      columnKey &&
+      !schema.columns.some((column) => column.key.toUpperCase() === columnKey.toUpperCase())
+    ) {
+      const key = `${formId}:${columnKey}`;
+      if (!seenCols.has(key)) {
+        const draft = requested?.columns?.find(
+          (column) => column.key.trim().toUpperCase() === columnKey
+        );
+        missingColumns.push({
+          formId,
+          columnKey,
+          label: draft?.label?.trim() || `Графа ${columnKey}`,
+        });
+        seenCols.add(key);
+      }
+    }
+  }
+  return { missingRows, missingColumns };
+}
+
+async function applyRashFormAdditions(
+  db: OkoDb,
+  preview: RashBundleStructurePreview
+): Promise<void> {
+  const formIds = [
+    ...new Set([
+      ...preview.missingRows.map((item) => item.formId),
+      ...preview.missingColumns.map((item) => item.formId),
+    ]),
+  ];
+  for (const formId of formIds) {
+    const schema = await loadFormSchema(db, formId);
+    if (!schema) throw new Error(`Форма ${formId} не найдена`);
+    const rows: FormRowDto[] = [...schema.rows];
+    for (const item of preview.missingRows.filter((row) => row.formId === formId)) {
+      if (!rows.some((row) => String(row.num ?? "").trim() === item.rowNo)) {
+        rows.push({ num: item.rowNo, name: item.name, kind: "data" });
+      }
+    }
+    const columns: FormColumnDto[] = [...schema.columns];
+    for (const item of preview.missingColumns.filter((column) => column.formId === formId)) {
+      if (!columns.some((column) => column.key.toUpperCase() === item.columnKey)) {
+        columns.push({
+          key: item.columnKey,
+          label: item.label,
+          type: "number",
+          width: 110,
+        });
+      }
+    }
+    await replaceFormRows(db, formId, rows, { bumpVersion: false });
+    await replaceFormColumns(db, formId, columns, { bumpVersion: false });
+    await bumpFormSchemaVersion(db, formId, "rash-constructor");
+  }
+}
+
 export async function findPlacementConflicts(
   db: OkoDb,
   kod: number,
@@ -665,12 +958,19 @@ export async function saveRashBundle(
     rule: RashRuleDto;
     addsum?: RashAddsumDto[];
     placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
+    modalSettings?: RashModalSettingsDto;
+    modalRows?: RashModalRowDto[];
+    formAdditions?: RashFormAdditionDto[];
+    createMissingFormParts?: boolean;
     forceConflicts?: boolean;
   }
 ): Promise<{
   rule: RashRuleDto;
   addsum: RashAddsumDto[];
   placements: RashPlacementDto[];
+  modalSettings: RashModalSettingsDto;
+  modalRows: RashModalRowDto[];
+  structurePreview: RashBundleStructurePreview;
   conflicts: RashPlacementConflict[];
 }> {
   const { rule } = payload;
@@ -678,6 +978,23 @@ export async function saveRashBundle(
     throw new Error("kod and name required");
   }
   const placements = payload.placements ?? [];
+  const structurePreview = await previewRashBundleStructure(
+    db,
+    placements,
+    payload.formAdditions
+  );
+  if (
+    !payload.createMissingFormParts &&
+    (structurePreview.missingRows.length > 0 || structurePreview.missingColumns.length > 0)
+  ) {
+    const err = new Error("В привязках есть строки или графы, которых нет в шаблонах форм");
+    (
+      err as Error & {
+        structurePreview?: RashBundleStructurePreview;
+      }
+    ).structurePreview = structurePreview;
+    throw err;
+  }
   const conflicts = await findPlacementConflicts(db, rule.kod, placements);
   if (conflicts.length && !payload.forceConflicts) {
     const err = new Error(
@@ -691,15 +1008,24 @@ export async function saveRashBundle(
   }
 
   return db.transaction(async (tx) => {
+    if (payload.createMissingFormParts) {
+      await applyRashFormAdditions(tx, structurePreview);
+    }
     await upsertRashRule(tx, rule);
 
     await tx.prepare("DELETE FROM rash_addsum WHERE kod = ?").run(rule.kod);
     const insertAdd = tx.prepare(
-      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type) VALUES (?, ?, ?, ?)"
+      "INSERT INTO rash_addsum (kod, sort_order, sum_title, fld_type, required) VALUES (?, ?, ?, ?, ?)"
     );
     const sortedAdd = [...(payload.addsum ?? [])].sort((a, b) => a.sort - b.sort);
     for (const [i, item] of sortedAdd.entries()) {
-      await insertAdd.run(rule.kod, item.sort ?? i, item.sumTitle, item.fldType || "Сумма");
+      await insertAdd.run(
+        rule.kod,
+        item.sort ?? i,
+        item.sumTitle,
+        item.fldType || "Сумма",
+        item.required ? 1 : 0
+      );
     }
 
     if (payload.forceConflicts) {
@@ -723,11 +1049,20 @@ export async function saveRashBundle(
         kod: rule.kod,
       }))
     );
+    const layout = await replaceRashModalLayout(
+      tx,
+      rule.kod,
+      payload.modalSettings ?? { rowMode: "dynamic" },
+      payload.modalRows ?? []
+    );
 
     return {
-      rule,
+      rule: (await getRashRule(tx, rule.kod)) ?? rule,
       addsum: await listRashAddsum(tx, rule.kod),
       placements: await listPlacementsByKod(tx, rule.kod),
+      modalSettings: layout.settings,
+      modalRows: layout.rows,
+      structurePreview,
       conflicts,
     };
   });

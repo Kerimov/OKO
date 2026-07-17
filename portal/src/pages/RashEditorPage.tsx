@@ -4,7 +4,6 @@ import {
   deleteRashRule,
   fetchNextRashKod,
   fetchRashPage,
-  fetchRashPlacements,
   fetchRashRule,
   fetchRashStats,
   fetchRashThresholds,
@@ -12,18 +11,28 @@ import {
   loadCatalog,
   loadSchema,
   previewRashPlacementsImport,
+  previewRashBundleStructure,
   previewRashRulesImport,
   reimportRashFromJson,
   reimportRashPlacementsFromJson,
   saveRashBundle,
   saveRashThresholds,
+  type RashFormAddition,
+  type RashListItem,
   type RashPlacement,
   type RashRule,
 } from "../api";
 import { clearRowRashIndexCache } from "../engine/rowRashIndex";
 import { clearRashCache } from "../engine/rashEngine";
 import { parseTotalColumn } from "../engine/rashEngine";
-import type { FormCatalog, FormSchema, RashAddsum, RashThresholds } from "../types";
+import type {
+  FormCatalog,
+  FormSchema,
+  RashAddsum,
+  RashModalRow,
+  RashModalSettings,
+  RashThresholds,
+} from "../types";
 import { isBackendMode } from "../storage";
 import { useAdminAccess } from "../components/AdminAccessGate";
 import {
@@ -42,15 +51,25 @@ import {
 } from "./rashEditor/refSpec";
 import {
   draftFingerprint,
+  stepHasErrors,
   SUPPORTED_FLD_TYPES,
   validateRashDraft,
   type PlacementDraft,
+  type RashWizardStep,
 } from "./rashEditor/validateDraft";
-import { ColumnKeyInput, normalizeColKey } from "./rashEditor/ColumnKeyInput";
+import { ColumnKeyInput } from "./rashEditor/ColumnKeyInput";
+import { BindingDesigner } from "./rashEditor/BindingDesigner";
+import { ModalRowsEditor } from "./rashEditor/ModalRowsEditor";
+import { RashEditorModal } from "../components/RashEditorModal";
+import {
+  buildRashModalLayout,
+  seedRashEntriesFromModalLayout,
+} from "../engine/rashEngine";
 
 const EMPTY_RULE: RashRule = {
   kod: 0,
   name: "",
+  isActive: true,
   note: null,
   refRows: null,
   totalFormula: null,
@@ -73,8 +92,7 @@ const SPECIAL_MODES: Record<number, string> = {
   6: "устаревший движок ras_vn",
 };
 
-type DetailTab = "wizard" | "rule" | "addsum" | "placements" | "usage";
-type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
+type WizardStep = RashWizardStep;
 
 function refsFromRule(rule: RashRule): [RefSpecDraft, RefSpecDraft, RefSpecDraft, RefSpecDraft] {
   return [
@@ -106,19 +124,20 @@ function applyRefsToRule(
 export function RashEditorPage() {
   const backend = isBackendMode();
   const adminOk = useAdminAccess().ok;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stats, setStats] = useState<{
     total: number;
     addsum: number;
     withFormula: number;
   } | null>(null);
   const [thresholds, setThresholds] = useState<RashThresholds | null>(null);
-  const [items, setItems] = useState<RashRule[]>([]);
+  const [items, setItems] = useState<RashListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [search, setSearch] = useState(
+  const [searchInput, setSearchInput] = useState(
     () => searchParams.get("kod") ?? searchParams.get("q") ?? ""
   );
+  const [search, setSearch] = useState(searchInput);
   const [formFilter, setFormFilter] = useState("");
   const [selected, setSelected] = useState<RashRule | null>(null);
   const [draft, setDraft] = useState<RashRule>(EMPTY_RULE);
@@ -131,8 +150,12 @@ export function RashEditorPage() {
   ]);
   const [addsumDraft, setAddsumDraft] = useState<RashAddsum[]>([]);
   const [placementsDraft, setPlacementsDraft] = useState<PlacementDraft[]>([]);
+  const [modalSettings, setModalSettings] = useState<RashModalSettings>({
+    rowMode: "dynamic",
+  });
+  const [modalRows, setModalRows] = useState<RashModalRow[]>([]);
+  const [formAdditions, setFormAdditions] = useState<RashFormAddition[]>([]);
   const [savedFingerprint, setSavedFingerprint] = useState("");
-  const [tab, setTab] = useState<DetailTab>("wizard");
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -178,6 +201,14 @@ export function RashEditorPage() {
   useEffect(() => {
     void loadPage();
   }, [loadPage]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput);
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     const raw = searchParams.get("kod") ?? searchParams.get("q");
@@ -232,9 +263,18 @@ export function RashEditorPage() {
       draft: composedRule,
       addsum: addsumDraft,
       placements: placementsDraft,
+      modalSettings,
+      modalRows,
     });
     return !!savedFingerprint && fp !== savedFingerprint;
-  }, [composedRule, addsumDraft, placementsDraft, savedFingerprint]);
+  }, [
+    composedRule,
+    addsumDraft,
+    placementsDraft,
+    modalSettings,
+    modalRows,
+    savedFingerprint,
+  ]);
 
   const validation = useMemo(
     () =>
@@ -245,52 +285,74 @@ export function RashEditorPage() {
         refs,
         addsum: addsumDraft,
         placements: placementsDraft,
+        modalSettings,
+        modalRows,
         schemas,
       }),
-    [composedRule, formula, refs, addsumDraft, placementsDraft, schemas, selected]
+    [
+      composedRule,
+      formula,
+      refs,
+      addsumDraft,
+      placementsDraft,
+      modalSettings,
+      modalRows,
+      schemas,
+      selected,
+    ]
   );
   const hasErrors = validation.some((v) => v.level === "error");
+  const currentStepBlocked = stepHasErrors(validation, wizardStep);
 
   const markSaved = (
     rule: RashRule,
     addsum: RashAddsum[],
-    placements: PlacementDraft[]
+    placements: PlacementDraft[],
+    settings: RashModalSettings = modalSettings,
+    rows: RashModalRow[] = modalRows
   ) => {
     setSavedFingerprint(
       draftFingerprint({
         draft: rule,
         addsum,
         placements,
+        modalSettings: settings,
+        modalRows: rows,
       })
     );
   };
 
   const loadDetail = async (rule: RashRule) => {
     setSelected(rule);
-    setTab("wizard");
     setWizardStep(1);
     if (!backend) return;
     setDetailLoading(true);
     setError("");
     try {
       const full = await fetchRashRule(rule.kod);
-      const places = await fetchRashPlacements(rule.kod);
       const nextDraft = { ...EMPTY_RULE, ...full };
       const nextAddsum = full.addsum ?? [];
-      const nextPlaces = places.map((p) => ({
+      const nextPlaces = (full.placements ?? []).map((p) => ({
         formId: p.formId,
         rowNo: p.rowNo,
         columnKey: p.columnKey,
       }));
+      const nextSettings = full.modalSettings ?? { rowMode: "dynamic" as const };
+      const nextModalRows = full.modalRows ?? [];
       setDraft(nextDraft);
       setRefs(refsFromRule(nextDraft));
       setFormula(parseFormulaDraft(nextDraft.totalFormula));
       setAddsumDraft(nextAddsum);
       setPlacementsDraft(nextPlaces);
+      setModalSettings(nextSettings);
+      setModalRows(nextModalRows);
+      setFormAdditions([]);
       markSaved(
         { ...nextDraft, totalFormula: nextDraft.totalFormula ?? null },
         nextAddsum,
-        nextPlaces
+        nextPlaces,
+        nextSettings,
+        nextModalRows
       );
       for (const p of nextPlaces) {
         if (p.formId) void ensureSchema(p.formId);
@@ -305,10 +367,17 @@ export function RashEditorPage() {
     }
   };
 
-  const handleNew = async () => {
+  const handleNew = async (force = false) => {
+    if (
+      !force &&
+      dirty &&
+      !confirm("Есть несохранённые изменения. Создать новое правило и потерять их?")
+    ) {
+      return;
+    }
+    setSearchParams({});
     setSelected(null);
     setUsage(null);
-    setTab("wizard");
     setWizardStep(1);
     let kod = 90001;
     if (backend) {
@@ -324,10 +393,28 @@ export function RashEditorPage() {
     setFormula(emptyFormula());
     setAddsumDraft([]);
     setPlacementsDraft([]);
-    markSaved(next, [], []);
+    setModalSettings({ rowMode: "dynamic" });
+    setModalRows([]);
+    setFormAdditions([]);
+    markSaved(next, [], [], { rowMode: "dynamic" }, []);
   };
 
-  const handleSaveAll = async (forceConflicts = false) => {
+  const handleSelectRule = async (rule: RashRule) => {
+    if (
+      dirty &&
+      selected?.kod !== rule.kod &&
+      !confirm("Есть несохранённые изменения. Перейти к другому правилу?")
+    ) {
+      return;
+    }
+    setSearchParams({ kod: String(rule.kod) });
+    await loadDetail(rule);
+  };
+
+  const handleSaveAll = async (
+    forceConflicts = false,
+    createMissingFormParts = false
+  ) => {
     if (!backend) {
       setError("Редактирование доступно при подключении к API");
       return;
@@ -337,6 +424,31 @@ export function RashEditorPage() {
       return;
     }
     try {
+      if (!createMissingFormParts) {
+        const structure = await previewRashBundleStructure({
+          placements: placementsDraft,
+          formAdditions,
+        });
+        if (structure.missingRows.length || structure.missingColumns.length) {
+          const details = [
+            ...structure.missingRows.map(
+              (item) => `${item.formId}: строка ${item.rowNo} «${item.name}»`
+            ),
+            ...structure.missingColumns.map(
+              (item) => `${item.formId}: графа ${item.columnKey} «${item.label}»`
+            ),
+          ].join("\n");
+          if (
+            !confirm(
+              `В шаблонах форм отсутствуют элементы:\n\n${details}\n\nСоздать их и сохранить правило?`
+            )
+          ) {
+            setError("Сохранение отменено: сначала создайте строки/графы или подтвердите создание");
+            return;
+          }
+          return handleSaveAll(forceConflicts, true);
+        }
+      }
       const saved = await saveRashBundle({
         rule: composedRule,
         addsum: addsumDraft.map((a, i) => ({
@@ -344,8 +456,17 @@ export function RashEditorPage() {
           sort: a.sort ?? i,
           sumTitle: a.sumTitle,
           fldType: a.fldType || "Сумма",
+          required: a.required ?? false,
         })),
         placements: placementsDraft,
+        modalSettings,
+        modalRows: modalRows.map((row, index) => ({
+          ...row,
+          kod: composedRule.kod,
+          sort: index,
+        })),
+        formAdditions,
+        createMissingFormParts,
         forceConflicts,
       });
       clearRowRashIndexCache();
@@ -360,8 +481,17 @@ export function RashEditorPage() {
         columnKey: p.columnKey,
       }));
       setPlacementsDraft(places);
+      setModalSettings(saved.modalSettings);
+      setModalRows(saved.modalRows);
+      setFormAdditions([]);
       setSelected(saved.rule);
-      markSaved(saved.rule, saved.addsum, places);
+      markSaved(
+        saved.rule,
+        saved.addsum,
+        places,
+        saved.modalSettings,
+        saved.modalRows
+      );
       setSearch(String(saved.rule.kod));
       setOffset(0);
       setStatus(
@@ -371,7 +501,6 @@ export function RashEditorPage() {
       );
       setError("");
       await loadPage();
-      await loadPage();
       setUsage(await fetchRashUsage(saved.rule.kod));
     } catch (e) {
       const conflicts = (e as { conflicts?: Array<{ existingKod: number }> }).conflicts;
@@ -379,7 +508,7 @@ export function RashEditorPage() {
         const ok = confirm(
           `${e instanceof Error ? e.message : "Конфликт привязок"}\n\nПерезаписать чужие привязки?`
         );
-        if (ok) await handleSaveAll(true);
+        if (ok) await handleSaveAll(true, createMissingFormParts);
         else setError(e instanceof Error ? e.message : "Конфликт");
         return;
       }
@@ -389,7 +518,7 @@ export function RashEditorPage() {
 
   const handleDiscard = () => {
     if (selected) void loadDetail(selected);
-    else void handleNew();
+    else void handleNew(true);
   };
 
   const handleDelete = async () => {
@@ -409,7 +538,7 @@ export function RashEditorPage() {
       await deleteRashRule(selected.kod);
       clearRowRashIndexCache();
       clearRashCache();
-      await handleNew();
+      await handleNew(true);
       setStatus("Удалено");
       await loadPage();
     } catch (e) {
@@ -419,6 +548,12 @@ export function RashEditorPage() {
 
   const handleImportPreview = async (kind: "rules" | "placements") => {
     if (!backend) return;
+    if (
+      dirty &&
+      !confirm("Есть несохранённые изменения. Продолжить к импорту? Несохранённый черновик может быть сброшен.")
+    ) {
+      return;
+    }
     try {
       const data =
         kind === "rules"
@@ -444,7 +579,7 @@ export function RashEditorPage() {
         setStatus(`Импортировано привязок: ${reimported}`);
       }
       setImportPreview(null);
-      await handleNew();
+      await handleNew(true);
       await loadPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка импорта");
@@ -468,6 +603,54 @@ export function RashEditorPage() {
   const primarySchema = primaryFormId ? schemas[primaryFormId] : undefined;
   const numberCols =
     primarySchema?.columns.filter((c) => c.type === "number" && c.key !== "num") ?? [];
+
+  const previewEntries = useMemo(() => {
+    if (!composedRule.kod) return [];
+    const layout = buildRashModalLayout({
+      rule: composedRule,
+      formColumns: primarySchema?.columns ?? [],
+      addsum: addsumDraft,
+      placementColumns: placementsDraft
+        .filter((p) => p.formId === primaryFormId)
+        .map((p) => p.columnKey)
+        .filter(Boolean),
+      modalSettings,
+      modalRows,
+    });
+    const seeded = seedRashEntriesFromModalLayout([], layout, {
+      formId: primaryFormId || "PREVIEW",
+      parentRowNo: Number(placementsDraft[0]?.rowNo) || 1,
+      rashKod: composedRule.kod,
+    });
+    if (seeded.length > 0) {
+      return seeded.map((entry, index) => ({
+        ...entry,
+        values:
+          index === 0 && layout.columns[0]
+            ? { [layout.columns[0].key]: 100 }
+            : entry.values,
+      }));
+    }
+    return [
+      {
+        formId: primaryFormId || "PREVIEW",
+        parentRowNo: Number(placementsDraft[0]?.rowNo) || 1,
+        columnKey: null as string | null,
+        rashKod: composedRule.kod,
+        lineNo: 0,
+        kontrName: "Пример контрагента",
+        values: {} as Record<string, string | number>,
+      },
+    ];
+  }, [
+    composedRule,
+    primarySchema,
+    addsumDraft,
+    placementsDraft,
+    primaryFormId,
+    modalSettings,
+    modalRows,
+  ]);
 
   const updateRef = (idx: 0 | 1 | 2 | 3, patch: Partial<RefSpecDraft>) => {
     setRefs((prev) => {
@@ -634,11 +817,8 @@ export function RashEditorPage() {
       <div className="checks-toolbar">
         <input
           placeholder="Код или название…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setOffset(0);
-          }}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
         />
         <select
           value={formFilter}
@@ -674,33 +854,42 @@ export function RashEditorPage() {
         )}
       </div>
 
-      <div className="checks-editor-layout rash-constructor-layout">
+      <div className="checks-layout rash-constructor-layout">
         <div className="checks-list-panel">
           {loading ? (
             <div className="loading">Загрузка…</div>
           ) : (
-            <table className="checks-table">
-              <thead>
-                <tr>
-                  <th>Код</th>
-                  <th>Тип / форма</th>
-                  <th>Итог</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((r) => (
-                  <tr
-                    key={r.kod}
-                    className={selected?.kod === r.kod ? "selected" : undefined}
-                    onClick={() => void loadDetail(r)}
-                  >
-                    <td>{r.kod}</td>
-                    <td>{r.name}</td>
-                    <td>{parseTotalColumn(r.totalFormula) ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="rash-rule-catalog">
+              {items.map((r) => (
+                <button
+                  type="button"
+                  key={r.kod}
+                  className={`rash-rule-card${selected?.kod === r.kod ? " selected" : ""}`}
+                  onClick={() => void handleSelectRule(r)}
+                >
+                  <span className="rash-rule-card-title">
+                    <strong>№{r.kod}</strong> {r.name}
+                  </span>
+                  <span className="rash-rule-card-meta">
+                    <span>{r.isActive === false ? "Выключено" : "Активно"}</span>
+                    <span>{r.formIds.join(", ") || "Без формы"}</span>
+                    <span>Привязок: {r.placementCount}</span>
+                    <span>
+                      Строки:{" "}
+                      {r.rowMode === "dynamic"
+                        ? "динамические"
+                        : r.rowMode === "fixed"
+                          ? `фиксированные (${r.fixedRowCount})`
+                          : `смешанные (${r.fixedRowCount})`}
+                    </span>
+                    <span>
+                      Итог: {parseTotalColumn(r.totalFormula) ?? "—"} · доп. полей:{" "}
+                      {r.addsumCount}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
           <div className="toolbar-actions" style={{ marginTop: "0.5rem" }}>
             <button
@@ -728,282 +917,286 @@ export function RashEditorPage() {
         <div className="checks-detail-panel">
           {detailLoading && <div className="loading">Загрузка правила…</div>}
 
-          <div className="rash-tab-row">
-            {(
-              [
-                ["wizard", "Мастер"],
-                ["rule", "Правило"],
-                ["addsum", "Доп. графы"],
-                ["placements", "Привязки"],
-                ["usage", "Использование"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`btn ${tab === id ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => setTab(id)}
-                disabled={id === "usage" && !selected}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <header className="rash-constructor-header">
+            <div>
+              <h2>{selected ? `Правило №${draft.kod}: ${draft.name}` : "Новое правило"}</h2>
+              <span className={`status-badge ${draft.isActive === false ? "returned" : "accepted"}`}>
+                {draft.isActive === false ? "Выключено" : "Активно"}
+              </span>
+              {dirty && <span className="rash-dirty-indicator">Есть несохранённые изменения</span>}
+            </div>
+            {modeHint && <span className="tools-hint">{modeHint}</span>}
+          </header>
 
-          {modeHint && (
-            <p className="tools-hint">
-              Специальный режим (код {draft.kod}): <strong>{modeHint}</strong>
-            </p>
-          )}
+          <nav className="rash-wizard-steps" aria-label="Шаги конструктора">
+            {[
+              "Основное",
+              "Где открывается",
+              "Строки окна",
+              "Графы окна",
+              "Предпросмотр",
+              "Проверка",
+            ].map((label, index) => {
+              const step = (index + 1) as WizardStep;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  className={`btn ${wizardStep === step ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setWizardStep(step)}
+                >
+                  <span>{step}</span> {label}
+                </button>
+              );
+            })}
+          </nav>
 
-          {validation.length > 0 && (
-            <ul className="rash-validation">
-              {validation.map((v, i) => (
-                <li key={i} className={v.level === "error" ? "err" : "warn"}>
-                  {v.level === "error" ? "Ошибка" : "Внимание"}: {v.message}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {(tab === "wizard" || tab === "rule") && (
-            <>
-              {tab === "wizard" && (
-                <div className="rash-wizard-steps">
-                  {[1, 2, 3, 4, 5, 6].map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`btn ${wizardStep === s ? "btn-primary" : "btn-secondary"}`}
-                      onClick={() => setWizardStep(s as WizardStep)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                  <span className="muted">
-                    {
-                      [
-                        "",
-                        "Форма и код",
-                        "Строки и графы",
-                        "Справочники",
-                        "Итог и доп. графы",
-                        "Предпросмотр",
-                        "Сохранение",
-                      ][wizardStep]
-                    }
-                  </span>
-                </div>
-              )}
-
-              {(tab === "rule" || wizardStep === 1) && (
-                <div className="checks-form-grid">
-                  <label>
-                    Код расшифровки
-                    <input
-                      type="number"
-                      value={draft.kod || ""}
-                      disabled={!!selected}
-                      onChange={(e) => setDraft({ ...draft, kod: Number(e.target.value) })}
-                    />
-                  </label>
-                  <label>
-                    Тип / название
-                    <input
-                      value={draft.name}
-                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                      placeholder="N01_1_1105"
-                    />
-                  </label>
-                  <label className="full-width">
-                    Примечание
-                    <input
-                      value={draft.note ?? ""}
-                      onChange={(e) => setDraft({ ...draft, note: e.target.value || null })}
-                    />
-                  </label>
-                  {advanced && (
-                    <label className="full-width">
-                      Legacy refRows (Access)
-                      <input
-                        value={draft.refRows ?? ""}
-                        onChange={(e) => setDraft({ ...draft, refRows: e.target.value || null })}
-                        placeholder="лучше используйте вкладку Привязки"
-                      />
-                    </label>
-                  )}
-                  <label className="full-width rash-check">
-                    <input
-                      type="checkbox"
-                      checked={advanced}
-                      onChange={(e) => setAdvanced(e.target.checked)}
-                    />
-                    Расширенный режим (сырые Access-поля)
-                  </label>
-                </div>
-              )}
-
-              {(tab === "rule" || wizardStep === 2) && (
-                <section className="tools-section">
-                  <h2>Привязки к ячейкам</h2>
-                  <p className="tools-hint">
-                    Строки и графы — из шаблона формы или свои произвольные номера/буквы.
-                  </p>
-                  <PlacementEditor
-                    formIds={formIds}
-                    schemas={schemas}
-                    ensureSchema={ensureSchema}
-                    placements={placementsDraft}
-                    onChange={setPlacementsDraft}
-                    preferFormId={primaryFormId}
-                  />
-                </section>
-              )}
-
-              {(tab === "rule" || wizardStep === 3) && (
-                <section className="tools-section">
-                  <h2>Справочники окна</h2>
-                  {renderRefEditor(0, "Измерение 1")}
-                  {renderRefEditor(1, "Измерение 2")}
-                  {renderRefEditor(2, "Измерение 3")}
-                  {renderRefEditor(3, "Измерение 4")}
-                </section>
-              )}
-
-              {(tab === "rule" || wizardStep === 4) && (
-                <section className="tools-section">
-                  <h2>Формула итога</h2>
-                  <FormulaEditor
-                    formula={formula}
-                    columns={numberCols}
-                    onChange={setFormula}
-                  />
-                  <h3>Дополнительные графы</h3>
-                  <AddsumEditor items={addsumDraft} kod={draft.kod} onChange={setAddsumDraft} />
-                </section>
-              )}
-
-              {(tab === "wizard" && wizardStep === 5) || tab === "rule" ? (
-                <section className="tools-section rash-preview">
-                  <h2>Предпросмотр</h2>
-                  <RashLivePreview
-                    rule={composedRule}
-                    refs={refs}
-                    formula={formula}
-                    addsum={addsumDraft}
-                    placements={placementsDraft}
-                    schema={primarySchema}
-                  />
-                </section>
-              ) : null}
-
-              {(tab === "wizard" && wizardStep === 6) || tab === "rule" ? (
-                <div className="toolbar-actions" style={{ marginTop: "1rem" }}>
-                  {backend && adminOk && (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={hasErrors}
-                        onClick={() => void handleSaveAll()}
-                      >
-                        Сохранить всё
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={!dirty}
-                        onClick={handleDiscard}
-                      >
-                        Отменить изменения
-                      </button>
-                      {selected && (
-                        <button type="button" className="btn btn-danger" onClick={() => void handleDelete()}>
-                          Удалить
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              ) : null}
-
-              {tab === "wizard" && wizardStep < 6 && (
-                <div className="toolbar-actions" style={{ marginTop: "0.75rem" }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={wizardStep <= 1}
-                    onClick={() => setWizardStep((wizardStep - 1) as WizardStep)}
-                  >
-                    Назад
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => setWizardStep((wizardStep + 1) as WizardStep)}
-                  >
-                    Далее
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {tab === "addsum" && (
-            <AddsumEditor items={addsumDraft} kod={draft.kod} onChange={setAddsumDraft} />
-          )}
-
-          {tab === "placements" && (
-            <PlacementEditor
-              formIds={formIds}
-              schemas={schemas}
-              ensureSchema={ensureSchema}
-              placements={placementsDraft}
-              onChange={setPlacementsDraft}
-              preferFormId={primaryFormId}
-            />
-          )}
-
-          {tab === "usage" && usage && (
+          {wizardStep === 1 && (
             <section className="tools-section">
-              <h2>Использование кода {usage.kod}</h2>
-              <p>
-                Привязок: <strong>{usage.placementCount}</strong> · форм:{" "}
-                <strong>{usage.forms.length}</strong> · строк расшифровок в БД:{" "}
-                <strong>{usage.entryCount}</strong> · комплектов:{" "}
-                <strong>{usage.instanceCount}</strong>
-              </p>
-              <p className="tools-hint">Формы: {usage.forms.join(", ") || "—"}</p>
-              <table className="checks-table">
-                <thead>
-                  <tr>
-                    <th>Форма</th>
-                    <th>Строка</th>
-                    <th>Графа</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usage.samplePlacements.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.formId}</td>
-                      <td>{p.rowNo}</td>
-                      <td>{p.columnKey || "*"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <h2>1. Основное</h2>
+              <p className="tools-hint">Название и статус правила, понятные пользователю.</p>
+              <div className="checks-form-grid">
+                <label>
+                  Код расшифровки
+                  <input
+                    type="number"
+                    value={draft.kod || ""}
+                    disabled={!!selected}
+                    onChange={(e) => setDraft({ ...draft, kod: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  Название
+                  <input
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    placeholder="Расчёты с контрагентами"
+                  />
+                </label>
+                <label className="full-width">
+                  Описание
+                  <textarea
+                    value={draft.note ?? ""}
+                    onChange={(e) => setDraft({ ...draft, note: e.target.value || null })}
+                    placeholder="Когда и зачем пользователь заполняет это окно"
+                  />
+                </label>
+                <label className="full-width rash-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.isActive !== false}
+                    onChange={(e) => setDraft({ ...draft, isActive: e.target.checked })}
+                  />
+                  Правило активно и доступно в формах
+                </label>
+              </div>
             </section>
           )}
 
-          {tab !== "wizard" && backend && adminOk && (
-            <div className="toolbar-actions" style={{ marginTop: "1rem" }}>
+          {wizardStep === 2 && (
+            <section className="tools-section">
+              <h2>2. Где открывается окно</h2>
+              <BindingDesigner
+                formIds={formIds}
+                schemas={schemas as Record<string, FormSchema>}
+                ensureSchema={ensureSchema}
+                placements={placementsDraft}
+                additions={formAdditions}
+                onChange={setPlacementsDraft}
+                onAdditionsChange={setFormAdditions}
+                preferFormId={primaryFormId}
+                currentKod={draft.kod || selected?.kod}
+                onOpenRule={(kod) => {
+                  void handleSelectRule({ ...EMPTY_RULE, kod, name: `№${kod}` });
+                }}
+              />
+            </section>
+          )}
+
+          {wizardStep === 3 && (
+            <section className="tools-section">
+              <h2>3. Строки внутри окна</h2>
+              <ModalRowsEditor
+                settings={modalSettings}
+                rows={modalRows}
+                schemas={schemas as Record<string, FormSchema>}
+                primaryFormId={primaryFormId}
+                onSettingsChange={setModalSettings}
+                onRowsChange={setModalRows}
+              />
+            </section>
+          )}
+
+          {wizardStep === 4 && (
+            <>
+              <section className="tools-section">
+                <h2>4. Графы внутри окна</h2>
+                <h3>Справочники</h3>
+                {renderRefEditor(0, "Контрагент или классификатор 1")}
+                {renderRefEditor(1, "Классификатор 2")}
+                {renderRefEditor(2, "Классификатор 3")}
+                {renderRefEditor(3, "Классификатор 4")}
+              </section>
+              <section className="tools-section">
+                <h3>Суммовые графы и перенос итога</h3>
+                <FormulaEditor formula={formula} columns={numberCols} onChange={setFormula} />
+              </section>
+              <section className="tools-section">
+                <h3>Дополнительные поля</h3>
+                <AddsumEditor items={addsumDraft} kod={draft.kod} onChange={setAddsumDraft} />
+              </section>
+              <details className="tools-section">
+                <summary>Совместимость с Access</summary>
+                <label className="full-width">
+                  refRows
+                  <input
+                    value={draft.refRows ?? ""}
+                    onChange={(e) => setDraft({ ...draft, refRows: e.target.value || null })}
+                  />
+                </label>
+                <label className="rash-check">
+                  <input
+                    type="checkbox"
+                    checked={advanced}
+                    onChange={(e) => setAdvanced(e.target.checked)}
+                  />
+                  Показывать сырую формулу
+                </label>
+              </details>
+            </>
+          )}
+
+          {wizardStep === 5 && (
+            <section className="tools-section rash-preview">
+              <h2>5. Предпросмотр окна</h2>
+              <div className="rash-preview-summary">
+                <p>
+                  Открывается из{" "}
+                  <strong>{placementsDraft.length || "—"}</strong> ячеек · строки:{" "}
+                  <strong>
+                    {modalSettings.rowMode === "dynamic"
+                      ? "динамические"
+                      : modalSettings.rowMode === "fixed"
+                        ? "фиксированные"
+                        : "смешанные"}
+                  </strong>
+                  {modalRows.length ? ` (${modalRows.length})` : ""} · итог{" "}
+                  <strong>{parseTotalColumn(composedRule.totalFormula) ?? "—"}</strong>
+                </p>
+              </div>
+              <RashEditorModal
+                open
+                preview
+                readOnly
+                onClose={() => undefined}
+                onSave={() => undefined}
+                context={{
+                  formId: primaryFormId || "PREVIEW",
+                  parentRowNo: Number(placementsDraft[0]?.rowNo) || 1,
+                  columnKey: placementsDraft[0]?.columnKey || "K",
+                  rashKod: composedRule.kod || 0,
+                  rule: composedRule,
+                  parentLabel: composedRule.name || "Строка формы",
+                  parentValue: 100,
+                  placementColumns: placementsDraft
+                    .filter((p) => p.formId === primaryFormId)
+                    .map((p) => p.columnKey)
+                    .filter(Boolean),
+                }}
+                entries={previewEntries}
+                formColumns={primarySchema?.columns ?? numberCols}
+                addsum={addsumDraft}
+                kontrAgents={[]}
+                modalSettings={modalSettings}
+                modalRows={modalRows}
+              />
+            </section>
+          )}
+
+          {wizardStep === 6 && (
+            <section className="tools-section">
+              <h2>6. Проверка перед сохранением</h2>
+              {validation.length === 0 ? (
+                <p className="status-ok">Правило заполнено корректно и готово к сохранению.</p>
+              ) : (
+                <ul className="rash-validation">
+                  {validation.map((v, i) => (
+                    <li key={i} className={v.level === "error" ? "err" : "warn"}>
+                      {v.level === "error" ? "Ошибка" : "Внимание"}: {v.message}
+                      {v.step != null && (
+                        <>
+                          {" "}
+                          <button
+                            type="button"
+                            className="btn-link"
+                            onClick={() => setWizardStep(v.step!)}
+                          >
+                            к шагу {v.step}
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="rash-rule-summary">
+                <p>
+                  Открывается: <strong>{placementsDraft.length}</strong> ячеек в{" "}
+                  <strong>{new Set(placementsDraft.map((item) => item.formId)).size}</strong> формах.
+                </p>
+                <p>
+                  Строки окна: <strong>{modalSettings.rowMode}</strong>
+                  {modalRows.length ? `, фиксированных: ${modalRows.length}` : ""}.
+                </p>
+                <p>
+                  Дополнительных полей: <strong>{addsumDraft.length}</strong>.
+                </p>
+              </div>
+              {usage && (
+                <p className="tools-hint">
+                  Уже используется: {usage.placementCount} привязок, {usage.entryCount} строк
+                  расшифровок в {usage.instanceCount} комплектах.
+                </p>
+              )}
+            </section>
+          )}
+
+          <div className="rash-constructor-navigation">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={wizardStep === 1}
+              onClick={() => setWizardStep((wizardStep - 1) as WizardStep)}
+            >
+              Назад
+            </button>
+            {wizardStep < 6 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={currentStepBlocked}
+                title={
+                  currentStepBlocked
+                    ? "Исправьте ошибки текущего шага"
+                    : undefined
+                }
+                onClick={() => setWizardStep((wizardStep + 1) as WizardStep)}
+              >
+                Далее
+              </button>
+            )}
+          </div>
+
+          {backend && adminOk && (
+            <div className="rash-constructor-savebar">
+              <span>{dirty ? "Изменения не сохранены" : "Все изменения сохранены"}</span>
               <button
                 type="button"
                 className="btn btn-primary"
                 disabled={hasErrors}
                 onClick={() => void handleSaveAll()}
               >
-                Сохранить всё
+                Сохранить
               </button>
               <button
                 type="button"
@@ -1011,8 +1204,13 @@ export function RashEditorPage() {
                 disabled={!dirty}
                 onClick={handleDiscard}
               >
-                Отменить изменения
+                Отменить
               </button>
+              {selected && (
+                <button type="button" className="btn btn-danger" onClick={() => void handleDelete()}>
+                  Удалить
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1164,6 +1362,7 @@ function AddsumEditor({
             <th>Порядок</th>
             <th>Заголовок</th>
             <th>Тип</th>
+            <th>Обязательное</th>
             <th />
           </tr>
         </thead>
@@ -1206,9 +1405,20 @@ function AddsumEditor({
                       {t}
                     </option>
                   ))}
-                  <option value="Текст">Текст (ограничено)</option>
-                  <option value="Дата">Дата (ограничено)</option>
+                  <option value="Текст">Текст</option>
+                  <option value="Дата">Дата</option>
                 </select>
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  checked={row.required ?? false}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[idx] = { ...row, required: e.target.checked };
+                    onChange(next);
+                  }}
+                />
               </td>
               <td>
                 <button
@@ -1230,340 +1440,19 @@ function AddsumEditor({
         onClick={() =>
           onChange([
             ...items,
-            { kod, sort: items.length, sumTitle: "", fldType: "Сумма" },
+            {
+              kod,
+              sort: items.length,
+              sumTitle: "",
+              fldType: "Сумма",
+              required: false,
+            },
           ])
         }
       >
         Добавить графу
       </button>
     </>
-  );
-}
-
-function PlacementEditor({
-  formIds,
-  schemas,
-  ensureSchema,
-  placements,
-  onChange,
-  preferFormId,
-}: {
-  formIds: string[];
-  schemas: Record<string, FormSchema>;
-  ensureSchema: (id: string) => Promise<FormSchema | undefined>;
-  placements: PlacementDraft[];
-  onChange: (p: PlacementDraft[]) => void;
-  preferFormId?: string;
-}) {
-  const [pickForm, setPickForm] = useState(preferFormId || "");
-  const [pickedRows, setPickedRows] = useState<string[]>([]);
-  const [pickedCols, setPickedCols] = useState<string[]>([]);
-  const [customRow, setCustomRow] = useState("");
-  const [customCol, setCustomCol] = useState("");
-
-  useEffect(() => {
-    if (preferFormId && !pickForm) setPickForm(preferFormId);
-  }, [preferFormId, pickForm]);
-
-  useEffect(() => {
-    if (pickForm) void ensureSchema(pickForm);
-  }, [pickForm, ensureSchema]);
-
-  const schema = pickForm ? schemas[pickForm] : undefined;
-  const rows = schema?.rows ?? [];
-  const cols = schema?.columns.filter((c) => c.type === "number" && c.key !== "num") ?? [];
-
-  const addFromPicker = () => {
-    if (!pickForm) return;
-    const customR = customRow.trim();
-    const rowNos = [
-      ...pickedRows.filter(Boolean),
-      ...(customR && !pickedRows.includes(customR) ? [customR] : []),
-    ];
-    if (rowNos.length === 0) return;
-
-    const next = [...placements];
-    const custom = normalizeColKey(customCol);
-    const colKeys = [
-      ...pickedCols,
-      ...(custom && !pickedCols.some((c) => c.toUpperCase() === custom) ? [custom] : []),
-    ];
-    const keys = colKeys.length ? colKeys : [""];
-    for (const rowNo of rowNos) {
-      for (const columnKey of keys) {
-        const exists = next.some(
-          (p) =>
-            p.formId === pickForm &&
-            p.rowNo === rowNo &&
-            (p.columnKey || "").toUpperCase() === columnKey.toUpperCase()
-        );
-        if (!exists) next.push({ formId: pickForm, rowNo, columnKey });
-      }
-    }
-    onChange(next);
-    setPickedRows([]);
-    setCustomRow("");
-    setCustomCol("");
-  };
-
-  return (
-    <div className="rash-placement-editor">
-      <div className="checks-form-grid">
-        <label>
-          Форма
-          <select
-            value={pickForm}
-            onChange={(e) => {
-              setPickForm(e.target.value);
-              setPickedRows([]);
-              setPickedCols([]);
-              setCustomRow("");
-              setCustomCol("");
-            }}
-          >
-            <option value="">— выберите —</option>
-            {formIds.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="full-width">
-          Строки из формы (множественный выбор)
-          <select
-            multiple
-            size={8}
-            value={pickedRows}
-            onChange={(e) =>
-              setPickedRows(Array.from(e.target.selectedOptions).map((o) => o.value))
-            }
-          >
-            {rows.map((r) => (
-              <option key={String(r.num)} value={String(r.num ?? "")}>
-                {r.num} — {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Своя строка
-          <input
-            value={customRow}
-            placeholder="напр. 2000"
-            onChange={(e) => setCustomRow(e.target.value)}
-            onBlur={() => setCustomRow(customRow.trim())}
-          />
-        </label>
-        <label className="full-width">
-          Графы из формы (пусто + без своей = вся строка)
-          <select
-            multiple
-            size={6}
-            value={pickedCols}
-            onChange={(e) =>
-              setPickedCols(Array.from(e.target.selectedOptions).map((o) => o.value))
-            }
-          >
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.key} — {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Своя графа
-          <input
-            value={customCol}
-            placeholder="напр. K"
-            onChange={(e) => setCustomCol(e.target.value)}
-            onBlur={() => setCustomCol(normalizeColKey(customCol))}
-          />
-        </label>
-      </div>
-      <p className="tools-hint">
-        Строки и графы — из шаблона и/или свои произвольные (их ещё может не быть в форме).
-      </p>
-      <button type="button" className="btn btn-secondary" onClick={addFromPicker}>
-        Добавить выбранные привязки
-      </button>
-
-      <table className="checks-table" style={{ marginTop: "0.75rem" }}>
-        <thead>
-          <tr>
-            <th>Форма</th>
-            <th>Строка</th>
-            <th>Графа</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {placements.map((row, idx) => {
-            const formRows = schemas[row.formId]?.rows ?? rows;
-            const formCols =
-              schemas[row.formId]?.columns.filter(
-                (c) => c.type === "number" && c.key !== "num"
-              ) ?? cols;
-            const knownRow = formRows.some(
-              (r) => String(r.num ?? "").trim() === String(row.rowNo).trim()
-            );
-            return (
-              <tr key={`${row.formId}-${row.rowNo}-${row.columnKey}-${idx}`}>
-                <td>{row.formId}</td>
-                <td>
-                  <div className="rash-col-key-input">
-                    <select
-                      value={knownRow ? String(row.rowNo) : "__custom__"}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        const next = [...placements];
-                        next[idx] = {
-                          ...row,
-                          rowNo: v === "__custom__" ? row.rowNo || "" : v,
-                        };
-                        onChange(next);
-                      }}
-                    >
-                      {formRows
-                        .filter((r) => String(r.num ?? "").trim())
-                        .map((r) => (
-                          <option key={String(r.num)} value={String(r.num)} title={r.name}>
-                            {r.num}
-                            {r.name ? ` — ${String(r.name).slice(0, 24)}` : ""}
-                          </option>
-                        ))}
-                      <option value="__custom__">Своя строка…</option>
-                    </select>
-                    {(!knownRow || !String(row.rowNo).trim()) && (
-                      <input
-                        value={row.rowNo}
-                        placeholder="№ строки"
-                        aria-label="Произвольная строка"
-                        onChange={(e) => {
-                          const next = [...placements];
-                          next[idx] = { ...row, rowNo: e.target.value.trim() };
-                          onChange(next);
-                        }}
-                        style={{ maxWidth: "7rem" }}
-                      />
-                    )}
-                  </div>
-                </td>
-                <td>
-                  <ColumnKeyInput
-                    value={row.columnKey}
-                    columns={formCols}
-                    allowEmpty
-                    emptyLabel="* (вся строка)"
-                    onChange={(columnKey) => {
-                      const next = [...placements];
-                      next[idx] = { ...row, columnKey };
-                      onChange(next);
-                    }}
-                  />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => onChange(placements.filter((_, i) => i !== idx))}
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {placements.length === 0 && <p className="tools-hint">Привязок пока нет.</p>}
-    </div>
-  );
-}
-
-function RashLivePreview({
-  rule,
-  refs,
-  formula,
-  addsum,
-  placements,
-  schema,
-}: {
-  rule: RashRule;
-  refs: [RefSpecDraft, RefSpecDraft, RefSpecDraft, RefSpecDraft];
-  formula: FormulaDraft;
-  addsum: RashAddsum[];
-  placements: PlacementDraft[];
-  schema?: FormSchema;
-}) {
-  const formulaStr = buildFormulaString(formula);
-  const dims = refs
-    .map((r, i) => ({
-      key: `a${i + 1}`,
-      title: r.title || r.kind || `A${i + 1}`,
-      name: buildRefName(r),
-    }))
-    .filter((d) => d.name);
-  return (
-    <div>
-      <p className="tools-hint">
-        Код <strong>{rule.kod}</strong> · {rule.name || "без названия"} · формула{" "}
-        <code>{formulaStr || "—"}</code>
-      </p>
-      <div className="table-wrap">
-        <table className="form-table">
-          <thead>
-            <tr>
-              {dims.map((d) => (
-                <th key={d.key}>{d.title}</th>
-              ))}
-              {(formula.rawMode
-                ? []
-                : formula.terms.map((t) => t.col).filter(Boolean)
-              ).map((c) => (
-                <th key={c}>{c}</th>
-              ))}
-              {formula.totalCol && <th>{formula.totalCol} (итог)</th>}
-              {addsum.map((a) => (
-                <th key={a.sort}>{a.sumTitle || `+${a.sort}`}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {dims.map((d) => (
-                <td key={d.key} className="muted">
-                  {d.name}
-                </td>
-              ))}
-              {(formula.rawMode ? [] : formula.terms.map((t) => t.col).filter(Boolean)).map((c) => (
-                <td key={c}>0</td>
-              ))}
-              {formula.totalCol && <td>0</td>}
-              {addsum.map((a) => (
-                <td key={a.sort}>0</td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p className="tools-hint" style={{ marginTop: "0.75rem" }}>
-        Кнопка «…» появится на{" "}
-        {placements.length
-          ? placements
-              .slice(0, 8)
-              .map((p) => `${p.formId}:${p.rowNo}:${p.columnKey || "*"}`)
-              .join(", ") + (placements.length > 8 ? "…" : "")
-          : "— (нет привязок)"}
-      </p>
-      {schema && (
-        <p className="tools-hint">
-          Шаблон {schema.id}: {schema.rows.length} строк,{" "}
-          {schema.columns.filter((c) => c.type === "number").length} числовых граф
-        </p>
-      )}
-    </div>
   );
 }
 
