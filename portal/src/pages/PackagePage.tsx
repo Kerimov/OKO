@@ -64,7 +64,12 @@ export function PackagePage() {
     admin || (orgZid != null && typeof zid === "number" && zid === orgZid);
 
   const refreshCompleteness = useCallback(async (z: number, e: number) => {
-    setCompleteness(await fetchPackageCompleteness(z, e));
+    try {
+      setCompleteness(await fetchPackageCompleteness(z, e));
+    } catch (err) {
+      setCompleteness(null);
+      setStatus(err instanceof Error ? err.message : "Не удалось загрузить комплект");
+    }
   }, []);
 
   const refreshPeriods = useCallback(async (orgZid: number) => {
@@ -85,10 +90,12 @@ export function PackagePage() {
       if (typeof initialZid === "number") {
         const perList = await listPeriods(initialZid);
         setPeriods(perList);
+        const ctxEid =
+          ctx.eid != null && perList.some((p) => p.eid === ctx.eid) ? ctx.eid : null;
         const initialEid: number | "" =
           Number.isFinite(paramEid) && paramEid > 0
             ? paramEid
-            : ctx.eid ?? perList[0]?.eid ?? "";
+            : ctxEid ?? perList[0]?.eid ?? "";
         setEid(initialEid);
         if (typeof initialEid === "number") {
           await refreshCompleteness(initialZid, initialEid);

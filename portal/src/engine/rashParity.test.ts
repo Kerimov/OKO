@@ -170,7 +170,7 @@ describe("t_ras parity", () => {
     }
   });
 
-  it("rashSlotVisible hides button below threshold", () => {
+  it("rashSlotVisible: explicit placement always shown; legacy respects threshold", () => {
     const rows: RowData[] = [{ num: "20", name: "Нефть", B: "0.5", M: "0" }];
     const schemaCols = [
       { key: "num", label: "№", type: "text" as const },
@@ -188,9 +188,14 @@ describe("t_ras parity", () => {
     const slot = slots.find((s) => s.rowNum === "20");
     expect(slot).toBeTruthy();
     if (!slot) return;
-    expect(rashSlotVisible(slot, rows[0], thresholds, new Map())).toBe(false);
+    // Привязка из индекса — кнопка видна даже при сумме ниже порога
+    expect(slot.fromPlacement).toBe(true);
+    expect(rashSlotVisible(slot, rows[0], thresholds, new Map())).toBe(true);
+
+    const legacy = { ...slot, fromPlacement: false };
+    expect(rashSlotVisible(legacy, rows[0], thresholds, new Map())).toBe(false);
     expect(
-      rashSlotVisible(slot, { ...rows[0], B: "100" }, thresholds, new Map())
+      rashSlotVisible(legacy, { ...rows[0], B: "100" }, thresholds, new Map())
     ).toBe(true);
   });
 

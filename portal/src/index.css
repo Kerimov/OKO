@@ -2634,13 +2634,77 @@ a:hover {
   align-items: center;
 }
 
+.rash-col-key-input {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.rash-col-key-input select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.rash-col-key-input input {
+  flex: 0 1 5.5rem;
+  min-width: 3.5rem;
+  max-width: 6rem;
+}
+
 .rash-preview {
   background: var(--surface-2, #f7f7f5);
+}
+
+.rash-placement-editor {
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .rash-placement-editor select[multiple] {
   min-height: 8rem;
   width: 100%;
+}
+
+.rash-placement-editor .checks-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.rash-placement-editor .checks-table th:nth-child(1),
+.rash-placement-editor .checks-table td:nth-child(1) {
+  width: 5.5rem;
+}
+
+.rash-placement-editor .checks-table th:nth-child(2),
+.rash-placement-editor .checks-table td:nth-child(2) {
+  width: 38%;
+}
+
+.rash-placement-editor .checks-table th:nth-child(3),
+.rash-placement-editor .checks-table td:nth-child(3) {
+  width: 38%;
+}
+
+.rash-placement-editor .checks-table th:nth-child(4),
+.rash-placement-editor .checks-table td:nth-child(4) {
+  width: 2.75rem;
+}
+
+.rash-placement-editor .checks-table td {
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.rash-placement-editor .checks-table select,
+.rash-placement-editor .checks-table input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .forms-workbench {

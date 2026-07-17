@@ -343,8 +343,11 @@ export async function listRashRules(db: OkoDb, options: ListRashRulesOptions = {
     params.push(like, like, like, like);
   }
   if (formId) {
-    conditions.push("(name = ? OR name LIKE ? OR ref_rows LIKE ?)");
-    params.push(formId, `${formId}_%`, `%${formId}%`);
+    conditions.push(`(
+      name = ? OR name LIKE ? OR ref_rows LIKE ?
+      OR kod IN (SELECT kod FROM rash_placements WHERE form_id = ?)
+    )`);
+    params.push(formId, `${formId}_%`, `%${formId}%`, formId);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -358,7 +361,7 @@ export async function listRashRules(db: OkoDb, options: ListRashRulesOptions = {
               ref_a1_name, ref_a1_title, ref_a2_name, ref_a2_title,
               ref_a3_name, ref_a3_title, ref_a4_name, ref_a4_title
        FROM rash_rules ${where}
-       ORDER BY kod
+       ORDER BY kod DESC
        LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset)) as RashRuleRow[];

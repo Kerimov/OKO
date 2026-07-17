@@ -460,9 +460,16 @@ export function FormsEditorPage() {
 
   const addRow = () => {
     if (!schema) return;
+    const nums = schema.rows
+      .map((r) => parseInt(String(r.num ?? ""), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const nextNum = nums.length ? String(Math.max(...nums) + 1) : "1";
     setSchema({
       ...schema,
-      rows: [...schema.rows, { name: "Новая строка", num: "", kind: "data" }],
+      rows: [
+        ...schema.rows,
+        { name: "Новая строка", num: nextNum, kind: "data" },
+      ],
     });
   };
 

@@ -119,15 +119,15 @@ export function validateRashDraft(input: {
     const row = schema.rows.find((r) => String(r.num ?? "").trim() === String(p.rowNo).trim());
     if (!row) {
       issues.push({
-        level: "error",
-        message: `В форме ${p.formId} нет строки ${p.rowNo}`,
+        level: "warning",
+        message: `Строки ${p.rowNo} пока нет в шаблоне ${p.formId} — привязка сохранится; добавьте строку в редакторе форм при необходимости`,
       });
     }
     const col = (p.columnKey || "").trim().toUpperCase();
     if (col && !schema.columns.some((c) => c.key.toUpperCase() === col)) {
       issues.push({
-        level: "error",
-        message: `В форме ${p.formId} нет графы ${col}`,
+        level: "warning",
+        message: `Графа ${col} пока нет в шаблоне ${p.formId} — привязка сохранится; добавьте графу в редакторе форм при необходимости`,
       });
     }
     if (formulaStr && col) {
