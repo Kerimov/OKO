@@ -15,6 +15,7 @@ export interface RashEntryRow {
   attr_a2: string | null;
   attr_a3: string | null;
   attr_a4: string | null;
+  template_row_key: string | null;
   values_json: string;
 }
 
@@ -32,6 +33,7 @@ export interface RashEntryDto {
   attrA2?: string | null;
   attrA3?: string | null;
   attrA4?: string | null;
+  templateRowKey?: string | null;
   values: Record<string, string | number>;
 }
 
@@ -52,6 +54,7 @@ export async function migrateRashDataTables(db: OkoDb): Promise<void> {
         attr_a2         TEXT,
         attr_a3         TEXT,
         attr_a4         TEXT,
+        template_row_key TEXT,
         values_json     TEXT NOT NULL DEFAULT '{}'
       );
       CREATE INDEX IF NOT EXISTS idx_rash_entries_instance ON form_rash_entries(instance_id);
@@ -81,6 +84,7 @@ function rowToDto(row: RashEntryRow): RashEntryDto {
     attrA2: row.attr_a2,
     attrA3: row.attr_a3,
     attrA4: row.attr_a4,
+    templateRowKey: row.template_row_key,
     values,
   };
 }
@@ -99,7 +103,8 @@ export async function loadRashEntries(
   const rows = (await db
     .prepare(
       `SELECT id, instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
-              kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4, values_json
+              kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4,
+              template_row_key, values_json
        FROM form_rash_entries ${where}
        ORDER BY parent_row_no, rash_kod, line_no, id`
     )
@@ -121,8 +126,9 @@ export async function saveRashEntries(
     const insert = tx.prepare(
       `INSERT INTO form_rash_entries (
         instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
-        kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4, values_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4,
+        template_row_key, values_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     for (let i = 0; i < entries.length; i++) {
@@ -142,6 +148,7 @@ export async function saveRashEntries(
         e.attrA2 ?? null,
         e.attrA3 ?? null,
         e.attrA4 ?? null,
+        e.templateRowKey ?? null,
         valuesJson
       );
     }

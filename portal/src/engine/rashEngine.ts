@@ -4,6 +4,9 @@ import type {
   FormRowTemplate,
   KontrAgent,
   RashAddsum,
+  RashModalRow,
+  RashModalRowMode,
+  RashModalSettings,
   RashRule,
   RashRulesData,
   RashThresholds,
@@ -187,7 +190,141 @@ export function rashRuleMatchesForm(
 }
 
 export function getRashRulesForForm(rules: RashRule[], formId: string): RashRule[] {
-  return rules.filter((r) => rashRuleMatchesForm(r, formId) && !isRashClosedKod(r.kod));
+  return rules.filter(
+    (r) =>
+      rashRuleMatchesForm(r, formId) &&
+      !isRashClosedKod(r.kod) &&
+      r.isActive !== false
+  );
+}
+
+/** Modal window layout shared by constructor preview and runtime. */
+export interface RashModalLayout {
+  rowMode: RashModalRowMode;
+  fixedRows: RashModalRow[];
+  columns: FormColumn[];
+  totalCol: string | null;
+  allowAddRows: boolean;
+  allowRemoveDynamic: boolean;
+}
+
+export function resolveRashModalSettings(
+  data: RashRulesData | null | undefined,
+  kod: number,
+  fallback?: RashModalSettings
+): RashModalSettings {
+  return data?.modalSettings?.[String(kod)] ?? fallback ?? { rowMode: "dynamic" };
+}
+
+export function resolveRashModalRows(
+  data: RashRulesData | null | undefined,
+  kod: number,
+  fallback: RashModalRow[] = []
+): RashModalRow[] {
+  if (!data?.modalRows?.length) return fallback;
+  return data.modalRows
+    .filter((row) => row.kod === kod)
+    .slice()
+    .sort((a, b) => a.sort - b.sort || a.rowKey.localeCompare(b.rowKey));
+}
+
+export function buildRashModalLayout(input: {
+  rule: RashRule;
+  formColumns: FormColumn[];
+  addsum: RashAddsum[];
+  placementColumns?: string[];
+  modalSettings?: RashModalSettings | null;
+  modalRows?: RashModalRow[] | null;
+}): RashModalLayout {
+  const rowMode = input.modalSettings?.rowMode ?? "dynamic";
+  const fixedRows = [...(input.modalRows ?? [])]
+    .filter((row) => row.rowKey.trim())
+    .sort((a, b) => a.sort - b.sort || a.rowKey.localeCompare(b.rowKey));
+  return {
+    rowMode,
+    fixedRows,
+    columns: getRashNumericColumns(
+      input.rule,
+      input.formColumns,
+      input.addsum,
+      input.placementColumns
+    ),
+    totalCol: parseTotalColumn(effectiveRashFormula(input.rule)),
+    allowAddRows: rowMode !== "fixed",
+    allowRemoveDynamic: rowMode !== "fixed",
+  };
+}
+
+/**
+ * Ensure fixed template rows exist in the draft; keep dynamic lines after them.
+ * Existing entries matched by templateRowKey (or legacy kontrName === label) are reused.
+ */
+export function seedRashEntriesFromModalLayout(
+  existing: FormRashEntry[],
+  layout: RashModalLayout,
+  ctx: {
+    formId: string;
+    parentRowNo: number;
+    rashKod: number;
+  }
+): FormRashEntry[] {
+  if (layout.rowMode === "dynamic" || layout.fixedRows.length === 0) {
+    return existing.map((e, i) => ({ ...e, lineNo: i, columnKey: null }));
+  }
+
+  const pool = [...existing];
+  const takeMatch = (row: RashModalRow): FormRashEntry | null => {
+    const byKey = pool.findIndex((e) => e.templateRowKey === row.rowKey);
+    if (byKey >= 0) return pool.splice(byKey, 1)[0];
+    const byLabel = pool.findIndex(
+      (e) =>
+        !e.templateRowKey &&
+        (e.kontrName?.trim() || "") === row.label.trim()
+    );
+    if (byLabel >= 0) return pool.splice(byLabel, 1)[0];
+    return null;
+  };
+
+  const fixed: FormRashEntry[] = layout.fixedRows.map((row, index) => {
+    const prev = takeMatch(row);
+    return {
+      formId: ctx.formId,
+      parentRowNo: ctx.parentRowNo,
+      columnKey: null,
+      rashKod: ctx.rashKod,
+      lineNo: index,
+      kontrId: prev?.kontrId ?? null,
+      kontrName: prev?.kontrName?.trim() ? prev.kontrName : row.label,
+      inn: prev?.inn ?? null,
+      kpp: prev?.kpp ?? null,
+      attrA2: prev?.attrA2 ?? null,
+      attrA3: prev?.attrA3 ?? null,
+      attrA4: prev?.attrA4 ?? null,
+      templateRowKey: row.rowKey,
+      values: { ...(prev?.values ?? {}) },
+    };
+  });
+
+  if (layout.rowMode === "fixed") {
+    return fixed.map((e, i) => ({ ...e, lineNo: i }));
+  }
+
+  const dynamic = pool
+    .filter((e) => !e.templateRowKey)
+    .map((e, i) => ({
+      ...e,
+      formId: ctx.formId,
+      parentRowNo: ctx.parentRowNo,
+      rashKod: ctx.rashKod,
+      columnKey: null,
+      lineNo: fixed.length + i,
+      values: { ...e.values },
+    }));
+  return [...fixed, ...dynamic];
+}
+
+export function isFixedRashEntry(entry: FormRashEntry): boolean {
+  return Boolean(entry.templateRowKey?.trim());
 }
 
 export function isRashClosedKod(kod: number): boolean {
@@ -601,12 +738,12 @@ export function buildRashCellSlots(
           const col = columns.find((c) => c.key === colKey);
           if (!col || col.type !== "number" || colKey === "num") continue;
           const rule = rulesByKod.get(kod);
-          if (!rule) continue;
+          if (!rule || rule.isActive === false) continue;
           pushSlotForColumn(slots, num, colKey, kod, rule, true);
         }
       } else if (meta.defaultKod != null) {
         const rule = rulesByKod.get(meta.defaultKod);
-        if (rule) {
+        if (rule && rule.isActive !== false) {
           const before = slots.length;
           pushSlotsForDefaultRule(slots, formId, num, meta.defaultKod, rule, columns);
           for (let i = before; i < slots.length; i++) {

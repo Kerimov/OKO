@@ -22,6 +22,7 @@ export interface FormRashEntryDto {
   attrA2?: string | null;
   attrA3?: string | null;
   attrA4?: string | null;
+  templateRowKey?: string | null;
   values: Record<string, string | number>;
 }
 
