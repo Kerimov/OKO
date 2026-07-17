@@ -393,7 +393,8 @@ export function getRashNumericColumns(
   const cols: FormColumn[] = [];
   for (const key of [...keys].sort()) {
     const found = formColumns.find((c) => c.key === key);
-    if (found) cols.push(found);
+    // Своя графа (ещё не в шаблоне формы) — показываем как числовую колонку по букве.
+    cols.push(found ?? { key, label: key, type: "number", width: 120 });
   }
   for (const a of getAddsumForRule(rule.kod, addsum)) {
     const input = addsumInputType(a.fldType);
