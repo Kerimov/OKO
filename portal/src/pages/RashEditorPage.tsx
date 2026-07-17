@@ -46,6 +46,7 @@ import {
   validateRashDraft,
   type PlacementDraft,
 } from "./rashEditor/validateDraft";
+import { ColumnKeyInput, normalizeColKey } from "./rashEditor/ColumnKeyInput";
 
 const EMPTY_RULE: RashRule = {
   kod: 0,
@@ -361,12 +362,15 @@ export function RashEditorPage() {
       setPlacementsDraft(places);
       setSelected(saved.rule);
       markSaved(saved.rule, saved.addsum, places);
+      setSearch(String(saved.rule.kod));
+      setOffset(0);
       setStatus(
         forceConflicts
           ? `Сохранено с перезаписью конфликтов (код ${saved.rule.kod})`
           : `Сохранено целиком: правило ${saved.rule.kod}`
       );
       setError("");
+      await loadPage();
       await loadPage();
       setUsage(await fetchRashUsage(saved.rule.kod));
     } catch (e) {
@@ -629,7 +633,7 @@ export function RashEditorPage() {
 
       <div className="checks-toolbar">
         <input
-          placeholder="Поиск…"
+          placeholder="Код или название…"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -638,6 +642,7 @@ export function RashEditorPage() {
         />
         <select
           value={formFilter}
+          title="Включая правила с привязками к форме"
           onChange={(e) => {
             setFormFilter(e.target.value);
             setOffset(0);
@@ -842,7 +847,7 @@ export function RashEditorPage() {
                 <section className="tools-section">
                   <h2>Привязки к ячейкам</h2>
                   <p className="tools-hint">
-                    Выберите форму и строки из шаблона — без ручного набора id.
+                    Строки и графы — из шаблона формы или свои произвольные номера/буквы.
                   </p>
                   <PlacementEditor
                     formIds={formIds}
@@ -1071,18 +1076,16 @@ function FormulaEditor({
         <>
           <label>
             Итоговая графа
-            <select
+            <ColumnKeyInput
               value={formula.totalCol}
-              onChange={(e) => onChange({ ...formula, totalCol: e.target.value })}
-            >
-              <option value="">—</option>
-              {columns.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.key} — {c.label}
-                </option>
-              ))}
-            </select>
+              columns={columns}
+              allowEmpty
+              onChange={(totalCol) => onChange({ ...formula, totalCol })}
+            />
           </label>
+          <p className="tools-hint">
+            Графу можно выбрать из формы или указать свою («Своя графа…»).
+          </p>
           <div className="rash-formula-terms">
             {formula.terms.map((t, idx) => (
               <div key={idx} className="rash-formula-term">
@@ -1097,21 +1100,16 @@ function FormulaEditor({
                   <option value="+">+</option>
                   <option value="-">−</option>
                 </select>
-                <select
+                <ColumnKeyInput
                   value={t.col}
-                  onChange={(e) => {
+                  columns={columns}
+                  allowEmpty
+                  onChange={(col) => {
                     const terms = [...formula.terms];
-                    terms[idx] = { ...t, col: e.target.value };
+                    terms[idx] = { ...t, col };
                     onChange({ ...formula, terms });
                   }}
-                >
-                  <option value="">—</option>
-                  {columns.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.key}
-                    </option>
-                  ))}
-                </select>
+                />
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1260,6 +1258,8 @@ function PlacementEditor({
   const [pickForm, setPickForm] = useState(preferFormId || "");
   const [pickedRows, setPickedRows] = useState<string[]>([]);
   const [pickedCols, setPickedCols] = useState<string[]>([]);
+  const [customRow, setCustomRow] = useState("");
+  const [customCol, setCustomCol] = useState("");
 
   useEffect(() => {
     if (preferFormId && !pickForm) setPickForm(preferFormId);
@@ -1274,11 +1274,23 @@ function PlacementEditor({
   const cols = schema?.columns.filter((c) => c.type === "number" && c.key !== "num") ?? [];
 
   const addFromPicker = () => {
-    if (!pickForm || pickedRows.length === 0) return;
+    if (!pickForm) return;
+    const customR = customRow.trim();
+    const rowNos = [
+      ...pickedRows.filter(Boolean),
+      ...(customR && !pickedRows.includes(customR) ? [customR] : []),
+    ];
+    if (rowNos.length === 0) return;
+
     const next = [...placements];
-    const colKeys = pickedCols.length ? pickedCols : [""];
-    for (const rowNo of pickedRows) {
-      for (const columnKey of colKeys) {
+    const custom = normalizeColKey(customCol);
+    const colKeys = [
+      ...pickedCols,
+      ...(custom && !pickedCols.some((c) => c.toUpperCase() === custom) ? [custom] : []),
+    ];
+    const keys = colKeys.length ? colKeys : [""];
+    for (const rowNo of rowNos) {
+      for (const columnKey of keys) {
         const exists = next.some(
           (p) =>
             p.formId === pickForm &&
@@ -1290,6 +1302,8 @@ function PlacementEditor({
     }
     onChange(next);
     setPickedRows([]);
+    setCustomRow("");
+    setCustomCol("");
   };
 
   return (
@@ -1303,6 +1317,8 @@ function PlacementEditor({
               setPickForm(e.target.value);
               setPickedRows([]);
               setPickedCols([]);
+              setCustomRow("");
+              setCustomCol("");
             }}
           >
             <option value="">— выберите —</option>
@@ -1314,7 +1330,7 @@ function PlacementEditor({
           </select>
         </label>
         <label className="full-width">
-          Строки (множественный выбор)
+          Строки из формы (множественный выбор)
           <select
             multiple
             size={8}
@@ -1330,8 +1346,17 @@ function PlacementEditor({
             ))}
           </select>
         </label>
+        <label>
+          Своя строка
+          <input
+            value={customRow}
+            placeholder="напр. 2000"
+            onChange={(e) => setCustomRow(e.target.value)}
+            onBlur={() => setCustomRow(customRow.trim())}
+          />
+        </label>
         <label className="full-width">
-          Графы (пусто = вся строка)
+          Графы из формы (пусто + без своей = вся строка)
           <select
             multiple
             size={6}
@@ -1347,7 +1372,19 @@ function PlacementEditor({
             ))}
           </select>
         </label>
+        <label>
+          Своя графа
+          <input
+            value={customCol}
+            placeholder="напр. K"
+            onChange={(e) => setCustomCol(e.target.value)}
+            onBlur={() => setCustomCol(normalizeColKey(customCol))}
+          />
+        </label>
       </div>
+      <p className="tools-hint">
+        Строки и графы — из шаблона и/или свои произвольные (их ещё может не быть в форме).
+      </p>
       <button type="button" className="btn btn-secondary" onClick={addFromPicker}>
         Добавить выбранные привязки
       </button>
@@ -1362,22 +1399,82 @@ function PlacementEditor({
           </tr>
         </thead>
         <tbody>
-          {placements.map((row, idx) => (
-            <tr key={`${row.formId}-${row.rowNo}-${row.columnKey}-${idx}`}>
-              <td>{row.formId}</td>
-              <td>{row.rowNo}</td>
-              <td>{row.columnKey || "*"}</td>
-              <td>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => onChange(placements.filter((_, i) => i !== idx))}
-                >
-                  ✕
-                </button>
-              </td>
-            </tr>
-          ))}
+          {placements.map((row, idx) => {
+            const formRows = schemas[row.formId]?.rows ?? rows;
+            const formCols =
+              schemas[row.formId]?.columns.filter(
+                (c) => c.type === "number" && c.key !== "num"
+              ) ?? cols;
+            const knownRow = formRows.some(
+              (r) => String(r.num ?? "").trim() === String(row.rowNo).trim()
+            );
+            return (
+              <tr key={`${row.formId}-${row.rowNo}-${row.columnKey}-${idx}`}>
+                <td>{row.formId}</td>
+                <td>
+                  <div className="rash-col-key-input">
+                    <select
+                      value={knownRow ? String(row.rowNo) : "__custom__"}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const next = [...placements];
+                        next[idx] = {
+                          ...row,
+                          rowNo: v === "__custom__" ? row.rowNo || "" : v,
+                        };
+                        onChange(next);
+                      }}
+                    >
+                      {formRows
+                        .filter((r) => String(r.num ?? "").trim())
+                        .map((r) => (
+                          <option key={String(r.num)} value={String(r.num)} title={r.name}>
+                            {r.num}
+                            {r.name ? ` — ${String(r.name).slice(0, 24)}` : ""}
+                          </option>
+                        ))}
+                      <option value="__custom__">Своя строка…</option>
+                    </select>
+                    {(!knownRow || !String(row.rowNo).trim()) && (
+                      <input
+                        value={row.rowNo}
+                        placeholder="№ строки"
+                        aria-label="Произвольная строка"
+                        onChange={(e) => {
+                          const next = [...placements];
+                          next[idx] = { ...row, rowNo: e.target.value.trim() };
+                          onChange(next);
+                        }}
+                        style={{ maxWidth: "7rem" }}
+                      />
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <ColumnKeyInput
+                    value={row.columnKey}
+                    columns={formCols}
+                    allowEmpty
+                    emptyLabel="* (вся строка)"
+                    onChange={(columnKey) => {
+                      const next = [...placements];
+                      next[idx] = { ...row, columnKey };
+                      onChange(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onChange(placements.filter((_, i) => i !== idx))}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {placements.length === 0 && <p className="tools-hint">Привязок пока нет.</p>}

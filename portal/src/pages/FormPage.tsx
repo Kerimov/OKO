@@ -60,7 +60,7 @@ import type {
   RashRulesData,
   RowData,
 } from "../types";
-import { buildInitialRows, formatPeriod, formStatusLabel } from "../utils";
+import { buildInitialRows, alignInstanceRowsToSchema, formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListBackLabel } from "../formsListLabels";
 import { makeRowId } from "@oko/spreadsheet";
@@ -119,11 +119,19 @@ export function FormPage() {
   const [periodClosed, setPeriodClosed] = useState(false);
   const isLocked =
     (instanceStatus === "submitted" && !admin) || periodClosed;
+  const alignedSchemaKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    alignedSchemaKeyRef.current = null;
+  }, [instanceId]);
 
   useEffect(() => {
     if (!instanceId) return;
     setError("");
     setPeriodClosed(false);
+    setSchema(null);
+    setInstance(null);
+    setRows([]);
     loadInstance(instanceId).then((inst) => {
       if (!inst) {
         setError("Форма не найдена. Возможно, она была удалена.");
@@ -145,7 +153,12 @@ export function FormPage() {
           .catch(() => setPeriodClosed(false));
       }
 
-      loadSchema(inst.templateId, inst.templateSchemaVersion)
+      // Черновик: берём актуальную схему, чтобы новые строки шаблона (после
+      // правки в редакторе форм / привязки расшифровки) попали в заполнение.
+      // Сданная форма остаётся на pinned version.
+      const pinVersion =
+        inst.status === "submitted" ? inst.templateSchemaVersion : undefined;
+      loadSchema(inst.templateId, pinVersion)
         .then(setSchema)
         .catch((e) => setError(e.message));
 
@@ -156,6 +169,39 @@ export function FormPage() {
         .catch(() => setRashEntries(inst.rashEntries ?? []));
     });
   }, [instanceId]);
+
+  /** Новые строки шаблона → в экземпляр (иначе после настройки расшифровки «пропадают»). */
+  useEffect(() => {
+    if (!schema || !instance || isLocked) return;
+    const key = `${instance.instanceId}:${schema.schemaVersion ?? 1}:${schema.rows.length}`;
+    if (alignedSchemaKeyRef.current === key) return;
+
+    const { rows: next, added } = alignInstanceRowsToSchema(schema, rows);
+    if (added === 0) {
+      alignedSchemaKeyRef.current = key;
+      return;
+    }
+    alignedSchemaKeyRef.current = key;
+
+    setRows(next);
+    const updated: OkoFormInstance = {
+      ...instance,
+      rows: next,
+      templateSchemaVersion: schema.schemaVersion ?? instance.templateSchemaVersion,
+      updatedAt: new Date().toISOString(),
+    };
+    setInstance(updated);
+    void saveInstance(updated)
+      .then(() => {
+        setStatus(`Добавлены строки из шаблона: ${added}`);
+        setTimeout(() => setStatus(""), 4000);
+      })
+      .catch(() => {
+        /* keep UI rows even if save fails */
+      });
+    // rows намеренно из первого кадра после загрузки схемы
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema, instance?.instanceId, isLocked]);
 
   useEffect(() => {
     if (!schema) return;

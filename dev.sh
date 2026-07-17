@@ -66,21 +66,38 @@ run_service() {
   echo "==> ${name}: pid ${pid}"
 }
 
-# PostgreSQL required for API
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  if command -v docker >/dev/null 2>&1; then
-    echo "==> DATABASE_URL unset — starting local Postgres (docker compose)"
-    (cd "${ROOT_DIR}" && docker compose up -d postgres) || {
-      echo "ERROR: could not start postgres" >&2
-      exit 1
-    }
-    PG_HOST_PORT="${POSTGRES_PORT:-5432}"
-    export DATABASE_URL="${DATABASE_URL:-postgresql://oko:oko@localhost:${PG_HOST_PORT}/oko}"
-    export DATABASE_SSL="${DATABASE_SSL:-false}"
-  else
-    echo "ERROR: DATABASE_URL is required (PostgreSQL). Install Docker or set DATABASE_URL in .env." >&2
+# PostgreSQL required for API. Local Docker URL → always ensure compose postgres is up.
+ensure_local_postgres() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: Docker not found. Start Postgres yourself or install Docker Desktop." >&2
     exit 1
   fi
+  echo "==> Postgres: docker compose up -d postgres"
+  (cd "${ROOT_DIR}" && docker compose up -d postgres) || {
+    echo "ERROR: could not start postgres" >&2
+    exit 1
+  }
+  echo "==> Postgres: waiting until ready…"
+  for _ in $(seq 1 30); do
+    if (cd "${ROOT_DIR}" && docker compose exec -T postgres pg_isready -U oko -d oko) >/dev/null 2>&1; then
+      echo "==> Postgres: ready"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: postgres did not become ready in time" >&2
+  exit 1
+}
+
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  ensure_local_postgres
+  PG_HOST_PORT="${POSTGRES_PORT:-5432}"
+  export DATABASE_URL="postgresql://oko:oko@localhost:${PG_HOST_PORT}/oko"
+  export DATABASE_SSL="${DATABASE_SSL:-false}"
+elif [[ "${DATABASE_URL}" == *"localhost"* || "${DATABASE_URL}" == *"127.0.0.1"* ]]; then
+  # .env already has DATABASE_URL (e.g. :5433) — still start the compose DB
+  ensure_local_postgres
+  export DATABASE_SSL="${DATABASE_SSL:-false}"
 fi
 
 if [[ -f "${PIDS_FILE}" ]]; then

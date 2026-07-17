@@ -45,6 +45,8 @@ export interface RashCellSlot {
   rashKod: number;
   rule: RashRule;
   pattern: "cell" | "total";
+  /** Явная привязка из rash_placements — кнопку «…» показываем всегда. */
+  fromPlacement?: boolean;
 }
 
 export interface RashEditorContext {
@@ -490,10 +492,18 @@ function pushSlotForColumn(
   num: string,
   colKey: string,
   kod: number,
-  rule: RashRule
+  rule: RashRule,
+  fromPlacement = false
 ): void {
   if (rule.refRows) {
-    slots.push({ rowNum: num, columnKey: colKey, rashKod: kod, rule, pattern: "cell" });
+    slots.push({
+      rowNum: num,
+      columnKey: colKey,
+      rashKod: kod,
+      rule,
+      pattern: "cell",
+      fromPlacement,
+    });
     return;
   }
   const formula = effectiveRashFormula(rule);
@@ -509,11 +519,19 @@ function pushSlotForColumn(
         rashKod: kod,
         rule,
         pattern: "total",
+        fromPlacement,
       });
       return;
     }
   }
-  slots.push({ rowNum: num, columnKey: colKey, rashKod: kod, rule, pattern: "cell" });
+  slots.push({
+    rowNum: num,
+    columnKey: colKey,
+    rashKod: kod,
+    rule,
+    pattern: "cell",
+    fromPlacement,
+  });
 }
 
 function pushSlotsForDefaultRule(
@@ -583,12 +601,16 @@ export function buildRashCellSlots(
           if (!col || col.type !== "number" || colKey === "num") continue;
           const rule = rulesByKod.get(kod);
           if (!rule) continue;
-          pushSlotForColumn(slots, num, colKey, kod, rule);
+          pushSlotForColumn(slots, num, colKey, kod, rule, true);
         }
       } else if (meta.defaultKod != null) {
         const rule = rulesByKod.get(meta.defaultKod);
         if (rule) {
+          const before = slots.length;
           pushSlotsForDefaultRule(slots, formId, num, meta.defaultKod, rule, columns);
+          for (let i = before; i < slots.length; i++) {
+            slots[i] = { ...slots[i], fromPlacement: true };
+          }
         }
       }
       continue;
@@ -613,13 +635,14 @@ export function rashSlotKey(rowNum: string, columnKey: string, rashKod: number):
   return `${rowNum}:${columnKey}:${rashKod}`;
 }
 
-/** Показывать кнопку «…» при сумме ≥ level1 или если расшифровка уже есть. */
+/** Показывать кнопку «…» при сумме ≥ level1, если расшифровка уже есть, или при явной привязке. */
 export function rashSlotVisible(
   slot: RashCellSlot,
   row: RowData,
   thresholds: RashThresholds,
   rashEntryCounts?: Map<string, number>
 ): boolean {
+  if (slot.fromPlacement) return true;
   const groupKey = rashGroupKey(slot.rowNum, slot.rashKod);
   if ((rashEntryCounts?.get(groupKey) ?? 0) > 0) return true;
   // Legacy maps keyed by full slot key

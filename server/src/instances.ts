@@ -87,7 +87,7 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       enterprise_code = excluded.enterprise_code,
       signatures_json = excluded.signatures_json,
       status = excluded.status,
-      template_schema_version = COALESCE(form_instances.template_schema_version, excluded.template_schema_version),
+      template_schema_version = COALESCE(excluded.template_schema_version, form_instances.template_schema_version),
       updated_at = excluded.updated_at`
     )
     .run(
@@ -120,10 +120,23 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
     const row = rows[index];
     const rowNo = resolveRowNo(row, index);
     const rowName = String(row.name ?? "");
+    let wrote = false;
     for (const [key, val] of Object.entries(row)) {
       const { value_num, value_text } = cellValueParts(val);
       if (value_num === null && value_text === null) continue;
       await insert.run(inst.instanceId, rowNo, rowName || null, key, value_num, value_text);
+      wrote = true;
+    }
+    // Строка только с номером/пустыми графами иначе пропадает при load (rowsFromCells).
+    if (!wrote && rowNo < 900_000_000) {
+      await insert.run(
+        inst.instanceId,
+        rowNo,
+        rowName || null,
+        "num",
+        null,
+        String(row.num ?? rowNo)
+      );
     }
     if (!row.num && rowNo >= 900_000_000) {
       await insert.run(inst.instanceId, rowNo, rowName || null, "_row_index", index, null);

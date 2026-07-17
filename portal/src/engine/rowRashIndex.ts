@@ -10,12 +10,14 @@ export interface RowRashIndexData {
   stats?: { forms: number; rows: number; placements?: number };
 }
 
+import { apiFetchRaw } from "../apiClient";
+
 let cached: RowRashIndexData | null = null;
 
 export async function loadRowRashIndex(): Promise<RowRashIndexData> {
   if (cached) return cached;
   try {
-    const apiRes = await fetch("/api/rash/placements/export");
+    const apiRes = await apiFetchRaw("/api/rash/placements/export");
     if (apiRes.ok) {
       const data = (await apiRes.json()) as RowRashIndexData;
       if (data.forms && Object.keys(data.forms).length > 0) {

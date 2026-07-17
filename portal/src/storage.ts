@@ -237,11 +237,14 @@ export async function createInstance(schema: FormSchema): Promise<OkoFormInstanc
     updatedAt: now,
   };
 
-  await saveInstance(instance);
+  await saveInstance(instance, { isNew: true });
   return instance;
 }
 
-export async function saveInstance(instance: OkoFormInstance): Promise<void> {
+export async function saveInstance(
+  instance: OkoFormInstance,
+  opts?: { isNew?: boolean }
+): Promise<void> {
   const normalized = ensureInstanceMeta({
     ...instance,
     updatedAt: new Date().toISOString(),
@@ -263,7 +266,9 @@ export async function saveInstance(instance: OkoFormInstance): Promise<void> {
     return;
   }
 
-  const existing = await loadInstance(instance.instanceId);
+  // Freshly generated UUID cannot exist on the server — skip the probe GET
+  // that otherwise logs a 404 in the browser console.
+  const existing = opts?.isNew ? null : await loadInstance(instance.instanceId);
   if (existing) {
     await apiFetch(`/api/instances/${instance.instanceId}`, {
       method: "PUT",

@@ -231,6 +231,42 @@ export async function seedOrganizationsFromSettings(db: OkoDb): Promise<number> 
   return 1;
 }
 
+/**
+ * Если организации уже насеяны (например, из agg-list.json), а периодов нет,
+ * form_instances.eid из старого рабочего контекста нарушает FK на periods.
+ * Создаём период по умолчанию, чтобы платформа работала «из коробки».
+ */
+export async function seedDefaultPeriodIfMissing(db: OkoDb): Promise<number> {
+  const periods = (
+    (await db.prepare("SELECT COUNT(*) AS c FROM periods").get()) as { c: number }
+  ).c;
+  if (periods > 0) return 0;
+
+  let zid: number | null = null;
+  const workZidRow = (await db
+    .prepare("SELECT value FROM app_settings WHERE key = 'workZid'")
+    .get()) as { value: string } | undefined;
+  if (workZidRow) {
+    const candidate = Number(workZidRow.value) || null;
+    if (candidate != null) {
+      const org = await db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(candidate);
+      if (org) zid = candidate;
+    }
+  }
+  if (zid == null) {
+    const row = (await db.prepare("SELECT MIN(zid) AS z FROM organizations").get()) as
+      | { z: number | null }
+      | undefined;
+    zid = row?.z ?? null;
+  }
+  if (zid == null) return 0;
+
+  await db
+    .prepare("INSERT INTO periods (eid, zid, name) VALUES (1, ?, 'Текущий период')")
+    .run(zid);
+  return 1;
+}
+
 function rowToOrg(row: {
   zid: number;
   name: string;
@@ -528,11 +564,23 @@ export async function getWorkContext(
       eid: eRaw ? Number(eRaw) || null : null,
     };
   };
+  // Устаревший eid (период удалён/не создан или принадлежит другой организации)
+  // приводит к FK-ошибке form_instances_eid_fkey и «Период не найден» — отбрасываем его.
+  const sanitize = async (ctx: WorkContextDto): Promise<WorkContextDto> => {
+    if (ctx.eid == null) return ctx;
+    const exists =
+      ctx.zid != null
+        ? await db
+            .prepare("SELECT 1 FROM periods WHERE eid = ? AND zid = ?")
+            .get(ctx.eid, ctx.zid)
+        : await db.prepare("SELECT 1 FROM periods WHERE eid = ?").get(ctx.eid);
+    return exists ? ctx : { ...ctx, eid: null };
+  };
   if (userId != null) {
     const scoped = readPair(`workZid:u${userId}`, `workEid:u${userId}`);
-    if (scoped.zid != null || scoped.eid != null) return scoped;
+    if (scoped.zid != null || scoped.eid != null) return sanitize(scoped);
   }
-  return readPair("workZid", "workEid");
+  return sanitize(readPair("workZid", "workEid"));
 }
 
 export async function setWorkContext(
@@ -540,6 +588,19 @@ export async function setWorkContext(
   ctx: WorkContextDto,
   userId?: number | null
 ): Promise<WorkContextDto> {
+  if (ctx.eid != null) {
+    const exists =
+      ctx.zid != null
+        ? await db
+            .prepare("SELECT 1 FROM periods WHERE eid = ? AND zid = ?")
+            .get(ctx.eid, ctx.zid)
+        : await db.prepare("SELECT 1 FROM periods WHERE eid = ?").get(ctx.eid);
+    if (!exists) {
+      const err = new Error(`Период eid=${ctx.eid} не найден`);
+      (err as Error & { status: number }).status = 400;
+      throw err;
+    }
+  }
   const zidKey = userId != null ? `workZid:u${userId}` : "workZid";
   const eidKey = userId != null ? `workEid:u${userId}` : "workEid";
   const upsert = db.prepare(

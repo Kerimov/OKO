@@ -22,7 +22,11 @@ import {
   seedSaldoRulesFromJson,
 } from "./saldo.js";
 import { migrateAuditTable } from "./audit.js";
-import { migrateOrgTables, seedOrganizationsFromSettings } from "./packages.js";
+import {
+  migrateOrgTables,
+  seedDefaultPeriodIfMissing,
+  seedOrganizationsFromSettings,
+} from "./packages.js";
 import { migrateRashTables, seedRashFromJson, seedPlacementsFromJson } from "./rash.js";
 import { migrateRashDataTables } from "./rash-data.js";
 import {
@@ -84,6 +88,10 @@ async function initSchema(database: OkoDb): Promise<void> {
   const seededOrgs = await seedOrganizationsFromSettings(database);
   if (seededOrgs > 0) {
     console.log("Seeded default organization and period (zid=1, eid=1)");
+  }
+  const seededPeriod = await seedDefaultPeriodIfMissing(database);
+  if (seededPeriod > 0) {
+    console.log("Seeded default period (eid=1) — periods table was empty");
   }
   const seededRash = await seedRashFromJson(database);
   if (seededRash > 0) {

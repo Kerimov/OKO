@@ -31,6 +31,54 @@ export function emptyRow(schema: FormSchema): RowData {
   return row;
 }
 
+/**
+ * Подтягивает в экземпляр новые строки шаблона (после правки формы в редакторе),
+ * не удаляя пользовательские строки (allowAddRows / без номера).
+ */
+export function alignInstanceRowsToSchema(
+  schema: FormSchema,
+  rows: RowData[]
+): { rows: RowData[]; added: number } {
+  if (!schema.rows.length) return { rows, added: 0 };
+
+  const byNum = new Map<string, RowData>();
+  const extras: RowData[] = [];
+  for (const row of rows) {
+    const num = String(row.num ?? "").trim();
+    if (num && !byNum.has(num)) byNum.set(num, row);
+    else extras.push(row);
+  }
+
+  const aligned: RowData[] = [];
+  let added = 0;
+  for (const t of schema.rows) {
+    const num = String(t.num ?? "").trim();
+    if (!num) {
+      // Строки шаблона без номера нельзя однозначно сопоставить — пропускаем автодобавление.
+      continue;
+    }
+    const existing = byNum.get(num);
+    if (existing) {
+      byNum.delete(num);
+      const base = templateToRow(t, schema);
+      aligned.push({
+        ...base,
+        ...existing,
+        num: existing.num || t.num || "",
+        name: existing.name || t.name || "",
+        code: existing.code || t.code || "",
+      });
+    } else {
+      aligned.push(templateToRow(t, schema));
+      added++;
+    }
+  }
+
+  for (const row of byNum.values()) aligned.push(row);
+  for (const row of extras) aligned.push(row);
+  return { rows: aligned, added };
+}
+
 export function formatPeriod(start: string, end: string): string {
   if (!start && !end) return "не указан";
   if (start && end) return `${start} — ${end}`;
