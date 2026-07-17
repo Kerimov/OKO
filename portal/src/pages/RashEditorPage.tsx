@@ -24,7 +24,7 @@ import {
 } from "../api";
 import { clearRowRashIndexCache } from "../engine/rowRashIndex";
 import { clearRashCache } from "../engine/rashEngine";
-import { parseTotalColumn } from "../engine/rashEngine";
+import { formIdFromRefRow, parseTotalColumn } from "../engine/rashEngine";
 import type {
   FormCatalog,
   FormSchema,
@@ -93,6 +93,15 @@ const SPECIAL_MODES: Record<number, string> = {
 };
 
 type WizardStep = RashWizardStep;
+
+/** Форма, «зашитая» в имени правила (N01_11_975 → N01_11); привязок может не быть. */
+function formIdFromRuleName(name: string | null | undefined): string | null {
+  const n = (name ?? "").trim();
+  if (!/^N\d/i.test(n)) return null;
+  const fid = formIdFromRefRow(n);
+  if (fid && fid !== n) return fid;
+  return /^N\d+_\d+$/i.test(n) ? n : null;
+}
 
 function refsFromRule(rule: RashRule): [RefSpecDraft, RefSpecDraft, RefSpecDraft, RefSpecDraft] {
   return [
@@ -872,7 +881,12 @@ export function RashEditorPage() {
                   </span>
                   <span className="rash-rule-card-meta">
                     <span>{r.isActive === false ? "Выключено" : "Активно"}</span>
-                    <span>{r.formIds.join(", ") || "Без формы"}</span>
+                    <span>
+                      {r.formIds.join(", ") ||
+                        (formIdFromRuleName(r.name)
+                          ? `имя: ${formIdFromRuleName(r.name)}, без привязок`
+                          : "Без формы")}
+                    </span>
                     <span>Привязок: {r.placementCount}</span>
                     <span>
                       Строки:{" "}
