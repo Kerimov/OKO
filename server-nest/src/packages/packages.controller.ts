@@ -29,6 +29,7 @@ import {
   getPackageWorkspace,
   getPackageWorkspaceDetail,
   importReportPackage,
+  listPackageCampaigns,
   previewPackageConstruction,
 } from "../../../server/src/packages.js";
 import {
@@ -67,10 +68,62 @@ function assertConstructAccess(req: Request, body: PackageConstructDto): void {
 @ApiBearerAuth()
 @Controller("packages")
 export class PackagesController {
-  @Get("workspace")
-  @ApiOperation({ summary: "Рабочий список комплектов (орг × период + БП + прогресс)" })
+  @Get("workspace/campaigns")
+  @ApiOperation({ summary: "Агрегаты кампаний (период × вид) для сайдбара" })
   @ApiQuery({ name: "zid", required: false })
-  async workspace(@Req() req: Request, @Query("zid") zidRaw?: string) {
+  @ApiQuery({ name: "packageKind", required: false })
+  @ApiQuery({ name: "q", required: false })
+  async workspaceCampaigns(
+    @Req() req: Request,
+    @Query("zid") zidRaw?: string,
+    @Query("packageKind") packageKind?: string,
+    @Query("q") q?: string
+  ) {
+    try {
+      const scoped = userZid(req);
+      let zid: number | undefined;
+      if (scoped != null) zid = scoped;
+      else if (zidRaw != null && zidRaw !== "") {
+        zid = Number(zidRaw);
+        if (!Number.isFinite(zid)) {
+          throw new BadRequestException({ error: "invalid zid" });
+        }
+      }
+      return listPackageCampaigns(await getDb(), {
+        zid,
+        packageKind:
+          packageKind === "BALANCE"
+            ? "BALANCE"
+            : packageKind === "OKO"
+              ? "OKO"
+              : undefined,
+        q: q?.trim() || undefined,
+      });
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "workspace campaigns failed");
+    }
+  }
+
+  @Get("workspace")
+  @ApiOperation({
+    summary: "Рабочий список комплектов (фильтр по кампании / орг / поиск)",
+  })
+  @ApiQuery({ name: "zid", required: false })
+  @ApiQuery({ name: "periodName", required: false })
+  @ApiQuery({ name: "packageKind", required: false })
+  @ApiQuery({ name: "q", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({ name: "offset", required: false })
+  async workspace(
+    @Req() req: Request,
+    @Query("zid") zidRaw?: string,
+    @Query("periodName") periodName?: string,
+    @Query("packageKind") packageKind?: string,
+    @Query("q") q?: string,
+    @Query("limit") limitRaw?: string,
+    @Query("offset") offsetRaw?: string
+  ) {
     try {
       const scoped = userZid(req);
       let zid: number | undefined;
@@ -82,7 +135,23 @@ export class PackagesController {
           throw new BadRequestException({ error: "invalid zid" });
         }
       }
-      return getPackageWorkspace(await getDb(), zid != null ? { zid } : undefined);
+      const limit =
+        limitRaw != null && limitRaw !== "" ? Number(limitRaw) : undefined;
+      const offset =
+        offsetRaw != null && offsetRaw !== "" ? Number(offsetRaw) : undefined;
+      return getPackageWorkspace(await getDb(), {
+        zid,
+        periodName: periodName?.trim() || undefined,
+        packageKind:
+          packageKind === "BALANCE"
+            ? "BALANCE"
+            : packageKind === "OKO"
+              ? "OKO"
+              : undefined,
+        q: q?.trim() || undefined,
+        limit: Number.isFinite(limit) ? limit : undefined,
+        offset: Number.isFinite(offset) ? offset : undefined,
+      });
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "workspace failed");
@@ -146,6 +215,26 @@ export class PackagesController {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "construct failed");
+    }
+  }
+
+  @Post("construct-async")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Массовое создание комплектов в фоне (job)" })
+  async constructAsync(@Req() req: Request, @Body() body: PackageConstructDto) {
+    try {
+      assertConstructAccess(req, body);
+      const targets = Array.isArray(body.targets) ? body.targets.length : 0;
+      const job = await enqueueBackgroundJob(await getDb(), {
+        type: "construct_packages",
+        payload: body as unknown as Record<string, unknown>,
+        createdBy: req.apiUser?.username ?? req.apiRole ?? null,
+        message: targets > 1 ? `Очередь: ${targets} орг.` : "Очередь создания комплектов",
+      });
+      return { jobId: job.id, status: job.status };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "construct-async failed");
     }
   }
 
@@ -247,20 +336,75 @@ export class PackagesController {
 
   @Post("bulk-delete")
   @HttpCode(200)
-  @ApiOperation({ summary: "Массовое удаление комплектов" })
+  @ApiOperation({ summary: "Массовое удаление комплектов (sync, ≤500)" })
   async bulkDelete(@Req() req: Request, @Body() body: PackageBulkDeleteDto) {
-    const items = body.items ?? [];
+    const rawItems = Array.isArray(body?.items) ? body.items : [];
+    const items = rawItems
+      .map((item) => ({
+        zid: Number(item?.zid),
+        eid: Number(item?.eid),
+      }))
+      .filter(
+        (item) =>
+          Number.isFinite(item.zid) &&
+          Number.isFinite(item.eid) &&
+          item.zid > 0 &&
+          item.eid > 0
+      );
     if (!items.length) {
-      throw new BadRequestException({ error: "items required" });
+      throw new BadRequestException({
+        error: "items required",
+        message: "Укажите комплекты для очистки (zid + eid)",
+      });
     }
     try {
       for (const item of items) {
-        assertOrgZidParam(req, Number(item.zid));
+        assertOrgZidParam(req, item.zid);
       }
-      return deleteReportPackagesBulk(await getDb(), items);
+      return await deleteReportPackagesBulk(await getDb(), items);
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "bulk delete failed");
+    }
+  }
+
+  @Post("bulk-delete-async")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Массовое удаление комплектов в фоне (job)" })
+  async bulkDeleteAsync(@Req() req: Request, @Body() body: PackageBulkDeleteDto) {
+    const rawItems = Array.isArray(body?.items) ? body.items : [];
+    const items = rawItems
+      .map((item) => ({
+        zid: Number(item?.zid),
+        eid: Number(item?.eid),
+      }))
+      .filter(
+        (item) =>
+          Number.isFinite(item.zid) &&
+          Number.isFinite(item.eid) &&
+          item.zid > 0 &&
+          item.eid > 0
+      );
+    if (!items.length) {
+      throw new BadRequestException({
+        error: "items required",
+        message: "Укажите комплекты для удаления (zid + eid)",
+      });
+    }
+    try {
+      for (const item of items) {
+        assertOrgZidParam(req, item.zid);
+      }
+      const job = await enqueueBackgroundJob(await getDb(), {
+        type: "delete_packages",
+        payload: { items },
+        createdBy: req.apiUser?.username ?? req.apiRole ?? null,
+        message: `Очередь удаления: ${items.length} компл.`,
+      });
+      return { jobId: job.id, status: job.status };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "bulk-delete-async failed");
     }
   }
 

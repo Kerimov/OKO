@@ -109,12 +109,32 @@ export async function assertPeriodWritableForInstance(
   await assertPeriodWritable(db, eid, zid, opts);
 }
 
-export async function snapshotPeriodFormSet(
+const FORM_SET_INSERT_CHUNK = 200;
+
+async function insertPeriodFormSetRows(
   db: OkoDb,
-  eid: number
-): Promise<number> {
-  await migratePeriodLifecycle(db);
-  const forms = (await db
+  eid: number,
+  forms: Array<{ form_id: string; schema_version: number }>
+): Promise<void> {
+  for (let offset = 0; offset < forms.length; offset += FORM_SET_INSERT_CHUNK) {
+    const chunk = forms.slice(offset, offset + FORM_SET_INSERT_CHUNK);
+    const placeholders = chunk.map(() => "(?, ?, ?)").join(", ");
+    const params: unknown[] = [];
+    for (const f of chunk) {
+      params.push(eid, f.form_id, f.schema_version);
+    }
+    await db
+      .prepare(
+        `INSERT INTO period_form_set (eid, form_id, schema_version) VALUES ${placeholders}`
+      )
+      .run(...params);
+  }
+}
+
+export async function listActiveFormTemplates(
+  db: OkoDb
+): Promise<Array<{ form_id: string; schema_version: number }>> {
+  return (await db
     .prepare(
       `SELECT form_id, COALESCE(schema_version, 1) AS schema_version
        FROM form_templates
@@ -122,15 +142,27 @@ export async function snapshotPeriodFormSet(
        ORDER BY sort_order, form_id`
     )
     .all()) as Array<{ form_id: string; schema_version: number }>;
+}
 
+/** Snapshot catalog into period_form_set using a preloaded form list (no catalog re-query). */
+export async function snapshotPeriodFormSetWithForms(
+  db: OkoDb,
+  eid: number,
+  forms: Array<{ form_id: string; schema_version: number }>
+): Promise<number> {
+  await migratePeriodLifecycle(db);
   await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
-  const ins = db.prepare(
-    `INSERT INTO period_form_set (eid, form_id, schema_version) VALUES (?, ?, ?)`
-  );
-  for (const f of forms) {
-    await ins.run(eid, f.form_id, f.schema_version);
-  }
+  if (forms.length === 0) return 0;
+  await insertPeriodFormSetRows(db, eid, forms);
   return forms.length;
+}
+
+export async function snapshotPeriodFormSet(
+  db: OkoDb,
+  eid: number
+): Promise<number> {
+  const forms = await listActiveFormTemplates(db);
+  return snapshotPeriodFormSetWithForms(db, eid, forms);
 }
 
 /**
@@ -167,12 +199,7 @@ export async function replacePeriodFormSet(
   }
 
   await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
-  const ins = db.prepare(
-    `INSERT INTO period_form_set (eid, form_id, schema_version) VALUES (?, ?, ?)`
-  );
-  for (const f of forms) {
-    await ins.run(eid, f.form_id, f.schema_version);
-  }
+  await insertPeriodFormSetRows(db, eid, forms);
   return forms.length;
 }
 

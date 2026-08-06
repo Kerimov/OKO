@@ -9,13 +9,15 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { getDb } from "../../../server/src/db.js";
 import {
+  countOrganizations,
   createOrganization,
   listOrganizations,
   updateOrganization,
@@ -32,11 +34,53 @@ import {
 @Controller("organizations")
 export class OrganizationsController {
   @Get()
-  @ApiOperation({ summary: "Список организаций (ZID)" })
-  async list(@Req() req: Request) {
+  @ApiOperation({
+    summary: "Список организаций (ZID). Поддержка q/limit/offset; без limit — до 2000 строк.",
+  })
+  @ApiQuery({ name: "q", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({ name: "offset", required: false })
+  @ApiQuery({
+    name: "total",
+    required: false,
+    description: "Если 1 — ответ { items, total } вместо массива",
+  })
+  async list(
+    @Req() req: Request,
+    @Query("q") q?: string,
+    @Query("limit") limitRaw?: string,
+    @Query("offset") offsetRaw?: string,
+    @Query("total") totalRaw?: string
+  ) {
     const orgZid = userZid(req);
-    const all = await listOrganizations(await getDb());
-    return orgZid != null ? all.filter((o) => o.zid === orgZid) : all;
+    const limitParsed =
+      limitRaw != null && limitRaw !== "" ? Number(limitRaw) : undefined;
+    const offsetParsed =
+      offsetRaw != null && offsetRaw !== "" ? Number(offsetRaw) : undefined;
+    // Cap unbounded list so the portal cannot pull millions of rows by accident.
+    const limit =
+      limitParsed != null && Number.isFinite(limitParsed)
+        ? limitParsed
+        : 2000;
+    const opts = {
+      q: q?.trim() || undefined,
+      limit,
+      offset:
+        offsetParsed != null && Number.isFinite(offsetParsed)
+          ? offsetParsed
+          : undefined,
+      zid: orgZid ?? undefined,
+    };
+    const db = await getDb();
+    const items = await listOrganizations(db, opts);
+    if (totalRaw === "1" || totalRaw === "true") {
+      const total = await countOrganizations(db, {
+        q: opts.q,
+        zid: opts.zid,
+      });
+      return { items, total };
+    }
+    return items;
   }
 
   @Post()

@@ -7,7 +7,10 @@ import type { OkoDb } from "./oko-db.js";
 
 export type BackgroundJobStatus = "queued" | "running" | "succeeded" | "failed";
 
-export type BackgroundJobType = "create_report_package";
+export type BackgroundJobType =
+  | "create_report_package"
+  | "construct_packages"
+  | "delete_packages";
 
 export interface BackgroundJobDto {
   id: string;
@@ -189,6 +192,61 @@ async function executeJob(db: OkoDb, job: BackgroundJobDto): Promise<void> {
       },
     });
     await finishJobSuccess(db, job.id, result);
+    return;
+  }
+  if (job.type === "construct_packages") {
+    const { constructPackages } = await import("./packages.js");
+    const result = await constructPackages(db, job.payload as never, {
+      onProgress: async (progress, message) => {
+        await updateBackgroundJobProgress(db, job.id, progress, message);
+      },
+    });
+    await finishJobSuccess(db, job.id, result);
+    return;
+  }
+  if (job.type === "delete_packages") {
+    const raw = Array.isArray(job.payload.items) ? job.payload.items : [];
+    const items = raw
+      .map((item: { zid?: unknown; eid?: unknown }) => ({
+        zid: Number(item?.zid),
+        eid: Number(item?.eid),
+      }))
+      .filter(
+        (item: { zid: number; eid: number }) =>
+          Number.isFinite(item.zid) &&
+          Number.isFinite(item.eid) &&
+          item.zid > 0 &&
+          item.eid > 0
+      );
+    if (!items.length) throw new Error("delete_packages: items required");
+    const { deleteReportPackagesBulk } = await import("./packages.js");
+    const CHUNK = 200;
+    let deleted = 0;
+    let failed = 0;
+    let deletedInstances = 0;
+    const results: unknown[] = [];
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const chunk = items.slice(i, i + CHUNK);
+      const part = await deleteReportPackagesBulk(db, chunk);
+      deleted += part.deleted;
+      failed += part.failed;
+      deletedInstances += part.deletedInstances;
+      results.push(...part.results);
+      const done = Math.min(i + chunk.length, items.length);
+      const pct = Math.min(99, Math.round((done / items.length) * 100));
+      await updateBackgroundJobProgress(
+        db,
+        job.id,
+        pct,
+        `Удаление комплектов: ${done}/${items.length}`
+      );
+    }
+    await finishJobSuccess(db, job.id, {
+      deleted,
+      failed,
+      deletedInstances,
+      results,
+    });
     return;
   }
   throw new Error(`Unknown job type: ${job.type}`);

@@ -103,10 +103,12 @@ export class WorkContextDto {
 
 export class PackageZidEidDto {
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
   zid!: number;
 
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
   eid!: number;
 }

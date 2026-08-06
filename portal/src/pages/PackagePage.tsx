@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   canMutateData,
@@ -15,8 +15,10 @@ import {
   StatusBanner,
   TabBar,
 } from "../components/ui";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import {
   constructPackages,
+  constructPackagesAsync,
   createPeriod,
   createPeriodsBulk,
   createReportPackageAsync,
@@ -24,7 +26,8 @@ import {
   reopenPeriod,
   distributePackagesToChildren,
   deleteReportPackage,
-  deleteReportPackagesBulk,
+  deleteReportPackagesBulkAsync,
+  fetchPackageCampaigns,
   fetchPackageWorkspace,
   fetchPackageWorkspaceDetail,
   listOrganizations,
@@ -206,6 +209,7 @@ export function PackagePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<PackageWorkspaceRow[]>([]);
+  const [campaigns, setCampaigns] = useState<PeriodCampaign[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [zid, setZid] = useState<number | "">("");
   const [eid, setEid] = useState<number | "">("");
@@ -215,6 +219,7 @@ export function PackagePage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [tab, setTab] = useState<WorkspaceTab>("period");
+  const packageTableScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [listSearch, setListSearch] = useState("");
   const [filterKind, setFilterKind] = useState("");
@@ -272,46 +277,10 @@ export function PackagePage() {
     return orgs;
   }, [orgs, orgZid]);
 
-  /** Periods (campaigns) — top level of the workspace. */
+  /** Periods (campaigns) — from server aggregates (not derived from all package rows). */
   const allCampaigns = useMemo(() => {
-    const map = new Map<string, PeriodCampaign>();
-    for (const r of rows) {
-      const key = campaignKeyOf(r);
-      const prev = map.get(key);
-      const closable = r.periodStatus !== "closed" && r.bpStatus === "completed";
-      const blockedClose =
-        r.periodStatus !== "closed" && r.bpStatus !== "completed";
-      if (prev) {
-        prev.orgCount += 1;
-        if (r.filled === 0) prev.withoutForms += 1;
-        if (r.periodStatus === "closed") prev.closedCount += 1;
-        else prev.openCount += 1;
-        if (closable) prev.closableCount += 1;
-        if (blockedClose) prev.blockedCloseCount += 1;
-      } else {
-        map.set(key, {
-          key,
-          periodName: r.periodName,
-          packageKind: r.packageKind,
-          periodStart: r.periodStart,
-          periodEnd: r.periodEnd,
-          orgCount: 1,
-          withoutForms: r.filled === 0 ? 1 : 0,
-          openCount: r.periodStatus === "closed" ? 0 : 1,
-          closedCount: r.periodStatus === "closed" ? 1 : 0,
-          status: r.periodStatus === "closed" ? "closed" : "open",
-          closableCount: closable ? 1 : 0,
-          blockedCloseCount: blockedClose ? 1 : 0,
-        });
-      }
-    }
-    for (const c of map.values()) {
-      if (c.openCount > 0 && c.closedCount > 0) c.status = "mixed";
-      else if (c.closedCount > 0 && c.openCount === 0) c.status = "closed";
-      else c.status = "open";
-    }
     const q = listSearch.trim().toLowerCase();
-    return [...map.values()]
+    return campaigns
       .filter((c) => {
         if (filterKind && c.packageKind !== filterKind) return false;
         if (filterPeriod === "open" && c.status === "closed") return false;
@@ -328,7 +297,7 @@ export function PackagePage() {
         if (sa !== sb) return sb.localeCompare(sa);
         return b.periodName.localeCompare(a.periodName, "ru");
       });
-  }, [rows, listSearch, filterKind, filterPeriod]);
+  }, [campaigns, listSearch, filterKind, filterPeriod]);
 
   const selectedCampaign = useMemo(
     () => allCampaigns.find((c) => c.key === selectedCampaignKey) ?? null,
@@ -358,29 +327,62 @@ export function PackagePage() {
 
   const periodLocked = selectedCampaign?.status === "closed";
 
-  /** Organizations from directory that are not yet in this period. */
-  const orgsMissingFromCampaign = useMemo(() => {
-    if (!selectedCampaign) return [];
-    const inPeriod = new Set(
-      rows
-        .filter((r) => campaignKeyOf(r) === selectedCampaign.key)
-        .map((r) => r.zid)
-    );
-    const source =
-      orgZid != null ? orgs.filter((o) => o.zid === orgZid) : orgs;
-    const q = addOrgSearch.trim().toLowerCase();
-    return source
-      .filter((o) => !inPeriod.has(o.zid))
-      .filter((o) => {
-        if (!q) return true;
-        return (
-          o.name.toLowerCase().includes(q) ||
-          (o.code ?? "").toLowerCase().includes(q) ||
-          String(o.zid).includes(q)
-        );
+  /** Directory search for orgs not yet in this period (server-side q/limit). */
+  const [orgsMissingFromCampaign, setOrgsMissingFromCampaign] = useState<
+    Organization[]
+  >([]);
+
+  useEffect(() => {
+    if (!selectedCampaign || periodLocked) {
+      setOrgsMissingFromCampaign([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void listOrganizations({
+        q: addOrgSearch.trim() || undefined,
+        limit: 150,
       })
-      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  }, [selectedCampaign, rows, orgs, orgZid, addOrgSearch]);
+        .then((list) => {
+          if (cancelled) return;
+          const inPeriod = new Set(rows.map((r) => r.zid));
+          setOrgsMissingFromCampaign(
+            list
+              .filter((o) => !inPeriod.has(o.zid))
+              .filter((o) => (orgZid == null ? true : o.zid === orgZid))
+              .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setOrgsMissingFromCampaign([]);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    selectedCampaign,
+    periodLocked,
+    addOrgSearch,
+    rows,
+    orgZid,
+  ]);
+
+  const PACKAGE_ROW_HEIGHT = 56;
+  const packageVirt = useVirtualRows(
+    packageTableScrollRef,
+    campaignPackages.length,
+    PACKAGE_ROW_HEIGHT,
+    { threshold: 40 }
+  );
+  const visibleCampaignPackages = useMemo(
+    () =>
+      packageVirt.enabled
+        ? campaignPackages.slice(packageVirt.startIndex, packageVirt.endIndex)
+        : campaignPackages,
+    [campaignPackages, packageVirt.enabled, packageVirt.startIndex, packageVirt.endIndex]
+  );
 
   const selectCampaign = useCallback((key: string) => {
     setSelectedCampaignKey(key);
@@ -440,15 +442,40 @@ export function PackagePage() {
     [setSearchParams]
   );
 
-  const loadList = useCallback(async () => {
-    const [list, orgList] = await Promise.all([
-      fetchPackageWorkspace(orgZid ?? undefined),
-      listOrganizations(),
-    ]);
-    setRows(list);
-    setOrgs(orgList);
+  const loadCampaigns = useCallback(async () => {
+    const list = await fetchPackageCampaigns({
+      zid: orgZid ?? undefined,
+    });
+    setCampaigns(list);
     return list;
   }, [orgZid]);
+
+  const loadCampaignPackages = useCallback(
+    async (campaign: PeriodCampaign | null) => {
+      if (!campaign) {
+        setRows([]);
+        return [] as PackageWorkspaceRow[];
+      }
+      const list = await fetchPackageWorkspace({
+        zid: orgZid ?? undefined,
+        periodName: campaign.periodName,
+        packageKind: campaign.packageKind,
+      });
+      setRows(list);
+      return list;
+    },
+    [orgZid]
+  );
+
+  const loadList = useCallback(async () => {
+    const [campList, orgList] = await Promise.all([
+      loadCampaigns(),
+      // Cap directory load — pickers use search; avoid pulling the full tree.
+      listOrganizations({ limit: orgZid != null ? 50 : 500 }),
+    ]);
+    setOrgs(orgList);
+    return campList;
+  }, [loadCampaigns, orgZid]);
 
   const loadDetail = useCallback(
     async (nextZid: number, nextEid: number, kind?: PackageKind) => {
@@ -488,7 +515,7 @@ export function PackagePage() {
     (async () => {
       setLoading(true);
       try {
-        const list = await loadList();
+        const campList = await loadList();
         const paramZid = Number(searchParams.get("zid"));
         const paramEid = Number(searchParams.get("eid"));
         const hasUrlPackage =
@@ -496,20 +523,47 @@ export function PackagePage() {
           paramZid > 0 &&
           Number.isFinite(paramEid) &&
           paramEid > 0;
-        const fromUrl = hasUrlPackage
-          ? list.find((r) => r.zid === paramZid && r.eid === paramEid)
-          : undefined;
-        if (fromUrl) {
-          setSelectedCampaignKey(campaignKeyOf(fromUrl));
-          setZid(fromUrl.zid);
-          setEid(fromUrl.eid);
-          syncUrl(fromUrl.zid, fromUrl.eid);
-          await saveWorkContext({ zid: fromUrl.zid, eid: fromUrl.eid });
-          await loadDetail(fromUrl.zid, fromUrl.eid, fromUrl.packageKind);
-          setTab("overview");
-        } else if (list[0]) {
-          // Period-first: open campaign list, do not pin a single org package.
-          setSelectedCampaignKey(campaignKeyOf(list[0]));
+
+        if (hasUrlPackage) {
+          const detailRow = await fetchPackageWorkspaceDetail(
+            paramZid,
+            paramEid
+          ).catch(() => null);
+          if (detailRow?.row) {
+            const key = campaignKeyOf(detailRow.row);
+            setSelectedCampaignKey(key);
+            setZid(detailRow.row.zid);
+            setEid(detailRow.row.eid);
+            syncUrl(detailRow.row.zid, detailRow.row.eid);
+            await saveWorkContext({
+              zid: detailRow.row.zid,
+              eid: detailRow.row.eid,
+            });
+            setDetail(detailRow);
+            const camp =
+              campList.find((c) => c.key === key) ??
+              ({
+                key,
+                periodName: detailRow.row.periodName,
+                packageKind: detailRow.row.packageKind,
+                periodStart: detailRow.row.periodStart,
+                periodEnd: detailRow.row.periodEnd,
+                orgCount: 1,
+                withoutForms: 0,
+                openCount: 1,
+                closedCount: 0,
+                status: "open" as const,
+                closableCount: 0,
+                blockedCloseCount: 0,
+              } satisfies PeriodCampaign);
+            await loadCampaignPackages(camp);
+            setTab("overview");
+            return;
+          }
+        }
+
+        if (campList[0]) {
+          setSelectedCampaignKey(campList[0].key);
           setZid("");
           setEid("");
           setDetail(null);
@@ -527,6 +581,21 @@ export function PackagePage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load packages only for the selected campaign (not all 1000 orgs at once).
+  useEffect(() => {
+    if (!selectedCampaignKey || loading) return;
+    const camp =
+      campaigns.find((c) => c.key === selectedCampaignKey) ??
+      allCampaigns.find((c) => c.key === selectedCampaignKey) ??
+      null;
+    if (!camp) return;
+    void loadCampaignPackages(camp).catch((e) => {
+      setStatus(
+        e instanceof Error ? e.message : "Не удалось загрузить комплекты периода"
+      );
+    });
+  }, [selectedCampaignKey, campaigns, loading, loadCampaignPackages, allCampaigns]);
 
   // Resume in-flight create job after reload (same tab session).
   useEffect(() => {
@@ -659,7 +728,12 @@ export function PackagePage() {
 
   const refreshAll = async () => {
     try {
-      const list = await loadList();
+      await loadCampaigns();
+      const camp =
+        campaigns.find((c) => c.key === selectedCampaignKey) ??
+        allCampaigns.find((c) => c.key === selectedCampaignKey) ??
+        null;
+      const list = await loadCampaignPackages(camp);
       if (typeof zid === "number" && typeof eid === "number") {
         const hit = list.find((r) => r.zid === zid && r.eid === eid);
         await loadDetail(zid, eid, hit?.packageKind);
@@ -1107,27 +1181,39 @@ export function PackagePage() {
         return;
       }
 
-      const res = await constructPackages({
-        mode: fillTargets.length > 1 ? "bulk" : "single",
-        targets: fillTargets.map((r) => ({ zid: r.zid })),
-        period: {
-          eid: fillTargets.length === 1 ? fillTargets[0].eid : undefined,
-          name: selectedCampaign.periodName,
-          periodStart: selectedCampaign.periodStart ?? undefined,
-          periodEnd: selectedCampaign.periodEnd ?? undefined,
-          packageKind: selectedCampaign.packageKind,
-          reuseExisting: true,
+      const res = await constructPackagesAsync(
+        {
+          mode: fillTargets.length > 1 ? "bulk" : "single",
+          targets: fillTargets.map((r) => ({ zid: r.zid })),
+          period: {
+            eid: fillTargets.length === 1 ? fillTargets[0].eid : undefined,
+            name: selectedCampaign.periodName,
+            periodStart: selectedCampaign.periodStart ?? undefined,
+            periodEnd: selectedCampaign.periodEnd ?? undefined,
+            packageKind: selectedCampaign.packageKind,
+            reuseExisting: true,
+          },
+          forms: {
+            mode: opts.formsMode,
+            formIds: opts.formsMode === "selected" ? opts.formIds : undefined,
+          },
+          options: {
+            createInstances: true,
+            allowCreatePeriod: false,
+            continueOnError: true,
+          },
         },
-        forms: {
-          mode: opts.formsMode,
-          formIds: opts.formsMode === "selected" ? opts.formIds : undefined,
-        },
-        options: {
-          createInstances: true,
-          allowCreatePeriod: false,
-          continueOnError: true,
-        },
-      });
+        {
+          onProgress: (job: BackgroundJobStatusDto) => {
+            const msg = job.message || job.status;
+            setStatus(
+              job.status === "queued" || job.status === "running"
+                ? `Заведение форм… ${job.progress}% — ${msg}`
+                : msg
+            );
+          },
+        }
+      );
       const ok = res.rows.filter((r) => r.status === "created").length;
       setStatus(
         `Формы заведены: комплектов ${ok}/${res.summary.targets}` +
@@ -1160,17 +1246,21 @@ export function PackagePage() {
     openFillForms([selectedRow]);
   };
 
-  const handleDeletePackage = async () => {
-    if (typeof zid !== "number" || typeof eid !== "number" || !selectedRow) return;
-    const filled = completeness?.filled ?? selectedRow.filled;
+  const handleDeletePackage = async (target?: PackageWorkspaceRow) => {
+    const row = target ?? selectedRow;
+    if (!row) return;
+    const targetZid = row.zid;
+    const targetEid = row.eid;
+    const filled =
+      target && target !== selectedRow
+        ? row.filled
+        : (completeness?.filled ?? row.filled);
     if (
       !confirm(
-        `Удалить комплект «${selectedRow.organizationName} — ${selectedRow.periodName}»?\n\n` +
+        `Удалить комплект «${row.organizationName} — ${row.periodName}»?\n\n` +
           (filled > 0 ? `Будут удалены все формы (${filled}).\n` : "Форм нет.\n") +
-          "Также будут удалены БП, набор форм, проверки, своды, inbox, переносы и прочие связи комплекта.\n" +
-          (periodClosed || selectedRow.bpStatus === "completed"
-            ? "Комплект закрыт/завершён — удаление всё равно выполнится.\n"
-            : "") +
+          "Комплект исчезнет из списка периода (не останется пустой строки).\n" +
+          "БП, проверки, своды и обмен будут сняты.\n" +
           "Действие необратимо."
       )
     ) {
@@ -1179,23 +1269,26 @@ export function PackagePage() {
     setBusy(true);
     setStatus("");
     try {
-      const result = await deleteReportPackage(zid, eid);
+      const result = await deleteReportPackage(targetZid, targetEid);
       setCheckedKeys((prev) => {
         const next = new Set(prev);
-        next.delete(rowKey({ zid, eid }));
+        next.delete(rowKey({ zid: targetZid, eid: targetEid }));
         return next;
       });
-      setDetail(null);
-      const list = await loadList();
-      const next = list.find((r) => r.zid === zid) ?? list[0];
-      if (next) {
-        await selectPackage(next.zid, next.eid, next.packageKind);
-      } else {
+      if (zid === targetZid && eid === targetEid) {
         setZid("");
         setEid("");
-        await saveWorkContext({ zid: typeof zid === "number" ? zid : null, eid: null });
+        setDetail(null);
+        setTab("period");
       }
-      setStatus(`Комплект удалён: форм ${result.deletedInstances}`);
+      await loadList();
+      setStatus(
+        `Комплект удалён` +
+          (result.deletedInstances
+            ? ` (форм: ${result.deletedInstances})`
+            : "") +
+          "."
+      );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка удаления комплекта");
     } finally {
@@ -1332,9 +1425,12 @@ export function PackagePage() {
           (filledSum > 0
             ? `Будут удалены формы (всего заведено: ${filledSum}).\n`
             : "") +
-          "Также будут удалены БП и все связанные данные каждого комплекта.\n" +
+          "Комплекты исчезнут из списка периода (пустых строк не останется).\n" +
           (closedOrDone > 0
-            ? `Среди них закрытых/завершённых: ${closedOrDone} — они тоже будут удалены.\n`
+            ? `Среди них закрытых/завершённых: ${closedOrDone}.\n`
+            : "") +
+          (toDelete.length > 200
+            ? `Большая выборка — удаление пойдёт пакетами (~${Math.ceil(toDelete.length / 100)} запросов).\n`
             : "") +
           "Действие необратимо."
       )
@@ -1342,37 +1438,48 @@ export function PackagePage() {
       return;
     }
     setBusy(true);
-    setStatus("");
+    setStatus(
+      toDelete.length > 20
+        ? `Удаление комплектов: 0/${toDelete.length}…`
+        : ""
+    );
     try {
-      const result = await deleteReportPackagesBulk(
-        toDelete.map((r) => ({ zid: r.zid, eid: r.eid }))
-      );
-      const deletedKeys = new Set(
-        result.results.filter((r) => r.ok).map((r) => `${r.zid}:${r.eid}`)
+      const result = await deleteReportPackagesBulkAsync(
+        toDelete.map((r) => ({ zid: r.zid, eid: r.eid })),
+        {
+          onProgress: (job) => {
+            const msg = job.message || job.status;
+            if (job.status === "queued" || job.status === "running") {
+              setStatus(`Удаление… ${job.progress}% — ${msg}`);
+            }
+          },
+        }
       );
       setCheckedKeys((prev) => {
         const next = new Set(prev);
-        for (const k of deletedKeys) next.delete(k);
+        for (const r of result.results.filter((x) => x.ok)) {
+          next.delete(`${r.zid}:${r.eid}`);
+        }
         return next;
       });
-      const list = await loadList();
-      const currentKey =
-        typeof zid === "number" && typeof eid === "number" ? `${zid}:${eid}` : "";
-      if (currentKey && deletedKeys.has(currentKey)) {
+      await loadCampaigns();
+      const camp =
+        campaigns.find((c) => c.key === selectedCampaignKey) ??
+        allCampaigns.find((c) => c.key === selectedCampaignKey) ??
+        null;
+      const list = await loadCampaignPackages(camp);
+      const stillHere =
+        typeof zid === "number" &&
+        typeof eid === "number" &&
+        list.some((r) => r.zid === zid && r.eid === eid);
+      if (!stillHere) {
+        setZid("");
+        setEid("");
         setDetail(null);
-        const next = list[0];
-        if (next) {
-          await selectPackage(next.zid, next.eid, next.packageKind);
-        } else {
-          setZid("");
-          setEid("");
-          await saveWorkContext({
-            zid: orgZid ?? (typeof zid === "number" ? zid : null),
-            eid: null,
-          });
-        }
+        setTab("period");
       } else if (typeof zid === "number" && typeof eid === "number") {
-        await loadDetail(zid, eid, selectedRow?.packageKind);
+        const hit = list.find((r) => r.zid === zid && r.eid === eid);
+        if (hit) await loadDetail(zid, eid, hit.packageKind);
       }
       const failHint =
         result.failed > 0
@@ -1384,7 +1491,9 @@ export function PackagePage() {
               .join("") || "")
           : "";
       setStatus(
-        `Удалено комплектов: ${result.deleted} (форм ${result.deletedInstances})${failHint}`
+        `Удалено комплектов: ${result.deleted}` +
+          (result.deletedInstances ? ` (форм ${result.deletedInstances})` : "") +
+          failHint
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка массового удаления");
@@ -2187,7 +2296,15 @@ export function PackagePage() {
                 </div>
               )}
 
-              <div className="table-wrap">
+              <div
+                className="table-wrap"
+                ref={packageTableScrollRef}
+                style={
+                  packageVirt.enabled
+                    ? { maxHeight: "min(70vh, 720px)", overflow: "auto" }
+                    : undefined
+                }
+              >
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -2200,14 +2317,26 @@ export function PackagePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {campaignPackages.map((r) => {
+                    {packageVirt.enabled && packageVirt.offsetTop > 0 ? (
+                      <tr aria-hidden>
+                        <td
+                          colSpan={canBulkSelect ? 6 : 5}
+                          style={{
+                            height: packageVirt.offsetTop,
+                            padding: 0,
+                            border: "none",
+                          }}
+                        />
+                      </tr>
+                    ) : null}
+                    {visibleCampaignPackages.map((r) => {
                       const key = rowKey(r);
                       const closed = r.periodStatus === "closed";
                       const canClose = !closed && r.bpStatus === "completed";
                       const canCheck =
                         canBulkSelect && (orgZid == null || r.zid === orgZid);
                       return (
-                        <tr key={key}>
+                        <tr key={key} style={{ height: PACKAGE_ROW_HEIGHT }}>
                           {canBulkSelect ? (
                             <td>
                               <input
@@ -2292,11 +2421,34 @@ export function PackagePage() {
                                   Переоткрыть
                                 </button>
                               )}
+                              {canMutate &&
+                                (admin || (orgZid != null && r.zid === orgZid)) && (
+                                <button
+                                  type="button"
+                                  className="btn btn-danger-outline"
+                                  disabled={busy}
+                                  onClick={() => void handleDeletePackage(r)}
+                                >
+                                  Удалить
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
                       );
                     })}
+                    {packageVirt.enabled && packageVirt.offsetBottom > 0 ? (
+                      <tr aria-hidden>
+                        <td
+                          colSpan={canBulkSelect ? 6 : 5}
+                          style={{
+                            height: packageVirt.offsetBottom,
+                            padding: 0,
+                            border: "none",
+                          }}
+                        />
+                      </tr>
+                    ) : null}
                     {!campaignPackages.length && (
                       <tr>
                         <td colSpan={canBulkSelect ? 6 : 5}>

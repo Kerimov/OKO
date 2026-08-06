@@ -129,12 +129,39 @@ async function ensureLocalDefaults(): Promise<void> {
   localStorage.setItem(LOCAL_WORK_CTX_KEY, JSON.stringify({ zid: 1, eid: 1 }));
 }
 
-export async function listOrganizations(): Promise<Organization[]> {
+export type ListOrganizationsOpts = {
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listOrganizations(
+  opts?: ListOrganizationsOpts
+): Promise<Organization[]> {
   if (isBackendMode()) {
-    return apiFetch<Organization[]>("/api/organizations");
+    const qs = new URLSearchParams();
+    if (opts?.q?.trim()) qs.set("q", opts.q.trim());
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.offset != null) qs.set("offset", String(opts.offset));
+    // Default cap matches server (2000) unless caller asks for more explicitly.
+    if (opts?.limit == null) qs.set("limit", "2000");
+    const q = qs.toString();
+    return apiFetch<Organization[]>(`/api/organizations${q ? `?${q}` : ""}`);
   }
   await ensureLocalDefaults();
-  return readLocalOrgs();
+  let orgs = readLocalOrgs();
+  const q = opts?.q?.trim().toLowerCase();
+  if (q) {
+    orgs = orgs.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        (o.code ?? "").toLowerCase().includes(q) ||
+        String(o.zid) === q
+    );
+  }
+  const offset = opts?.offset ?? 0;
+  const limit = opts?.limit ?? orgs.length;
+  return orgs.slice(offset, offset + limit);
 }
 
 export async function createOrganization(input: {
@@ -443,13 +470,119 @@ export async function fetchPackagesDashboard(): Promise<PackageDashboardRow[]> {
   return apiFetch<PackageDashboardRow[]>("/api/packages/dashboard");
 }
 
-export async function fetchPackageWorkspace(zid?: number): Promise<
-  import("./types").PackageWorkspaceRow[]
+export type FetchPackageWorkspaceOpts = {
+  zid?: number;
+  periodName?: string;
+  packageKind?: "OKO" | "BALANCE";
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchPackageCampaigns(opts?: {
+  zid?: number;
+  packageKind?: "OKO" | "BALANCE";
+  q?: string;
+}): Promise<
+  Array<{
+    key: string;
+    periodName: string;
+    packageKind: "OKO" | "BALANCE";
+    periodStart: string | null;
+    periodEnd: string | null;
+    orgCount: number;
+    withoutForms: number;
+    openCount: number;
+    closedCount: number;
+    status: "open" | "closed" | "mixed";
+    closableCount: number;
+    blockedCloseCount: number;
+  }>
 > {
-  if (isBackendMode()) {
-    const q = zid != null ? `?zid=${zid}` : "";
-    return apiFetch(`/api/packages/workspace${q}`);
+  if (!isBackendMode()) {
+    const rows = await fetchPackageWorkspace(
+      opts?.zid != null ? { zid: opts.zid } : undefined
+    );
+    // Local fallback: derive from full workspace (small datasets only).
+    const byKey = new Map<
+      string,
+      {
+        key: string;
+        periodName: string;
+        packageKind: "OKO" | "BALANCE";
+        periodStart: string | null;
+        periodEnd: string | null;
+        orgCount: number;
+        withoutForms: number;
+        openCount: number;
+        closedCount: number;
+        status: "open" | "closed" | "mixed";
+        closableCount: number;
+        blockedCloseCount: number;
+      }
+    >();
+    for (const r of rows) {
+      if (opts?.packageKind && r.packageKind !== opts.packageKind) continue;
+      const key = `${r.periodName}||${r.packageKind}`;
+      const prev = byKey.get(key);
+      const closed = r.periodStatus === "closed";
+      const closable = !closed && r.bpStatus === "completed";
+      if (prev) {
+        prev.orgCount += 1;
+        if (r.filled === 0) prev.withoutForms += 1;
+        if (closed) prev.closedCount += 1;
+        else prev.openCount += 1;
+        if (closable) prev.closableCount += 1;
+        else if (!closed) prev.blockedCloseCount += 1;
+      } else {
+        byKey.set(key, {
+          key,
+          periodName: r.periodName,
+          packageKind: r.packageKind,
+          periodStart: r.periodStart,
+          periodEnd: r.periodEnd,
+          orgCount: 1,
+          withoutForms: r.filled === 0 ? 1 : 0,
+          openCount: closed ? 0 : 1,
+          closedCount: closed ? 1 : 0,
+          status: closed ? "closed" : "open",
+          closableCount: closable ? 1 : 0,
+          blockedCloseCount: !closed && !closable ? 1 : 0,
+        });
+      }
+    }
+    for (const c of byKey.values()) {
+      if (c.openCount > 0 && c.closedCount > 0) c.status = "mixed";
+      else if (c.closedCount > 0 && c.openCount === 0) c.status = "closed";
+      else c.status = "open";
+    }
+    return [...byKey.values()];
   }
+  const qs = new URLSearchParams();
+  if (opts?.zid != null) qs.set("zid", String(opts.zid));
+  if (opts?.packageKind) qs.set("packageKind", opts.packageKind);
+  if (opts?.q?.trim()) qs.set("q", opts.q.trim());
+  const q = qs.toString();
+  return apiFetch(`/api/packages/workspace/campaigns${q ? `?${q}` : ""}`);
+}
+
+export async function fetchPackageWorkspace(
+  opts?: number | FetchPackageWorkspaceOpts
+): Promise<import("./types").PackageWorkspaceRow[]> {
+  const normalized: FetchPackageWorkspaceOpts =
+    typeof opts === "number" ? { zid: opts } : opts ?? {};
+  if (isBackendMode()) {
+    const qs = new URLSearchParams();
+    if (normalized.zid != null) qs.set("zid", String(normalized.zid));
+    if (normalized.periodName) qs.set("periodName", normalized.periodName);
+    if (normalized.packageKind) qs.set("packageKind", normalized.packageKind);
+    if (normalized.q?.trim()) qs.set("q", normalized.q.trim());
+    if (normalized.limit != null) qs.set("limit", String(normalized.limit));
+    if (normalized.offset != null) qs.set("offset", String(normalized.offset));
+    const q = qs.toString();
+    return apiFetch(`/api/packages/workspace${q ? `?${q}` : ""}`);
+  }
+  const zid = normalized.zid;
   // Local fallback: synthesize from orgs + periods + completeness
   const orgs = await listOrganizations();
   const periods = await listPeriods(zid);
@@ -495,7 +628,26 @@ export async function fetchPackageWorkspace(zid?: number): Promise<
       importVersion: Number(mark?.importVersion ?? 0),
     });
   }
-  return rows;
+  let filtered = rows;
+  if (normalized.periodName) {
+    filtered = filtered.filter((r) => r.periodName === normalized.periodName);
+  }
+  if (normalized.packageKind) {
+    filtered = filtered.filter((r) => r.packageKind === normalized.packageKind);
+  }
+  if (normalized.q?.trim()) {
+    const qq = normalized.q.trim().toLowerCase();
+    filtered = filtered.filter(
+      (r) =>
+        r.organizationName.toLowerCase().includes(qq) ||
+        (r.organizationCode ?? "").toLowerCase().includes(qq)
+    );
+  }
+  const offset = normalized.offset ?? 0;
+  if (normalized.limit != null) {
+    filtered = filtered.slice(offset, offset + normalized.limit);
+  }
+  return filtered;
 }
 
 export async function fetchPackageWorkspaceDetail(
@@ -556,6 +708,48 @@ export async function constructPackages(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** Bulk construct via background job (progress org i/N). Sync fallback for offline. */
+export async function constructPackagesAsync(
+  input: import("./types").PackageConstructInput,
+  opts?: {
+    onProgress?: (job: BackgroundJobStatusDto) => void;
+    pollMs?: number;
+  }
+): Promise<import("./types").PackageConstructResult> {
+  if (!isBackendMode()) {
+    throw new Error("Конструктор комплектов доступен только в backend-режиме");
+  }
+  const targets = Array.isArray(input.targets) ? input.targets.length : 0;
+  // Small batches stay sync; large campaigns go through the job worker.
+  if (targets <= 1) {
+    return constructPackages(input);
+  }
+
+  const started = await apiFetch<{ jobId: string; status: string }>(
+    "/api/packages/construct-async",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+  const pollMs = opts?.pollMs ?? 600;
+  for (;;) {
+    const job = await getBackgroundJob(started.jobId);
+    opts?.onProgress?.(job);
+    if (job.status === "succeeded") {
+      const result = job.result as import("./types").PackageConstructResult | null;
+      if (!result || !result.summary) {
+        throw new Error("Job finished without result");
+      }
+      return result;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.errorMessage || job.message || "Ошибка массового создания комплектов");
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
 }
 
 export async function createReportPackage(
@@ -732,32 +926,163 @@ export async function deleteReportPackage(
   const toDelete = summaries.filter((s) => s.zid === zid && s.eid === eid);
   await Promise.all(toDelete.map((s) => deleteInstance(s.instanceId)));
 
-  writeLocalPeriods(periods.filter((p) => !(p.zid === zid && p.eid === eid)));
-
-  const ctx = await loadWorkContext();
-  if (ctx.zid === zid && ctx.eid === eid) {
-    const remaining = readLocalPeriods().filter((p) => p.zid === zid);
-    await saveWorkContext({ zid, eid: remaining[0]?.eid ?? null });
+  const nextPeriods = periods.filter((p) => !(p.zid === zid && p.eid === eid));
+  writeLocalPeriods(nextPeriods);
+  const oldId = period.packageId;
+  if (oldId) {
+    const map = readLocalExchange();
+    delete map[exchangeKeyByPackageId(oldId)];
+    writeLocalExchange(map);
   }
 
   return { deletedInstances: toDelete.length, periodRemoved: true };
 }
 
-export async function deleteReportPackagesBulk(
+/** Matches server BULK_DELETE_MAX; set-based delete handles a full chunk in one transaction. */
+const BULK_DELETE_CHUNK = 500;
+const BULK_DELETE_CONCURRENCY = 2;
+/** Above this — use background job instead of sync HTTP chunks. */
+const BULK_DELETE_ASYNC_THRESHOLD = 50;
+
+function normalizeDeleteItems(
   items: Array<{ zid: number; eid: number }>
+): Array<{ zid: number; eid: number }> {
+  const seen = new Set<string>();
+  const unique: Array<{ zid: number; eid: number }> = [];
+  for (const raw of items) {
+    const zid = Number(raw?.zid);
+    const eid = Number(raw?.eid);
+    if (!Number.isFinite(zid) || !Number.isFinite(eid) || zid <= 0 || eid <= 0) {
+      continue;
+    }
+    const key = `${zid}:${eid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ zid, eid });
+  }
+  return unique;
+}
+
+/** Large bulk delete via background job (progress org i/N). */
+export async function deleteReportPackagesBulkAsync(
+  items: Array<{ zid: number; eid: number }>,
+  opts?: {
+    onProgress?: (job: BackgroundJobStatusDto) => void;
+    pollMs?: number;
+  }
 ): Promise<BulkDeletePackageResult> {
-  if (isBackendMode()) {
-    return apiFetch<BulkDeletePackageResult>("/api/packages/bulk-delete", {
-      method: "POST",
-      body: JSON.stringify({ items }),
+  const unique = normalizeDeleteItems(items);
+  if (!unique.length) {
+    return { deleted: 0, failed: 0, deletedInstances: 0, results: [] };
+  }
+  if (!isBackendMode()) {
+    return deleteReportPackagesBulk(unique, {
+      onProgress: (done, total) =>
+        opts?.onProgress?.({
+          id: "local",
+          type: "delete_packages",
+          status: "running",
+          progress: Math.round((done / total) * 100),
+          message: `Удаление: ${done}/${total}`,
+          payload: {},
+          result: null,
+          errorMessage: null,
+          errorStack: null,
+          createdAt: new Date().toISOString(),
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+        }),
     });
+  }
+  if (unique.length < BULK_DELETE_ASYNC_THRESHOLD) {
+    return deleteReportPackagesBulk(unique, {
+      onProgress: (done, total) =>
+        opts?.onProgress?.({
+          id: "sync",
+          type: "delete_packages",
+          status: "running",
+          progress: Math.round((done / total) * 100),
+          message: `Удаление: ${done}/${total}`,
+          payload: {},
+          result: null,
+          errorMessage: null,
+          errorStack: null,
+          createdAt: new Date().toISOString(),
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+        }),
+    });
+  }
+  const started = await apiFetch<{ jobId: string; status: string }>(
+    "/api/packages/bulk-delete-async",
+    {
+      method: "POST",
+      body: JSON.stringify({ items: unique }),
+    }
+  );
+  const pollMs = opts?.pollMs ?? 600;
+  for (;;) {
+    const job = await getBackgroundJob(started.jobId);
+    opts?.onProgress?.(job);
+    if (job.status === "succeeded") {
+      const result = job.result as BulkDeletePackageResult | null;
+      if (!result || typeof result.deleted !== "number") {
+        throw new Error("Job finished without result");
+      }
+      return result;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.errorMessage || job.message || "Ошибка массового удаления");
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
+export async function deleteReportPackagesBulk(
+  items: Array<{ zid: number; eid: number }>,
+  opts?: { onProgress?: (done: number, total: number) => void }
+): Promise<BulkDeletePackageResult> {
+  const unique = normalizeDeleteItems(items);
+
+  if (isBackendMode()) {
+    const results: BulkDeletePackageResult["results"] = [];
+    let deleted = 0;
+    let failed = 0;
+    let deletedInstances = 0;
+    const chunks: Array<Array<{ zid: number; eid: number }>> = [];
+    for (let i = 0; i < unique.length; i += BULK_DELETE_CHUNK) {
+      chunks.push(unique.slice(i, i + BULK_DELETE_CHUNK));
+    }
+    let completedItems = 0;
+    for (let i = 0; i < chunks.length; i += BULK_DELETE_CONCURRENCY) {
+      const batch = chunks.slice(i, i + BULK_DELETE_CONCURRENCY);
+      const parts = await Promise.all(
+        batch.map((chunk) =>
+          apiFetch<BulkDeletePackageResult>("/api/packages/bulk-delete", {
+            method: "POST",
+            body: JSON.stringify({ items: chunk }),
+          })
+        )
+      );
+      for (let j = 0; j < parts.length; j++) {
+        const part = parts[j]!;
+        deleted += part.deleted;
+        failed += part.failed;
+        deletedInstances += part.deletedInstances;
+        results.push(...part.results);
+        completedItems += batch[j]!.length;
+      }
+      opts?.onProgress?.(Math.min(completedItems, unique.length), unique.length);
+    }
+    return { deleted, failed, deletedInstances, results };
   }
 
   const results: BulkDeletePackageResult["results"] = [];
   let deleted = 0;
   let failed = 0;
   let deletedInstances = 0;
-  for (const item of items) {
+  for (let i = 0; i < unique.length; i++) {
+    const item = unique[i]!;
     try {
       const result = await deleteReportPackage(item.zid, item.eid);
       deleted += 1;
@@ -776,6 +1101,9 @@ export async function deleteReportPackagesBulk(
         ok: false,
         error: e instanceof Error ? e.message : "Ошибка удаления",
       });
+    }
+    if ((i + 1) % BULK_DELETE_CHUNK === 0 || i + 1 === unique.length) {
+      opts?.onProgress?.(i + 1, unique.length);
     }
   }
   return { deleted, failed, deletedInstances, results };

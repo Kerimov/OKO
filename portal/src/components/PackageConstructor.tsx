@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadCatalog } from "../api";
 import {
-  constructPackages,
+  constructPackagesAsync,
   createReportPackageAsync,
   previewPackageConstruct,
 } from "../packagesApi";
@@ -341,7 +341,7 @@ export function PackageConstructor({
         return;
       }
 
-      const res = await constructPackages(buildInput());
+      const res = await constructPackagesAsync(buildInput());
       setResult(res);
       setPreview(res);
       const firstOk = res.rows.find(

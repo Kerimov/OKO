@@ -90,8 +90,76 @@ async function insertCellValuesBulk(db: OkoDb, cells: CellInsertRow[]): Promise<
   }
 }
 
+const HEADER_INSERT_CHUNK = 100;
+
+/** Lazy cells ON by default: create writes headers only; rows hydrate from schema on load.
+ *  Set OKO_LAZY_CELLS=0|false to materialize empty cells at create time. */
 export function isLazyCellsEnabled(): boolean {
-  return process.env.OKO_LAZY_CELLS === "1" || process.env.OKO_LAZY_CELLS === "true";
+  const raw = process.env.OKO_LAZY_CELLS?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
+  return true;
+}
+
+/**
+ * Multi-row INSERT of form_instances headers only (no cells).
+ * Used when lazy cells are enabled so bulk package create stays fast.
+ */
+export async function saveInstanceHeadersBulk(
+  db: OkoDb,
+  instances: OkoFormInstance[]
+): Promise<void> {
+  if (instances.length === 0) return;
+  for (let offset = 0; offset < instances.length; offset += HEADER_INSERT_CHUNK) {
+    const chunk = instances.slice(offset, offset + HEADER_INSERT_CHUNK);
+    const placeholders = chunk
+      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .join(", ");
+    const params: unknown[] = [];
+    for (const inst of chunk) {
+      params.push(
+        inst.instanceId,
+        inst.templateId,
+        inst.zid ?? null,
+        inst.eid ?? null,
+        inst.templateTitle,
+        inst.displayName,
+        inst.meta?.organization ?? "",
+        dateOrNull(inst.meta?.periodStart),
+        dateOrNull(inst.meta?.periodEnd),
+        inst.meta?.unit ?? "тыс.руб.",
+        inst.meta?.enterpriseCode ?? "1@1",
+        JSON.stringify(inst.signatures ?? {}),
+        normalizeInstanceStatus(inst.status),
+        Number(inst.templateSchemaVersion ?? 1),
+        inst.createdAt,
+        inst.updatedAt
+      );
+    }
+    await db
+      .prepare(
+        `INSERT INTO form_instances (
+        instance_id, template_id, zid, eid, template_title, display_name, organization,
+        period_start, period_end, unit, enterprise_code, signatures_json, status,
+        template_schema_version, created_at, updated_at
+      ) VALUES ${placeholders}
+      ON CONFLICT(instance_id) DO UPDATE SET
+        template_id = excluded.template_id,
+        zid = excluded.zid,
+        eid = excluded.eid,
+        template_title = excluded.template_title,
+        display_name = excluded.display_name,
+        organization = excluded.organization,
+        period_start = excluded.period_start,
+        period_end = excluded.period_end,
+        unit = excluded.unit,
+        enterprise_code = excluded.enterprise_code,
+        signatures_json = excluded.signatures_json,
+        status = excluded.status,
+        template_schema_version = COALESCE(excluded.template_schema_version, form_instances.template_schema_version),
+        updated_at = excluded.updated_at`
+      )
+      .run(...params);
+  }
 }
 
 export async function saveInstanceCells(
@@ -310,9 +378,22 @@ function headerToInstance(
  * Bulk-load full instances (headers + cells + rash) with a few SQL queries
  * instead of N× (header + cells + rash).
  */
+export type LoadInstancesBulkFilter = {
+  zid?: number;
+  zids?: number[];
+  eid?: number;
+  instanceIds?: string[];
+  /**
+   * Hydrate empty (lazy) instances from schema.
+   * Default: only for a single package (zid+eid) or a small instanceIds list.
+   * Unscoped / multi-org loads skip hydrate to keep portal responsive at scale.
+   */
+  hydrateLazy?: boolean;
+};
+
 export async function loadInstancesBulk(
   db: OkoDb,
-  filter?: { zid?: number; zids?: number[]; eid?: number; instanceIds?: string[] }
+  filter?: LoadInstancesBulkFilter
 ): Promise<Map<string, OkoFormInstance>> {
   let instances = 0;
   return withTiming(
@@ -332,9 +413,18 @@ export async function loadInstancesBulk(
   );
 }
 
+function shouldHydrateLazy(filter?: LoadInstancesBulkFilter): boolean {
+  if (filter?.hydrateLazy === true) return true;
+  if (filter?.hydrateLazy === false) return false;
+  if (filter?.instanceIds?.length) {
+    return filter.instanceIds.length > 0 && filter.instanceIds.length <= 200;
+  }
+  return filter?.zid != null && filter?.eid != null;
+}
+
 async function loadInstancesBulkImpl(
   db: OkoDb,
-  filter?: { zid?: number; zids?: number[]; eid?: number; instanceIds?: string[] }
+  filter?: LoadInstancesBulkFilter
 ): Promise<Map<string, OkoFormInstance>> {
   const out = new Map<string, OkoFormInstance>();
   const conditions: string[] = [];
@@ -414,26 +504,28 @@ async function loadInstancesBulkImpl(
     );
   }
 
-  // Lazy cells: headers without form_cell_values get template rows on read.
-  const needsHydrate: string[] = [];
-  for (const id of ids) {
-    if (!(cellsByInstance.get(id)?.length)) needsHydrate.push(id);
-  }
-  if (needsHydrate.length > 0) {
-    const { loadFormSchemas, buildInitialRowsFromSchema } = await import("./forms.js");
-    const formIds = [
-      ...new Set(
-        needsHydrate
-          .map((id) => out.get(id)?.templateId)
-          .filter((x): x is string => Boolean(x))
-      ),
-    ];
-    const schemas = await loadFormSchemas(db, formIds);
-    for (const id of needsHydrate) {
-      const inst = out.get(id);
-      if (!inst) continue;
-      const schema = schemas.get(inst.templateId);
-      if (schema) inst.rows = buildInitialRowsFromSchema(schema);
+  // Lazy cells: hydrate from schema only on scoped reads (single form / one package).
+  if (shouldHydrateLazy(filter)) {
+    const needsHydrate: string[] = [];
+    for (const id of ids) {
+      if (!(cellsByInstance.get(id)?.length)) needsHydrate.push(id);
+    }
+    if (needsHydrate.length > 0) {
+      const { loadFormSchemas, buildInitialRowsFromSchema } = await import("./forms.js");
+      const formIds = [
+        ...new Set(
+          needsHydrate
+            .map((id) => out.get(id)?.templateId)
+            .filter((x): x is string => Boolean(x))
+        ),
+      ];
+      const schemas = await loadFormSchemas(db, formIds);
+      for (const id of needsHydrate) {
+        const inst = out.get(id);
+        if (!inst) continue;
+        const schema = schemas.get(inst.templateId);
+        if (schema) inst.rows = buildInitialRowsFromSchema(schema);
+      }
     }
   }
 
@@ -556,6 +648,57 @@ export async function deleteInstanceFromDb(db: OkoDb, instanceId: string): Promi
     await tx.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
     await tx.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
   });
+}
+
+/**
+ * Set-based delete of all form data for one or many (zid,eid) packages.
+ * Avoids O(instances × statements) round-trips used by deleteInstanceFromDb.
+ */
+export async function deleteInstancesForPackages(
+  db: OkoDb,
+  pairs: Array<{ zid: number; eid: number }>
+): Promise<number> {
+  if (!pairs.length) return 0;
+
+  let deleted = 0;
+  const PAIR_CHUNK = 80;
+  for (let offset = 0; offset < pairs.length; offset += PAIR_CHUNK) {
+    const chunk = pairs.slice(offset, offset + PAIR_CHUNK);
+    const where = chunk.map(() => "(zid = ? AND eid = ?)").join(" OR ");
+    const params = chunk.flatMap((p) => [p.zid, p.eid]);
+
+    const countRow = (await db
+      .prepare(`SELECT COUNT(*)::int AS c FROM form_instances WHERE ${where}`)
+      .get(...params)) as { c?: number } | undefined;
+    const n = Number(countRow?.c ?? 0);
+    if (n === 0) continue;
+
+    const inSub = `SELECT instance_id FROM form_instances WHERE ${where}`;
+    const runQuiet = async (sql: string) => {
+      try {
+        await db.prepare(sql).run(...params);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (
+          /does not exist|no such table|undefined.?column|column .+ does not exist/i.test(
+            msg
+          )
+        ) {
+          return;
+        }
+        throw e;
+      }
+    };
+
+    await runQuiet(`DELETE FROM form_cell_values WHERE instance_id IN (${inSub})`);
+    await runQuiet(`DELETE FROM cell_comments WHERE instance_id IN (${inSub})`);
+    await runQuiet(`DELETE FROM cell_change_log WHERE instance_id IN (${inSub})`);
+    await runQuiet(`DELETE FROM form_rash_entries WHERE instance_id IN (${inSub})`);
+    await runQuiet(`DELETE FROM portal_instances WHERE instance_id IN (${inSub})`);
+    await db.prepare(`DELETE FROM form_instances WHERE ${where}`).run(...params);
+    deleted += n;
+  }
+  return deleted;
 }
 
 export async function setInstanceStatus(

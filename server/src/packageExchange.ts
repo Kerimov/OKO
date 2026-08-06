@@ -22,30 +22,47 @@ async function pgTableExists(db: OkoDb, name: string): Promise<boolean> {
   return Boolean(row);
 }
 
+/** Process-local: after first successful GUID-keyed check, skip information_schema on hot paths. */
+let guidKeyedCache: boolean | null = null;
+let exchangeIndexEnsured = false;
+
+async function packageExchangeIsGuidKeyed(db: OkoDb): Promise<boolean> {
+  if (guidKeyedCache === true) return true;
+  if (!(await pgTableExists(db, "package_exchange"))) return false;
+  const row = (await db
+    .prepare(
+      `SELECT COUNT(*)::int AS c
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.key_column_usage kcu
+         ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+       WHERE tc.table_schema = 'public'
+         AND tc.table_name = 'package_exchange'
+         AND tc.constraint_type = 'PRIMARY KEY'
+         AND kcu.column_name = 'package_id'`
+    )
+    .get()) as { c?: number } | undefined;
+  const ok = Number(row?.c ?? 0) > 0;
+  if (ok) guidKeyedCache = true;
+  return ok;
+}
+
 /**
  * Exchange marks are keyed by package GUID (periods.package_id), not zid/eid.
  * Recreating a period after delete must not inherit previous export/import history.
  */
 export async function migratePackageExchange(db: OkoDb): Promise<void> {
-  const legacyName = "package_exchange__legacy_zid_eid";
-
-  if (await pgTableExists(db, legacyName)) {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS package_exchange (
-        package_id TEXT PRIMARY KEY,
-        zid INTEGER NOT NULL,
-        eid INTEGER NOT NULL,
-        last_exported_at TEXT,
-        last_imported_at TEXT,
-        import_version INTEGER NOT NULL DEFAULT 0
+  if (await packageExchangeIsGuidKeyed(db)) {
+    if (!exchangeIndexEnsured) {
+      await db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_package_exchange_zid_eid ON package_exchange(zid, eid)`
       );
-    `);
-    await db.exec(
-      `CREATE INDEX IF NOT EXISTS idx_package_exchange_zid_eid ON package_exchange(zid, eid)`
-    );
+      exchangeIndexEnsured = true;
+    }
     return;
   }
 
+  // Legacy or missing table → build GUID-keyed table and swap once.
   await db.exec(`
     CREATE TABLE IF NOT EXISTS package_exchange (
       zid INTEGER NOT NULL,
@@ -61,6 +78,9 @@ export async function migratePackageExchange(db: OkoDb): Promise<void> {
       `ALTER TABLE package_exchange ADD COLUMN import_version INTEGER NOT NULL DEFAULT 0`
     );
   }
+  if (!(await db.columnExists("package_exchange", "package_id"))) {
+    await db.exec(`ALTER TABLE package_exchange ADD COLUMN package_id TEXT`);
+  }
   await db.exec(`
     UPDATE package_exchange
        SET import_version = 1
@@ -68,26 +88,16 @@ export async function migratePackageExchange(db: OkoDb): Promise<void> {
        AND (import_version IS NULL OR import_version = 0)
   `);
 
-  if (!(await db.columnExists("package_exchange", "package_id"))) {
-    await db.exec(`ALTER TABLE package_exchange ADD COLUMN package_id TEXT`);
-  }
-
-  // If package_exchange already has package_id as PK (fresh install after schema change), skip swap.
-  const pkCol = (await db
-    .prepare(
-      `SELECT a.attname AS col
-       FROM pg_index i
-       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-       WHERE i.indrelid = 'package_exchange'::regclass AND i.indisprimary
-       LIMIT 1`
-    )
-    .get()) as { col?: string } | undefined;
-  if (pkCol?.col === "package_id") {
-    await db.exec(
-      `CREATE INDEX IF NOT EXISTS idx_package_exchange_zid_eid ON package_exchange(zid, eid)`
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS package_exchange_guid (
+      package_id TEXT PRIMARY KEY,
+      zid INTEGER NOT NULL,
+      eid INTEGER NOT NULL,
+      last_exported_at TEXT,
+      last_imported_at TEXT,
+      import_version INTEGER NOT NULL DEFAULT 0
     );
-    return;
-  }
+  `);
 
   const legacyRows = (await db
     .prepare(
@@ -103,17 +113,6 @@ export async function migratePackageExchange(db: OkoDb): Promise<void> {
     package_id: string | null;
   }>;
 
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS package_exchange_by_guid (
-      package_id TEXT PRIMARY KEY,
-      zid INTEGER NOT NULL,
-      eid INTEGER NOT NULL,
-      last_exported_at TEXT,
-      last_imported_at TEXT,
-      import_version INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-
   for (const r of legacyRows) {
     let packageId = r.package_id?.trim() || "";
     if (!packageId) {
@@ -125,14 +124,14 @@ export async function migratePackageExchange(db: OkoDb): Promise<void> {
     if (!packageId) continue;
     await db
       .prepare(
-        `INSERT INTO package_exchange_by_guid (
+        `INSERT INTO package_exchange_guid (
            package_id, zid, eid, last_exported_at, last_imported_at, import_version
          ) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(package_id) DO UPDATE SET
-           last_exported_at = COALESCE(EXCLUDED.last_exported_at, package_exchange_by_guid.last_exported_at),
-           last_imported_at = COALESCE(EXCLUDED.last_imported_at, package_exchange_by_guid.last_imported_at),
+           last_exported_at = COALESCE(EXCLUDED.last_exported_at, package_exchange_guid.last_exported_at),
+           last_imported_at = COALESCE(EXCLUDED.last_imported_at, package_exchange_guid.last_imported_at),
            import_version = GREATEST(
-             package_exchange_by_guid.import_version,
+             package_exchange_guid.import_version,
              EXCLUDED.import_version
            )`
       )
@@ -146,11 +145,13 @@ export async function migratePackageExchange(db: OkoDb): Promise<void> {
       );
   }
 
-  await db.exec(`ALTER TABLE package_exchange RENAME TO ${legacyName}`);
-  await db.exec(`ALTER TABLE package_exchange_by_guid RENAME TO package_exchange`);
+  await db.exec(`DROP TABLE IF EXISTS package_exchange`);
+  await db.exec(`ALTER TABLE package_exchange_guid RENAME TO package_exchange`);
   await db.exec(
     `CREATE INDEX IF NOT EXISTS idx_package_exchange_zid_eid ON package_exchange(zid, eid)`
   );
+  guidKeyedCache = true;
+  exchangeIndexEnsured = true;
 }
 
 export async function touchPackageExported(
@@ -200,17 +201,31 @@ export async function deletePackageExchange(
   db: OkoDb,
   opts: { packageId?: string; zid?: number; eid?: number }
 ): Promise<void> {
-  await migratePackageExchange(db);
+  // Hot path: do not re-run schema migration; boot already migrated.
   if (opts.packageId) {
-    await db
-      .prepare(`DELETE FROM package_exchange WHERE package_id = ?`)
-      .run(opts.packageId);
+    try {
+      await db
+        .prepare(`DELETE FROM package_exchange WHERE package_id = ?`)
+        .run(opts.packageId);
+    } catch {
+      await migratePackageExchange(db);
+      await db
+        .prepare(`DELETE FROM package_exchange WHERE package_id = ?`)
+        .run(opts.packageId);
+    }
     return;
   }
   if (opts.zid != null && opts.eid != null) {
-    await db
-      .prepare(`DELETE FROM package_exchange WHERE zid = ? AND eid = ?`)
-      .run(opts.zid, opts.eid);
+    try {
+      await db
+        .prepare(`DELETE FROM package_exchange WHERE zid = ? AND eid = ?`)
+        .run(opts.zid, opts.eid);
+    } catch {
+      await migratePackageExchange(db);
+      await db
+        .prepare(`DELETE FROM package_exchange WHERE zid = ? AND eid = ?`)
+        .run(opts.zid, opts.eid);
+    }
   }
 }
 
@@ -218,7 +233,14 @@ export async function listPackageExchange(
   db: OkoDb,
   opts?: { zid?: number }
 ): Promise<Map<string, PackageExchangeRow>> {
-  await migratePackageExchange(db);
+  // List is hot; migrate only if table/shape is not ready yet.
+  if (guidKeyedCache !== true) {
+    try {
+      await migratePackageExchange(db);
+    } catch {
+      /* optional marks */
+    }
+  }
   let sql = `SELECT package_id, zid, eid, last_exported_at, last_imported_at, import_version
              FROM package_exchange`;
   const params: unknown[] = [];
