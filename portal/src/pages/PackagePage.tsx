@@ -271,6 +271,16 @@ export function PackagePage() {
     filterBlockers,
   ]);
 
+  const listTotals = useMemo(() => {
+    let filled = 0;
+    let submitted = 0;
+    for (const r of filteredRows) {
+      filled += r.filled;
+      submitted += r.submitted;
+    }
+    return { packages: filteredRows.length, filled, submitted };
+  }, [filteredRows]);
+
   const formItems = useMemo(() => {
     const items = completeness?.items ?? [];
     const q = formSearch.trim().toLowerCase();
@@ -566,7 +576,7 @@ export function PackagePage() {
         <div>
           <h1>Комплекты отчётности</h1>
           <p className="tools-hint">
-            Выберите комплект слева — справа статус, формы и действия.
+            Список организаций и периодов слева, карточка и действия справа.
             {auditorRo ? " Режим аудитора: только чтение." : ""}
           </p>
         </div>
@@ -643,6 +653,10 @@ export function PackagePage() {
                 Есть блокеры
               </label>
             </div>
+            <p className="package-workspace-list-totals table-sub">
+              В списке: {listTotals.packages} · заведено {listTotals.filled} · сдано{" "}
+              {listTotals.submitted}
+            </p>
           </div>
 
           <div className="package-workspace-list-scroll">

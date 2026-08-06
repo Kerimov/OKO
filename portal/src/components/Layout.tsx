@@ -166,7 +166,7 @@ export function Layout() {
         items: [
           { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
           { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
-          { to: "/package", label: "Комплекты", isActive: (p) => p === "/package" },
+          { to: "/package", label: "Комплекты", isActive: (p) => p === "/package" || p === "/admin/packages" },
           ...(isBackendMode()
             ? [
                 {
@@ -217,11 +217,6 @@ export function Layout() {
       const adminItems: NavItem[] = [];
       if (techNav) {
         adminItems.push(
-          {
-            to: "/admin/packages",
-            label: "Сводка комплектов",
-            isActive: (p) => p === "/admin/packages",
-          },
           { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" }
         );
       }

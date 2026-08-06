@@ -34,7 +34,7 @@ export function breadcrumbsForPath(
   }
 
   if (parts[0] === "package") {
-    return [home, { label: "Комплект" }];
+    return [home, { label: "Комплекты" }];
   }
 
   if (parts[0] === "bp") {

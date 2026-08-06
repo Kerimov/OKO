@@ -25,7 +25,7 @@
 | `ExcelEditorPage.tsx` | `/admin/excel` | Excel-маппинг |
 | `RashEditorPage.tsx` | `/admin/rash` | Расшифровки |
 | `AggregationEditorPage.tsx` | `/admin/aggregation` | Агрегация |
-| `PackagesDashboardPage.tsx` | `/admin/packages` | Матрица комплектов |
+| `PackagesDashboardPage.tsx` | `/admin/packages` → `/package` | Редирект (сводка влита в Комплекты) |
 | `UsersAdminPage.tsx` | `/admin/users` | Пользователи |
 | `AuditLogPage.tsx` | `/admin/audit` | Журнал аудита |
 

@@ -2863,6 +2863,10 @@ a.btn:hover {
   color: var(--muted);
 }
 
+.package-workspace-list-totals {
+  margin: 0.15rem 0 0;
+}
+
 .package-workspace-list-scroll {
   overflow-y: auto;
   flex: 1;
