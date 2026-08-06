@@ -785,22 +785,17 @@ export function RefsAdminPage() {
                     </div>
                   </div>
                   <div className="refs-detail-actions">
-                    <CollapsibleFilters
-                      title="Фильтр записей"
-                      activeCount={countActiveFilters(itemQ.trim().length > 0)}
-                    >
-                      <label className="refs-sr-only" htmlFor="refs-item-search">
-                        Фильтр записей
-                      </label>
-                      <input
-                        id="refs-item-search"
-                        className="search-input"
-                        placeholder="Фильтр записей…"
-                        aria-label="Фильтр записей"
-                        value={itemQ}
-                        onChange={(e) => setItemQ(e.target.value)}
-                      />
-                    </CollapsibleFilters>
+                    <label className="refs-sr-only" htmlFor="refs-item-search">
+                      Фильтр записей
+                    </label>
+                    <input
+                      id="refs-item-search"
+                      className="search-input refs-detail-search"
+                      placeholder="Фильтр записей…"
+                      aria-label="Фильтр записей"
+                      value={itemQ}
+                      onChange={(e) => setItemQ(e.target.value)}
+                    />
                     {isKontr && (
                       <>
                         <button

@@ -4982,15 +4982,14 @@ a.btn:hover {
 }
 
 .refs-detail-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: start;
 }
 
 .refs-detail-title h2 {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.35rem;
   font-size: 1.15rem;
   color: var(--text);
   word-break: break-word;
@@ -5000,14 +4999,34 @@ a.btn:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.45rem;
+  max-width: 100%;
 }
 
-.refs-detail-actions .search-input {
-  min-width: 10rem;
-  width: 12rem;
-  flex: 1 1 10rem;
-  height: 2.2rem;
+.refs-detail-actions .search-input,
+.refs-detail-search {
+  min-width: 12rem;
+  width: 14rem;
+  flex: 0 1 14rem;
+  margin: 0;
+  height: 2rem;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .refs-detail-header {
+    grid-template-columns: 1fr;
+  }
+
+  .refs-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .refs-detail-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
 }
 
 .refs-table-wrap {

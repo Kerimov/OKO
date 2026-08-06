@@ -242,25 +242,30 @@
 }
 
 .toolbar-breadcrumb {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+  display: none;
 }
 
 .back-link {
-  border: 1px solid #d5e4ef;
-  border-radius: 999px;
-  background: #f3f9ff;
-  padding: 0.24rem 0.6rem;
-  color: var(--gazprom-blue-deep);
-  font-size: 0.76rem;
-  font-weight: 680;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0.45rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--gazprom-blue);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
 }
 
 .back-link.muted {
-  color: #657d92;
-  background: #ffffff;
+  color: var(--muted);
+  background: transparent;
 }
 
 .form-title-block-wide {

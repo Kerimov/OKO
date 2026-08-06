@@ -974,23 +974,10 @@ export function FormPage() {
     <div className="form-page">
       <div className="form-toolbar">
         <div className="form-toolbar-main">
-          <div className="toolbar-breadcrumb">
+          <div className="form-title-block form-title-block-wide">
             <Link to="/my" className="back-link">
               {formsBackLabel}
             </Link>
-            <Link to="/catalog" className="back-link muted">
-              Каталог
-            </Link>
-            {instance.zid != null && instance.eid != null && (
-              <Link
-                to={`/check-explanations?zid=${instance.zid}&eid=${instance.eid}`}
-                className="back-link muted"
-              >
-                Проверки комплекта
-              </Link>
-            )}
-          </div>
-          <div className="form-title-block form-title-block-wide">
             <label className="display-name-label">
               Название сохранённой формы
               <input
@@ -1007,6 +994,14 @@ export function FormPage() {
             </div>
           </div>
           <div className="toolbar-primary-actions">
+            {instance.zid != null && instance.eid != null && (
+              <Link
+                to={`/check-explanations?zid=${instance.zid}&eid=${instance.eid}`}
+                className="btn btn-outline btn-sm"
+              >
+                Проверки комплекта
+              </Link>
+            )}
             <Button variant="secondary" size="sm" onClick={() => void handleReset()}>
               Сбросить
             </Button>
