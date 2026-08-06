@@ -7,7 +7,10 @@ import {
   type CollectionUnitDto,
   type CollectionUnitKind,
 } from "../psdApi";
+import { listOrganizations } from "../packagesApi";
+import { OrgSelect, type IdOrEmpty } from "../components/OrgPeriodSelects";
 import { isBackendMode } from "../storage";
+import type { Organization } from "../types";
 
 function previewComposite(parts: {
   headCode: string;
@@ -32,16 +35,17 @@ export function CollectionUnitsPage() {
   const backend = isBackendMode();
   const canMutate = canMutateData();
   const [units, setUnits] = useState<CollectionUnitDto[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const [zid, setZid] = useState("");
+  const [zid, setZid] = useState<IdOrEmpty>("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [unitKind, setUnitKind] = useState<CollectionUnitKind>("branch");
-  const [parentZid, setParentZid] = useState("");
-  const [headZid, setHeadZid] = useState("");
+  const [parentZid, setParentZid] = useState<IdOrEmpty>("");
+  const [headZid, setHeadZid] = useState<IdOrEmpty>("");
   const [headCode, setHeadCode] = useState("1");
   const [branchCode, setBranchCode] = useState("");
   const [unitCode, setUnitCode] = useState("");
@@ -50,15 +54,19 @@ export function CollectionUnitsPage() {
     if (!backend) return;
     setError("");
     try {
-      setUnits(await listCollectionUnits());
+      const [u, o] = await Promise.all([listCollectionUnits(), listOrganizations()]);
+      setUnits(u);
+      setOrgs(o);
+      if (zid === "" && o[0]) setZid(o[0].zid);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     }
-  }, [backend]);
+  }, [backend, zid]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backend]);
 
   const compositePreview = useMemo(
     () =>
@@ -72,23 +80,41 @@ export function CollectionUnitsPage() {
     [headCode, code, branchCode, unitCode, unitKind]
   );
 
+  const onOrgPick = (next: IdOrEmpty) => {
+    setZid(next);
+    if (typeof next !== "number") return;
+    const fromUnits = units.find((u) => u.zid === next);
+    const fromOrgs = orgs.find((o) => o.zid === next);
+    if (fromUnits) {
+      setName(fromUnits.name);
+      setCode(fromUnits.code ?? "");
+      setUnitKind(fromUnits.unitKind);
+      setParentZid(fromUnits.parentZid ?? "");
+      setHeadZid(fromUnits.headZid ?? "");
+      setBranchCode(fromUnits.branchCode ?? "");
+      setUnitCode(fromUnits.unitCode ?? "");
+    } else if (fromOrgs) {
+      setName(fromOrgs.name);
+      setCode(fromOrgs.code ?? "");
+    }
+  };
+
   const handleUpsert = async () => {
     if (!canMutate) return;
-    const z = Number(zid);
-    if (!Number.isFinite(z) || !name.trim()) {
-      setError("Укажите zid и наименование");
+    if (typeof zid !== "number" || !name.trim()) {
+      setError("Выберите организацию и укажите наименование");
       return;
     }
     setBusy(true);
     setError("");
     setStatus("");
     try {
-      const saved = await upsertCollectionUnit(z, {
+      const saved = await upsertCollectionUnit(zid, {
         name: name.trim(),
         code: code.trim() || null,
-        parentZid: parentZid.trim() ? Number(parentZid) : null,
+        parentZid: typeof parentZid === "number" ? parentZid : null,
         unitKind,
-        headZid: headZid.trim() ? Number(headZid) : null,
+        headZid: typeof headZid === "number" ? headZid : null,
         branchCode: branchCode.trim() || null,
         unitCode: unitCode.trim() || null,
         headCode: headCode.trim() || null,
@@ -103,12 +129,12 @@ export function CollectionUnitsPage() {
   };
 
   const fillFrom = (u: CollectionUnitDto) => {
-    setZid(String(u.zid));
+    setZid(u.zid);
     setName(u.name);
     setCode(u.code ?? "");
     setUnitKind(u.unitKind);
-    setParentZid(u.parentZid != null ? String(u.parentZid) : "");
-    setHeadZid(u.headZid != null ? String(u.headZid) : "");
+    setParentZid(u.parentZid ?? "");
+    setHeadZid(u.headZid ?? "");
     setBranchCode(u.branchCode ?? "");
     setUnitCode(u.unitCode ?? "");
   };
@@ -186,10 +212,14 @@ export function CollectionUnitsPage() {
         <section className="tools-section">
           <h2>Создать / обновить</h2>
           <div className="tools-grid">
-            <label>
-              ZID
-              <input value={zid} onChange={(e) => setZid(e.target.value)} />
-            </label>
+            <OrgSelect
+              label="Организация"
+              value={zid}
+              onChange={onOrgPick}
+              allowEmpty
+              emptyLabel="— выберите —"
+              orgs={orgs}
+            />
             <label>
               Наименование
               <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -209,14 +239,22 @@ export function CollectionUnitsPage() {
               Код компании
               <input value={code} onChange={(e) => setCode(e.target.value)} />
             </label>
-            <label>
-              Parent ZID
-              <input value={parentZid} onChange={(e) => setParentZid(e.target.value)} />
-            </label>
-            <label>
-              Head ZID
-              <input value={headZid} onChange={(e) => setHeadZid(e.target.value)} />
-            </label>
+            <OrgSelect
+              label="Parent"
+              value={parentZid}
+              onChange={setParentZid}
+              allowEmpty
+              emptyLabel="— нет —"
+              orgs={orgs}
+            />
+            <OrgSelect
+              label="Head"
+              value={headZid}
+              onChange={setHeadZid}
+              allowEmpty
+              emptyLabel="— нет —"
+              orgs={orgs}
+            />
             <label>
               Head code
               <input value={headCode} onChange={(e) => setHeadCode(e.target.value)} />

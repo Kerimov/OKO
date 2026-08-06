@@ -14,8 +14,15 @@ import {
   type TransferMapDto,
   type TransferMapKind,
 } from "../psdApi";
+import {
+  OrgPeriodSelects,
+  type IdOrEmpty,
+} from "../components/OrgPeriodSelects";
+import { listOrganizations, listPeriods } from "../packagesApi";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
+import type { Organization, ReportingPeriod } from "../types";
+import { orgOptionLabel, packageKindLabel, periodOptionLabel } from "../uiLabels";
 
 type HubTab = "ports" | "svods" | "transfers" | "minfin";
 
@@ -35,42 +42,59 @@ export function IntegrationsPage() {
     []
   );
 
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [allPeriods, setAllPeriods] = useState<ReportingPeriod[]>([]);
+
   const [svodCode, setSvodCode] = useState("");
   const [svodName, setSvodName] = useState("");
-  const [svodEid, setSvodEid] = useState("");
+  const [svodZid, setSvodZid] = useState<IdOrEmpty>("");
+  const [svodEid, setSvodEid] = useState<IdOrEmpty>("");
+  const [svodPeriods, setSvodPeriods] = useState<ReportingPeriod[]>([]);
 
-  const [srcZid, setSrcZid] = useState("");
-  const [srcEid, setSrcEid] = useState("");
-  const [tgtZid, setTgtZid] = useState("");
-  const [tgtEid, setTgtEid] = useState("");
+  const [srcZid, setSrcZid] = useState<IdOrEmpty>("");
+  const [srcEid, setSrcEid] = useState<IdOrEmpty>("");
+  const [tgtZid, setTgtZid] = useState<IdOrEmpty>("");
+  const [tgtEid, setTgtEid] = useState<IdOrEmpty>("");
   const [xferKind, setXferKind] = useState<TransferMapKind>("period_to_period");
 
-  const [exportZid, setExportZid] = useState("");
-  const [exportEid, setExportEid] = useState("");
+  const [exportZid, setExportZid] = useState<IdOrEmpty>("");
+  const [exportEid, setExportEid] = useState<IdOrEmpty>("");
   const [exportTemplate, setExportTemplate] = useState("");
 
   const load = useCallback(async () => {
     if (!backend) return;
     setError("");
     try {
-      const [st, sv, tr, mf] = await Promise.all([
+      const [st, sv, tr, mf, orgList] = await Promise.all([
         getIntegrationsStatus(),
         listSvods(),
         listTransferMaps(),
         listMinfinMappings(),
+        listOrganizations(),
       ]);
       setStatus(st);
       setSvods(sv);
       setTransfers(tr);
+      setOrgs(orgList);
       const byTpl = new Map<string, number>();
       for (const m of mf) {
         byTpl.set(m.templateName, (byTpl.get(m.templateName) ?? 0) + 1);
       }
-      setMinfinCounts(
-        [...byTpl.entries()]
-          .map(([template, count]) => ({ template, count }))
-          .sort((a, b) => a.template.localeCompare(b.template, "ru"))
+      const counts = [...byTpl.entries()]
+        .map(([template, count]) => ({ template, count }))
+        .sort((a, b) => a.template.localeCompare(b.template, "ru"));
+      setMinfinCounts(counts);
+      setExportTemplate((prev) => prev || counts[0]?.template || "default");
+
+      // Periods for svod create: load for first few orgs as a flat unique list
+      const periodLists = await Promise.all(
+        orgList.slice(0, 40).map((o) => listPeriods(o.zid).catch(() => [] as ReportingPeriod[]))
       );
+      const byEid = new Map<number, ReportingPeriod>();
+      for (const list of periodLists) {
+        for (const p of list) byEid.set(p.eid, p);
+      }
+      setAllPeriods([...byEid.values()].sort((a, b) => b.eid - a.eid));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     }
@@ -91,21 +115,35 @@ export function IntegrationsPage() {
     []
   );
 
+  const onSvodOrgChange = async (raw: string) => {
+    const next = raw === "" ? "" : Number(raw);
+    setSvodZid(next);
+    setSvodEid("");
+    setSvodPeriods([]);
+    if (typeof next === "number") {
+      try {
+        const list = await listPeriods(next);
+        setSvodPeriods(list);
+        if (list[0]) setSvodEid(list[0].eid);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   const handleCreateSvod = async () => {
     if (!canMutate) return;
-    const eid = Number(svodEid);
-    if (!svodCode.trim() || !svodName.trim() || !Number.isFinite(eid)) {
-      setError("Укажите code, name и eid");
+    if (!svodCode.trim() || !svodName.trim() || typeof svodEid !== "number") {
+      setError("Укажите code, name и период");
       return;
     }
     setBusy(true);
     setError("");
     setStatusMsg("");
     try {
-      await createSvod({ eid, code: svodCode.trim(), name: svodName.trim() });
+      await createSvod({ eid: svodEid, code: svodCode.trim(), name: svodName.trim() });
       setSvodCode("");
       setSvodName("");
-      setSvodEid("");
       setStatusMsg("Свод создан");
       await load();
     } catch (e) {
@@ -117,12 +155,13 @@ export function IntegrationsPage() {
 
   const handleApplyTransfer = async () => {
     if (!canMutate) return;
-    const sourceZid = Number(srcZid);
-    const sourceEid = Number(srcEid);
-    const targetZid = Number(tgtZid);
-    const targetEid = Number(tgtEid);
-    if (![sourceZid, sourceEid, targetZid, targetEid].every(Number.isFinite)) {
-      setError("Укажите source/target zid и eid");
+    if (
+      typeof srcZid !== "number" ||
+      typeof srcEid !== "number" ||
+      typeof tgtZid !== "number" ||
+      typeof tgtEid !== "number"
+    ) {
+      setError("Выберите источник и приёмник (организация и период)");
       return;
     }
     setBusy(true);
@@ -130,10 +169,10 @@ export function IntegrationsPage() {
     setStatusMsg("");
     try {
       const res = await applyTransfers({
-        sourceZid,
-        sourceEid,
-        targetZid,
-        targetEid,
+        sourceZid: srcZid,
+        sourceEid: srcEid,
+        targetZid: tgtZid,
+        targetEid: tgtEid,
         kind: xferKind,
       });
       setStatusMsg(
@@ -149,17 +188,15 @@ export function IntegrationsPage() {
 
   const handleExportMinfin = async (templateName: string) => {
     if (!canMutate) return;
-    const zid = Number(exportZid);
-    const eid = Number(exportEid);
-    if (!Number.isFinite(zid) || !Number.isFinite(eid) || !templateName.trim()) {
-      setError("Укажите zid, eid и шаблон");
+    if (typeof exportZid !== "number" || typeof exportEid !== "number" || !templateName.trim()) {
+      setError("Выберите организацию, период и шаблон");
       return;
     }
     setBusy(true);
     setError("");
     setStatusMsg("");
     try {
-      const res = await exportMinfin({ zid, eid, templateName });
+      const res = await exportMinfin({ zid: exportZid, eid: exportEid, templateName });
       if (res.ok && downloadMinfinExport(res)) {
         setStatusMsg(
           `Скачан ${res.filename ?? "minfin.xlsx"} · ${res.message ?? `шаблон «${templateName}»`}`
@@ -257,12 +294,35 @@ export function IntegrationsPage() {
                 <input value={svodName} onChange={(e) => setSvodName(e.target.value)} />
               </label>
               <label>
-                EID
-                <input
-                  value={svodEid}
-                  inputMode="numeric"
-                  onChange={(e) => setSvodEid(e.target.value)}
-                />
+                Организация
+                <select
+                  value={svodZid === "" ? "" : String(svodZid)}
+                  onChange={(e) => void onSvodOrgChange(e.target.value)}
+                >
+                  <option value="">— выберите —</option>
+                  {orgs.map((o) => (
+                    <option key={o.zid} value={o.zid}>
+                      {orgOptionLabel(o)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Период
+                <select
+                  value={svodEid === "" ? "" : String(svodEid)}
+                  disabled={typeof svodZid !== "number"}
+                  onChange={(e) =>
+                    setSvodEid(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                >
+                  <option value="">— выберите —</option>
+                  {(svodPeriods.length ? svodPeriods : allPeriods).map((p) => (
+                    <option key={p.eid} value={p.eid}>
+                      {periodOptionLabel(p)}
+                    </option>
+                  ))}
+                </select>
               </label>
               <button
                 type="button"
@@ -279,8 +339,8 @@ export function IntegrationsPage() {
               <tr>
                 <th>Код</th>
                 <th>Название</th>
-                <th>EID</th>
-                <th>Тип</th>
+                <th>Период</th>
+                <th>Тип комплекта</th>
               </tr>
             </thead>
             <tbody>
@@ -289,7 +349,7 @@ export function IntegrationsPage() {
                   <td>{s.code}</td>
                   <td>{s.name}</td>
                   <td>{s.eid}</td>
-                  <td>{s.packageKind}</td>
+                  <td>{packageKindLabel(s.packageKind)}</td>
                 </tr>
               ))}
               {!svods.length && (
@@ -342,22 +402,27 @@ export function IntegrationsPage() {
             <>
               <h3 style={{ marginTop: "1rem" }}>Применить перенос</h3>
               <div className="tools-grid">
-                <label>
-                  Source ZID
-                  <input value={srcZid} onChange={(e) => setSrcZid(e.target.value)} />
-                </label>
-                <label>
-                  Source EID
-                  <input value={srcEid} onChange={(e) => setSrcEid(e.target.value)} />
-                </label>
-                <label>
-                  Target ZID
-                  <input value={tgtZid} onChange={(e) => setTgtZid(e.target.value)} />
-                </label>
-                <label>
-                  Target EID
-                  <input value={tgtEid} onChange={(e) => setTgtEid(e.target.value)} />
-                </label>
+                <OrgPeriodSelects
+                  zid={srcZid}
+                  eid={srcEid}
+                  orgLabel="Источник · организация"
+                  periodLabel="Источник · период"
+                  useWorkContextDefault
+                  onChange={({ zid, eid }) => {
+                    setSrcZid(zid);
+                    setSrcEid(eid);
+                  }}
+                />
+                <OrgPeriodSelects
+                  zid={tgtZid}
+                  eid={tgtEid}
+                  orgLabel="Приёмник · организация"
+                  periodLabel="Приёмник · период"
+                  onChange={({ zid, eid }) => {
+                    setTgtZid(zid);
+                    setTgtEid(eid);
+                  }}
+                />
                 <label>
                   Тип переноса
                   <select
@@ -365,8 +430,8 @@ export function IntegrationsPage() {
                     onChange={(e) => setXferKind(e.target.value as TransferMapKind)}
                   >
                     <option value="period_to_period">Период → период</option>
-                    <option value="balance_to_oko">BALANCE → OKO</option>
-                    <option value="oko_to_balance">OKO → BALANCE</option>
+                    <option value="balance_to_oko">Баланс → ОКО</option>
+                    <option value="oko_to_balance">ОКО → Баланс</option>
                   </select>
                 </label>
               </div>
@@ -425,26 +490,28 @@ export function IntegrationsPage() {
           </table>
           {canMutate && (
             <div className="tools-grid" style={{ marginTop: "0.75rem" }}>
-              <label>
-                ZID
-                <input value={exportZid} onChange={(e) => setExportZid(e.target.value)} />
-              </label>
-              <label>
-                EID
-                <input value={exportEid} onChange={(e) => setExportEid(e.target.value)} />
-              </label>
+              <OrgPeriodSelects
+                zid={exportZid}
+                eid={exportEid}
+                useWorkContextDefault
+                onChange={({ zid, eid }) => {
+                  setExportZid(zid);
+                  setExportEid(eid);
+                }}
+              />
               <label>
                 Шаблон
-                <input
+                <select
                   value={exportTemplate}
                   onChange={(e) => setExportTemplate(e.target.value)}
-                  list="minfin-templates"
-                />
-                <datalist id="minfin-templates">
+                >
+                  {!minfinCounts.length && <option value="default">default</option>}
                   {minfinCounts.map((r) => (
-                    <option key={r.template} value={r.template} />
+                    <option key={r.template} value={r.template}>
+                      {r.template} ({r.count})
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </label>
               <button
                 type="button"

@@ -27,6 +27,7 @@ import {
   type PackageKind,
 } from "../psdApi";
 import { isBackendMode } from "../storage";
+import { packageKindLabel } from "../uiLabels";
 import type {
   Organization,
   PackageCompleteness,
@@ -294,7 +295,7 @@ export function PackagePage() {
       setNewPackageKind("OKO");
       await handleEidChange(period.eid);
       setStatus(
-        `Период «${period.name}» создан (код ${period.eid}, тип ${period.packageKind ?? newPackageKind})`
+        `Период «${period.name}» создан · тип ${packageKindLabel(period.packageKind ?? newPackageKind)}`
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания периода");
@@ -516,7 +517,8 @@ export function PackagePage() {
               <option value="">— выберите —</option>
               {orgs.map((o) => (
                 <option key={o.zid} value={o.zid}>
-                  {o.name} (код {o.zid})
+                  {o.name}
+                  {o.code ? ` (${o.code})` : ""}
                 </option>
               ))}
             </select>
@@ -531,8 +533,10 @@ export function PackagePage() {
               <option value="">— выберите —</option>
               {periods.map((p) => (
                 <option key={p.eid} value={p.eid}>
-                  {p.name} (код {p.eid}
-                  {p.packageKind ? `, ${p.packageKind}` : ""})
+                  {p.name}
+                  {p.packageKind
+                    ? ` · ${p.packageKind === "BALANCE" ? "Баланс" : "ОКО"}`
+                    : ""}
                 </option>
               ))}
             </select>
@@ -547,7 +551,7 @@ export function PackagePage() {
             )}
             {" · "}
             Тип комплекта:{" "}
-            <strong>{selectedPeriod.packageKind ?? "OKO"}</strong>
+            <strong>{packageKindLabel(selectedPeriod.packageKind)}</strong>
             {" · "}
             Период:{" "}
             <strong>
@@ -576,7 +580,7 @@ export function PackagePage() {
               <p className="tools-hint">
                 Статус: <strong>{BP_STATUS_LABEL[bp.status]}</strong>
                 {" · "}
-                Тип: <strong>{bp.packageKind}</strong>
+                Тип: <strong>{packageKindLabel(bp.packageKind)}</strong>
                 {" · "}
                 Итерация: {bp.iteration}
                 {bp.curatorName || bp.curatorUserId != null
@@ -702,8 +706,8 @@ export function PackagePage() {
                 onChange={(e) => setNewPackageKind(e.target.value as PackageKind)}
                 disabled={zid === ""}
               >
-                <option value="OKO">OKO</option>
-                <option value="BALANCE">BALANCE</option>
+                <option value="OKO">ОКО</option>
+                <option value="BALANCE">Баланс</option>
               </select>
             </label>
             <label>

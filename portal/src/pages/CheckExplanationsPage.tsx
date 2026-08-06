@@ -13,14 +13,24 @@ import {
 } from "../psdApi";
 import { apiFetch } from "../apiClient";
 import { isBackendMode } from "../storage";
-import { loadWorkContext } from "../packagesApi";
+import { loadWorkContext, listOrganizations, listPeriods } from "../packagesApi";
+import type { Organization, ReportingPeriod } from "../types";
+import type { IdOrEmpty } from "../components/OrgPeriodSelects";
+import {
+  checkRunSummary,
+  orgOptionLabel,
+  packageKindLabel,
+  periodOptionLabel,
+} from "../uiLabels";
 
 export function CheckExplanationsPage() {
   const [searchParams] = useSearchParams();
   const backend = isBackendMode();
   const canMutate = canMutateData();
-  const [zid, setZid] = useState("");
-  const [eid, setEid] = useState("");
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
+  const [zid, setZid] = useState<IdOrEmpty>("");
+  const [eid, setEid] = useState<IdOrEmpty>("");
   const [packageKind, setPackageKind] = useState<PackageKind>("OKO");
   const [blockers, setBlockers] = useState<ApprovalBlockers | null>(null);
   const [explanations, setExplanations] = useState<CheckExplanationDto[]>([]);
@@ -36,9 +46,31 @@ export function CheckExplanationsPage() {
     if (!backend) return;
     void (async () => {
       try {
-        const ctx = await loadWorkContext();
-        setZid(searchParams.get("zid") ?? (ctx.zid != null ? String(ctx.zid) : ""));
-        setEid(searchParams.get("eid") ?? (ctx.eid != null ? String(ctx.eid) : ""));
+        const [orgList, ctx] = await Promise.all([
+          listOrganizations(),
+          loadWorkContext().catch(() => ({ zid: null, eid: null })),
+        ]);
+        setOrgs(orgList);
+        const qZid = searchParams.get("zid");
+        const qEid = searchParams.get("eid");
+        const initialZid = qZid
+          ? Number(qZid)
+          : ctx.zid != null && orgList.some((o) => o.zid === ctx.zid)
+            ? ctx.zid
+            : orgList[0]?.zid ?? "";
+        setZid(typeof initialZid === "number" && Number.isFinite(initialZid) ? initialZid : "");
+        if (typeof initialZid === "number" && Number.isFinite(initialZid)) {
+          const perList = await listPeriods(initialZid);
+          setPeriods(perList);
+          const initialEid = qEid
+            ? Number(qEid)
+            : ctx.eid != null && perList.some((p) => p.eid === ctx.eid)
+              ? ctx.eid
+              : perList[0]?.eid ?? "";
+          setEid(
+            typeof initialEid === "number" && Number.isFinite(initialEid) ? initialEid : ""
+          );
+        }
         if (searchParams.get("packageKind") === "BALANCE") setPackageKind("BALANCE");
       } catch {
         /* ignore */
@@ -46,20 +78,34 @@ export function CheckExplanationsPage() {
     })();
   }, [backend, searchParams]);
 
+  const onOrgChange = async (raw: string) => {
+    const next = raw === "" ? "" : Number(raw);
+    setZid(next);
+    setEid("");
+    setPeriods([]);
+    if (typeof next === "number") {
+      try {
+        const list = await listPeriods(next);
+        setPeriods(list);
+        if (list[0]) setEid(list[0].eid);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   const load = useCallback(async () => {
-    const z = Number(zid);
-    const e = Number(eid);
-    if (!Number.isFinite(z) || !Number.isFinite(e)) {
-      setError("Укажите zid и eid");
+    if (typeof zid !== "number" || typeof eid !== "number") {
+      setError("Выберите организацию и период");
       return;
     }
     setLoading(true);
     setError("");
     try {
       const [b, expl, journal] = await Promise.all([
-        getCheckApprovalBlockers(z, e, packageKind),
-        listCheckExplanations(z, e, packageKind),
-        listCheckJournal({ zid: z, eid: e, packageKind }),
+        getCheckApprovalBlockers(zid, eid, packageKind),
+        listCheckExplanations(zid, eid, packageKind),
+        listCheckJournal({ zid, eid, packageKind }),
       ]);
       setBlockers(b);
       setExplanations(expl);
@@ -72,7 +118,7 @@ export function CheckExplanationsPage() {
   }, [zid, eid, packageKind]);
 
   useEffect(() => {
-    if (backend && zid && eid) void load();
+    if (backend && typeof zid === "number" && typeof eid === "number") void load();
   }, [backend, zid, eid, packageKind, load]);
 
   const failedRules = useMemo(() => {
@@ -88,10 +134,12 @@ export function CheckExplanationsPage() {
 
   const handleSave = async () => {
     if (!canMutate) return;
-    const z = Number(zid);
-    const e = Number(eid);
+    if (typeof zid !== "number" || typeof eid !== "number") {
+      setError("Выберите организацию и период");
+      return;
+    }
     const rn = Number(ruleNumber);
-    if (!Number.isFinite(z) || !Number.isFinite(e) || !Number.isFinite(rn) || !text.trim()) {
+    if (!Number.isFinite(rn) || !text.trim()) {
       setError("Укажите правило и текст объяснения");
       return;
     }
@@ -100,8 +148,8 @@ export function CheckExplanationsPage() {
     setStatus("");
     try {
       await upsertCheckExplanation({
-        zid: z,
-        eid: e,
+        zid,
+        eid,
         packageKind,
         ruleNumber: rn,
         explanation: text.trim(),
@@ -133,21 +181,42 @@ export function CheckExplanationsPage() {
       <section className="tools-section">
         <div className="tools-grid">
           <label>
-            ZID
-            <input value={zid} onChange={(e) => setZid(e.target.value)} />
+            Организация
+            <select
+              value={zid === "" ? "" : String(zid)}
+              onChange={(e) => void onOrgChange(e.target.value)}
+            >
+              <option value="">— выберите —</option>
+              {orgs.map((o) => (
+                <option key={o.zid} value={o.zid}>
+                  {orgOptionLabel(o)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            EID
-            <input value={eid} onChange={(e) => setEid(e.target.value)} />
+            Период
+            <select
+              value={eid === "" ? "" : String(eid)}
+              disabled={typeof zid !== "number"}
+              onChange={(e) => setEid(e.target.value === "" ? "" : Number(e.target.value))}
+            >
+              <option value="">— выберите —</option>
+              {periods.map((p) => (
+                <option key={p.eid} value={p.eid}>
+                  {periodOptionLabel(p)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            Тип
+            Тип комплекта
             <select
               value={packageKind}
               onChange={(e) => setPackageKind(e.target.value as PackageKind)}
             >
-              <option value="OKO">OKO</option>
-              <option value="BALANCE">BALANCE</option>
+              <option value="OKO">{packageKindLabel("OKO")}</option>
+              <option value="BALANCE">{packageKindLabel("BALANCE")}</option>
             </select>
           </label>
           <button
@@ -163,10 +232,8 @@ export function CheckExplanationsPage() {
             className="btn btn-secondary"
             disabled={busy || loading || !canMutate}
             onClick={async () => {
-              const z = Number(zid);
-              const e = Number(eid);
-              if (!Number.isFinite(z) || !Number.isFinite(e)) {
-                setError("Укажите zid и eid");
+              if (typeof zid !== "number" || typeof eid !== "number") {
+                setError("Выберите организацию и период");
                 return;
               }
               setBusy(true);
@@ -176,22 +243,26 @@ export function CheckExplanationsPage() {
                   runId: string;
                   passed: number;
                   failed: number;
-                }>("/api/psd-checks/dsl/run", {
+                }>("/api/psd-checks/package-run", {
                   method: "POST",
-                  body: JSON.stringify({ zid: z, eid: e, packageKind }),
+                  body: JSON.stringify({ zid, eid, packageKind }),
                 });
                 setStatus(
-                  `DSL-прогон ${res.runId}: passed=${res.passed}, failed=${res.failed}`
+                  checkRunSummary({
+                    passed: res.passed,
+                    failed: res.failed,
+                    runId: res.runId,
+                  })
                 );
                 await load();
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Ошибка DSL");
+                setError(err instanceof Error ? err.message : "Не удалось выполнить проверки");
               } finally {
                 setBusy(false);
               }
             }}
           >
-            Прогон DSL
+            Выполнить проверки
           </button>
         </div>
       </section>
@@ -292,11 +363,24 @@ export function CheckExplanationsPage() {
           <div className="tools-grid">
             <label>
               Номер правила
-              <input
-                value={ruleNumber}
-                onChange={(e) => setRuleNumber(e.target.value)}
-                inputMode="numeric"
-              />
+              {failedRules.length > 0 ? (
+                <select value={ruleNumber} onChange={(e) => setRuleNumber(e.target.value)}>
+                  <option value="">— выберите —</option>
+                  {failedRules.map((f) => (
+                    <option key={f.ruleNumber} value={f.ruleNumber}>
+                      #{f.ruleNumber}
+                      {f.message ? ` — ${f.message.slice(0, 80)}` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={ruleNumber}
+                  onChange={(e) => setRuleNumber(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="Нет failed-правил — введите номер"
+                />
+              )}
             </label>
             <label style={{ gridColumn: "1 / -1" }}>
               Текст

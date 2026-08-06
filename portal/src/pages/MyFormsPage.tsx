@@ -661,7 +661,8 @@ export function MyFormsPage() {
             <option value="">Все организации</option>
             {orgs.map((o) => (
               <option key={o.zid} value={o.zid}>
-                {o.name} (код {o.zid})
+                {o.name}
+                {o.code ? ` (${o.code})` : ""}
               </option>
             ))}
           </select>
