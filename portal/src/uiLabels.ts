@@ -1,5 +1,66 @@
 /** User-facing Russian labels for codes / roles kept as English in the API. */
 
+export type BpStatusUi =
+  | "not_started"
+  | "collecting"
+  | "pending_curator_approval"
+  | "curator_approved"
+  | "completed";
+
+export const BP_STATUS_LABEL: Record<BpStatusUi, string> = {
+  not_started: "Не начат",
+  collecting: "Сбор",
+  pending_curator_approval: "На согласовании",
+  curator_approved: "Согласован",
+  completed: "Завершён",
+};
+
+export function bpStatusLabel(status: string | null | undefined): string {
+  if (status && status in BP_STATUS_LABEL) {
+    return BP_STATUS_LABEL[status as BpStatusUi];
+  }
+  return status?.trim() ? String(status) : "—";
+}
+
+export function formatDateTimeRu(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace("T", " ");
+  return d.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function unitKindLabel(kind: string | null | undefined): string {
+  switch (kind) {
+    case "organization":
+      return "Организация";
+    case "branch":
+      return "Филиал";
+    case "unit":
+      return "Подразделение";
+    default:
+      return kind?.trim() ? String(kind) : "—";
+  }
+}
+
+export function transferKindLabel(kind: string | null | undefined): string {
+  switch (kind) {
+    case "period_to_period":
+      return "Период → период";
+    case "balance_to_oko":
+      return "Баланс → ОКО";
+    case "oko_to_balance":
+      return "ОКО → Баланс";
+    default:
+      return kind?.trim() ? String(kind) : "—";
+  }
+}
+
 export function roleLabel(role: string | null | undefined): string {
   switch (role) {
     case "admin":

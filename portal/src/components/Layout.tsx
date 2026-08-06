@@ -166,7 +166,7 @@ export function Layout() {
         items: [
           { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
           { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
-          { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
+          { to: "/package", label: "Комплекты", isActive: (p) => p === "/package" },
           ...(isBackendMode()
             ? [
                 {
@@ -219,7 +219,7 @@ export function Layout() {
         adminItems.push(
           {
             to: "/admin/packages",
-            label: "Комплекты",
+            label: "Сводка комплектов",
             isActive: (p) => p === "/admin/packages",
           },
           { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" }
@@ -441,7 +441,7 @@ export function Layout() {
                       <span
                         className="status-badge"
                         style={{ marginLeft: 6, fontSize: "0.75em" }}
-                        title="PSD role"
+                        title="Роль ПСД"
                       >
                         {psdRoleLabelRu(psdRole)}
                       </span>

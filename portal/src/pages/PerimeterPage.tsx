@@ -8,6 +8,7 @@ import {
   type PerimeterOrgRow,
 } from "../psdApi";
 import { isBackendMode } from "../storage";
+import { unitKindLabel } from "../uiLabels";
 
 export function PerimeterPage() {
   const backend = isBackendMode();
@@ -60,7 +61,7 @@ export function PerimeterPage() {
         Реестр организаций и контрагентов. Переход по GUID открывает карточку в{" "}
         <Link to="/admin/refs">справочниках</Link>.
       </p>
-      {error && <div className="status-bar status-error">{error}</div>}
+      {error && <div className="error-box">{error}</div>}
       <div className="tools-tabs">
         <button
           type="button"
@@ -77,89 +78,141 @@ export function PerimeterPage() {
           Контрагенты
         </button>
       </div>
-      <div className="tools-row" style={{ gap: 8, margin: "0.75rem 0" }}>
-        <input
-          placeholder="Фильтр…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ minWidth: 240 }}
-        />
-        <button type="button" className="btn btn-secondary" onClick={() => void load()}>
-          Обновить
-        </button>
-      </div>
-      {tab === "kontr" && (
-        <div className="tools-row" style={{ gap: 8, marginBottom: "0.75rem" }}>
-          <input
-            placeholder="GUID контрагента"
-            value={guidLookup}
-            onChange={(e) => setGuidLookup(e.target.value)}
-            style={{ minWidth: 280 }}
-          />
-          <button type="button" className="btn btn-secondary" onClick={() => void lookupGuid()}>
-            Найти GUID
+
+      <section className="tools-section">
+        <div className="tools-grid">
+          <label>
+            Фильтр
+            <input
+              placeholder="Наименование или код…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ alignSelf: "end" }}
+            onClick={() => void load()}
+          >
+            Обновить
           </button>
-          {guidHit && (
-            <Link to={`/admin/refs?kontrId=${guidHit.id}`}>
-              {guidHit.name} ({guidHit.guid})
-            </Link>
-          )}
         </div>
-      )}
+        {tab === "kontr" && (
+          <div className="tools-grid" style={{ marginTop: "0.75rem" }}>
+            <label>
+              GUID контрагента
+              <input
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={guidLookup}
+                onChange={(e) => setGuidLookup(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ alignSelf: "end" }}
+              onClick={() => void lookupGuid()}
+            >
+              Найти
+            </button>
+            {guidHit && (
+              <p className="tools-hint" style={{ gridColumn: "1 / -1" }}>
+                <Link to={`/admin/refs?kontrId=${guidHit.id}`}>{guidHit.name}</Link>
+                {guidHit.guid ? (
+                  <span className="table-sub"> · {guidHit.guid}</span>
+                ) : null}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       {tab === "orgs" ? (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ZID</th>
-              <th>Наименование</th>
-              <th>Код</th>
-              <th>Вид</th>
-              <th>Head</th>
-              <th>GUID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orgs.map((o) => (
-              <tr key={o.zid}>
-                <td>{o.zid}</td>
-                <td>{o.name}</td>
-                <td>{o.code ?? o.compositeCode ?? "—"}</td>
-                <td>{o.unitKind ?? "—"}</td>
-                <td>{o.headZid ?? "—"}</td>
-                <td>{o.guid ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <section className="tools-section">
+          <h2>Организации</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th>Код</th>
+                  <th>Вид</th>
+                  <th>Головная</th>
+                  <th>GUID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orgs.map((o) => (
+                  <tr key={o.zid}>
+                    <td>
+                      {o.name}
+                      <div className="table-sub">код орг. {o.zid}</div>
+                    </td>
+                    <td>{o.code ?? o.compositeCode ?? "—"}</td>
+                    <td>{unitKindLabel(o.unitKind)}</td>
+                    <td>{o.headZid ?? "—"}</td>
+                    <td>
+                      <span className="table-sub">{o.guid ?? "—"}</span>
+                    </td>
+                  </tr>
+                ))}
+                {!orgs.length && (
+                  <tr>
+                    <td colSpan={5}>Нет организаций</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>GUID</th>
-              <th>Наименование</th>
-              <th>ИНН</th>
-              <th>КПП</th>
-              <th>Тип</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {kontr.map((k) => (
-              <tr key={k.id}>
-                <td>{k.id}</td>
-                <td>{k.guid ?? "—"}</td>
-                <td>{k.name}</td>
-                <td>{k.inn ?? "—"}</td>
-                <td>{k.kpp ?? "—"}</td>
-                <td>{k.orgType ?? "—"}</td>
-                <td>
-                  <Link to={`/admin/refs?kontrId=${k.id}`}>Карточка</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <section className="tools-section">
+          <h2>Контрагенты</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th>ИНН</th>
+                  <th>КПП</th>
+                  <th>Тип</th>
+                  <th>GUID</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {kontr.map((k) => (
+                  <tr key={k.id}>
+                    <td>
+                      {k.name}
+                      <div className="table-sub">№ {k.id}</div>
+                    </td>
+                    <td>{k.inn ?? "—"}</td>
+                    <td>{k.kpp ?? "—"}</td>
+                    <td>{k.orgType ?? "—"}</td>
+                    <td>
+                      <span className="table-sub">{k.guid ?? "—"}</span>
+                    </td>
+                    <td>
+                      <Link
+                        to={`/admin/refs?kontrId=${k.id}`}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        Карточка
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+                {!kontr.length && (
+                  <tr>
+                    <td colSpan={6}>Нет контрагентов</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );

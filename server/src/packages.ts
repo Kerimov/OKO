@@ -9,6 +9,7 @@ import {
   listChildOrganizations,
   migratePeriodLifecycle,
   normalizePeriodStatus,
+  replacePeriodFormSet,
   resolveActiveMethodologyId,
   snapshotPeriodFormSet,
   type PeriodLifecycleStatus,
@@ -150,6 +151,96 @@ export interface PackageDashboardRow {
   percent: number;
   packageStatus: PackageWorkflowStatus;
   packageComment: string | null;
+}
+
+/** Aggregated package list row for the Package workspace UI. */
+export interface PackageWorkspaceRow {
+  zid: number;
+  eid: number;
+  organizationName: string;
+  organizationCode: string | null;
+  periodName: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  periodStatus: PeriodLifecycleStatus;
+  packageKind: "OKO" | "BALANCE";
+  total: number;
+  filled: number;
+  draft: number;
+  submitted: number;
+  percent: number;
+  bpId: string | null;
+  bpStatus: import("./businessProcessTypes.js").BpStatus | null;
+  curatorUserId: number | null;
+  curatorName: string | null;
+  bpLastChangedAt: string | null;
+  bpIteration: number | null;
+  hasBlockers: boolean;
+  methodologyReleaseId: string | null;
+}
+
+export interface PackageWorkspaceDetail {
+  row: PackageWorkspaceRow;
+  completeness: PackageCompletenessDto;
+  bp: import("./businessProcessTypes.js").BusinessProcessDto | null;
+  blockers: {
+    blocked: boolean;
+    missingExplanations: Array<{
+      ruleNumber: number;
+      formId: string | null;
+      message: string | null;
+    }>;
+  } | null;
+  childOrgCount: number;
+}
+
+export interface PackageConstructInput {
+  mode: "single" | "bulk";
+  targets: Array<{ zid: number }>;
+  period: {
+    name?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    quarter?: number;
+    year?: number;
+    packageKind?: "OKO" | "BALANCE";
+    reuseExisting?: boolean;
+    methodologyReleaseId?: string | null;
+    collectionUnitZid?: number | null;
+  };
+  forms: {
+    mode: "all" | "selected";
+    formIds?: string[];
+  };
+  options?: {
+    createInstances?: boolean;
+    continueOnError?: boolean;
+  };
+}
+
+export interface PackageConstructRowResult {
+  zid: number;
+  organizationName: string;
+  eid?: number;
+  periodName: string;
+  status: "ready" | "created" | "skipped" | "error";
+  periodCreated: boolean;
+  formsTotal: number;
+  formsCreated: number;
+  formsSkipped: number;
+  warnings: string[];
+  error?: string;
+}
+
+export interface PackageConstructResult {
+  summary: {
+    targets: number;
+    periodsCreated: number;
+    formsCreated: number;
+    skipped: number;
+    errors: number;
+  };
+  rows: PackageConstructRowResult[];
 }
 
 export interface CreatePackageResult {
@@ -899,6 +990,249 @@ export async function getPackagesDashboard(db: OkoDb): Promise<PackageDashboardR
   return rows;
 }
 
+function packageKey(zid: number, eid: number, kind: string): string {
+  return `${zid}:${eid}:${kind}`;
+}
+
+/**
+ * Workspace list: periods × orgs with form counts + BP status (no N+1 completeness items).
+ */
+export async function getPackageWorkspace(
+  db: OkoDb,
+  opts?: { zid?: number }
+): Promise<PackageWorkspaceRow[]> {
+  const { normalizeBpStatus, normalizePackageKind, bpIdFor } = await import(
+    "./businessProcessTypes.js"
+  );
+  const { getApprovalBlockers } = await import("./checkJournal.js");
+
+  const catalog = await exportCatalog(db);
+  const catalogIds = catalog.forms.map((f) => f.id);
+  const defaultTotal = catalogIds.length;
+
+  const formSetRows = (await db
+    .prepare(`SELECT eid, form_id FROM period_form_set`)
+    .all()) as Array<{ eid: number; form_id: string }>;
+  const formSetByEid = new Map<number, string[]>();
+  for (const r of formSetRows) {
+    const list = formSetByEid.get(Number(r.eid)) ?? [];
+    list.push(r.form_id);
+    formSetByEid.set(Number(r.eid), list);
+  }
+
+  let periodSql = `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end,
+            p.period_status, p.package_kind, p.methodology_release_id,
+            o.name AS org_name, o.code AS org_code
+     FROM periods p
+     JOIN organizations o ON o.zid = p.zid`;
+  const periodParams: unknown[] = [];
+  if (opts?.zid != null) {
+    periodSql += ` WHERE p.zid = ?`;
+    periodParams.push(opts.zid);
+  }
+  periodSql += ` ORDER BY o.name, p.period_start DESC, p.eid DESC`;
+
+  const periods = (await db.prepare(periodSql).all(...periodParams)) as Array<{
+    eid: number;
+    zid: number;
+    name: string;
+    period_start: string | null;
+    period_end: string | null;
+    period_status: string | null;
+    package_kind: string | null;
+    methodology_release_id: string | null;
+    org_name: string;
+    org_code: string | null;
+  }>;
+
+  let instSql = `SELECT instance_id, zid, eid, template_id, status, updated_at
+     FROM form_instances`;
+  const instParams: unknown[] = [];
+  if (opts?.zid != null) {
+    instSql += ` WHERE zid = ?`;
+    instParams.push(opts.zid);
+  }
+  instSql += ` ORDER BY updated_at DESC`;
+
+  const instances = (await db.prepare(instSql).all(...instParams)) as Array<{
+    instance_id: string;
+    zid: number;
+    eid: number;
+    template_id: string;
+    status: string | null;
+    updated_at: string;
+  }>;
+
+  const latestByPackage = new Map<
+    string,
+    Map<string, { status: "draft" | "submitted" }>
+  >();
+  for (const inst of instances) {
+    const pk = `${inst.zid}:${inst.eid}`;
+    let map = latestByPackage.get(pk);
+    if (!map) {
+      map = new Map();
+      latestByPackage.set(pk, map);
+    }
+    if (!map.has(inst.template_id)) {
+      map.set(inst.template_id, {
+        status: inst.status === "submitted" ? "submitted" : "draft",
+      });
+    }
+  }
+
+  let bpSql = `SELECT bp.id, bp.zid, bp.eid, bp.package_kind, bp.status,
+            bp.curator_user_id, bp.last_changed_at, bp.iteration,
+            u.display_name AS curator_name
+     FROM business_processes bp
+     LEFT JOIN users u ON u.id = bp.curator_user_id`;
+  const bpParams: unknown[] = [];
+  if (opts?.zid != null) {
+    bpSql += ` WHERE bp.zid = ?`;
+    bpParams.push(opts.zid);
+  }
+  const bpRows = (await db.prepare(bpSql).all(...bpParams)) as Array<{
+    id: string;
+    zid: number;
+    eid: number;
+    package_kind: string;
+    status: string;
+    curator_user_id: number | null;
+    last_changed_at: string | null;
+    iteration: number;
+    curator_name: string | null;
+  }>;
+  const bpByKey = new Map(
+    bpRows.map((b) => [
+      packageKey(Number(b.zid), Number(b.eid), normalizePackageKind(b.package_kind)),
+      b,
+    ])
+  );
+
+  const rows: PackageWorkspaceRow[] = [];
+  for (const p of periods) {
+    const zid = Number(p.zid);
+    const eid = Number(p.eid);
+    const packageKind = normalizePackageKind(p.package_kind);
+    const formIds = formSetByEid.get(eid);
+    const expected = formIds && formIds.length > 0 ? formIds : catalogIds;
+    const expectedSet = new Set(expected);
+    const latest = latestByPackage.get(`${zid}:${eid}`) ?? new Map();
+
+    let filled = 0;
+    let draft = 0;
+    let submitted = 0;
+    for (const formId of expectedSet) {
+      const hit = latest.get(formId);
+      if (!hit) continue;
+      filled++;
+      if (hit.status === "submitted") submitted++;
+      else draft++;
+    }
+    const total = expectedSet.size || defaultTotal;
+    const bp = bpByKey.get(packageKey(zid, eid, packageKind));
+    const bpStatus = bp ? normalizeBpStatus(bp.status) : null;
+
+    let hasBlockers = false;
+    if (bpStatus === "pending_curator_approval") {
+      try {
+        const blockers = await getApprovalBlockers(db, zid, eid, packageKind);
+        hasBlockers = blockers.blocked;
+      } catch {
+        hasBlockers = false;
+      }
+    }
+
+    rows.push({
+      zid,
+      eid,
+      organizationName: p.org_name,
+      organizationCode: p.org_code,
+      periodName: p.name,
+      periodStart: dateOrNull(p.period_start),
+      periodEnd: dateOrNull(p.period_end),
+      periodStatus: normalizePeriodStatus(p.period_status),
+      packageKind,
+      total,
+      filled,
+      draft,
+      submitted,
+      percent: total > 0 ? Math.round((filled / total) * 100) : 0,
+      bpId: bp?.id ?? bpIdFor(zid, eid, packageKind),
+      bpStatus,
+      curatorUserId: bp?.curator_user_id == null ? null : Number(bp.curator_user_id),
+      curatorName: bp?.curator_name ?? null,
+      bpLastChangedAt: bp?.last_changed_at ?? null,
+      bpIteration: bp ? Number(bp.iteration ?? 0) : null,
+      hasBlockers,
+      methodologyReleaseId: p.methodology_release_id ?? null,
+    });
+  }
+  return rows;
+}
+
+export async function getPackageWorkspaceDetail(
+  db: OkoDb,
+  zid: number,
+  eid: number,
+  packageKind?: "OKO" | "BALANCE"
+): Promise<PackageWorkspaceDetail | null> {
+  const { ensureBusinessProcess } = await import("./businessProcess.js");
+  const { getApprovalBlockers } = await import("./checkJournal.js");
+  const { normalizePackageKind } = await import("./businessProcessTypes.js");
+
+  const kind = normalizePackageKind(packageKind);
+  const list = await getPackageWorkspace(db, { zid });
+  const row = list.find((r) => r.eid === eid && r.packageKind === kind) ?? list.find((r) => r.eid === eid);
+  if (!row) return null;
+
+  const completeness = await getPackageCompleteness(db, zid, eid);
+  let bp = null;
+  try {
+    bp = await ensureBusinessProcess(db, zid, eid, row.packageKind);
+  } catch {
+    bp = null;
+  }
+
+  let blockers = null;
+  if (bp) {
+    try {
+      blockers = await getApprovalBlockers(db, zid, eid, row.packageKind);
+    } catch {
+      blockers = null;
+    }
+  }
+
+  const children = await listChildOrganizations(db, zid);
+
+  const enrichedRow: PackageWorkspaceRow = {
+    ...row,
+    bpId: bp?.id ?? row.bpId,
+    bpStatus: bp?.status ?? row.bpStatus,
+    curatorUserId: bp?.curatorUserId ?? row.curatorUserId,
+    curatorName: bp?.curatorName ?? row.curatorName,
+    bpLastChangedAt: bp?.lastChangedAt ?? row.bpLastChangedAt,
+    bpIteration: bp?.iteration ?? row.bpIteration,
+    hasBlockers: blockers?.blocked ?? row.hasBlockers,
+    total: completeness.total,
+    filled: completeness.filled,
+    draft: completeness.draft,
+    submitted: completeness.submitted,
+    percent:
+      completeness.total > 0
+        ? Math.round((completeness.filled / completeness.total) * 100)
+        : 0,
+  };
+
+  return {
+    row: enrichedRow,
+    completeness,
+    bp,
+    blockers,
+    childOrgCount: children.length,
+  };
+}
+
 export interface DeletePackageResult {
   deletedInstances: number;
   periodRemoved: boolean;
@@ -1180,6 +1514,407 @@ export async function distributePackagesToChildren(
     createdPeriods: result.length,
     createdPackages,
     children: result,
+  };
+}
+
+async function resolveConstructFormIds(
+  db: OkoDb,
+  forms: PackageConstructInput["forms"]
+): Promise<string[]> {
+  const catalog = await exportCatalog(db);
+  const active = catalog.forms
+    .filter((f) => !(f as { archived?: boolean }).archived)
+    .map((f) => f.id);
+  if (forms.mode !== "selected") return active;
+  const requested = [...new Set((forms.formIds ?? []).map((id) => String(id).trim()).filter(Boolean))];
+  if (!requested.length) {
+    const err = new Error("Выберите хотя бы одну форму");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  const allow = new Set(active);
+  const selected = requested.filter((id) => allow.has(id));
+  if (!selected.length) {
+    const err = new Error("Выбранные формы не найдены в каталоге");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  return selected;
+}
+
+function constructPeriodLabel(period: PackageConstructInput["period"]): string {
+  return String(period.name ?? "").trim() || "Период";
+}
+
+function quarterDateRange(
+  quarter: number,
+  year: number
+): { periodStart: string; periodEnd: string } {
+  const q = Math.min(4, Math.max(1, Math.trunc(quarter)));
+  const y = Math.trunc(year);
+  const startMonth = (q - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lastDay = new Date(y, endMonth, 0).getDate();
+  return {
+    periodStart: `${y}-${pad(startMonth)}-01`,
+    periodEnd: `${y}-${pad(endMonth)}-${pad(lastDay)}`,
+  };
+}
+
+function quarterPeriodName(quarter: number, year: number): string {
+  const q = Math.min(4, Math.max(1, Math.trunc(quarter)));
+  return `${q} квартал ${Math.trunc(year)}`;
+}
+
+function normalizeConstructInput(input: PackageConstructInput): PackageConstructInput {
+  const rawQuarter = input.period?.quarter != null ? Number(input.period.quarter) : NaN;
+  const rawYear = input.period?.year != null ? Number(input.period.year) : NaN;
+  const hasQuarter =
+    Number.isFinite(rawQuarter) &&
+    rawQuarter >= 1 &&
+    rawQuarter <= 4 &&
+    Number.isFinite(rawYear) &&
+    rawYear >= 2000 &&
+    rawYear <= 2100;
+
+  let name = String(input.period?.name ?? "").trim();
+  let periodStart = input.period?.periodStart;
+  let periodEnd = input.period?.periodEnd;
+  let quarter: number | undefined;
+  let year: number | undefined;
+
+  if (hasQuarter) {
+    quarter = Math.trunc(rawQuarter);
+    year = Math.trunc(rawYear);
+    name = quarterPeriodName(quarter, year);
+    const range = quarterDateRange(quarter, year);
+    periodStart = range.periodStart;
+    periodEnd = range.periodEnd;
+  }
+
+  if (!name) {
+    const err = new Error("Укажите квартал и год отчётного периода");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  const targets = (input.targets ?? [])
+    .map((t) => ({ zid: Number(t.zid) }))
+    .filter((t) => Number.isFinite(t.zid) && t.zid > 0);
+  if (!targets.length) {
+    const err = new Error("Выберите хотя бы одну организацию");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  const unique = new Map<number, { zid: number }>();
+  for (const t of targets) unique.set(t.zid, t);
+  return {
+    mode: input.mode === "bulk" ? "bulk" : "single",
+    targets: [...unique.values()],
+    period: {
+      name,
+      periodStart,
+      periodEnd,
+      quarter,
+      year,
+      packageKind: input.period.packageKind === "BALANCE" ? "BALANCE" : "OKO",
+      reuseExisting: input.period.reuseExisting !== false,
+      methodologyReleaseId: input.period.methodologyReleaseId,
+      collectionUnitZid: input.period.collectionUnitZid,
+    },
+    forms: {
+      mode: input.forms?.mode === "selected" ? "selected" : "all",
+      formIds: input.forms?.formIds,
+    },
+    options: {
+      createInstances: input.options?.createInstances !== false,
+      continueOnError: input.options?.continueOnError !== false,
+    },
+  };
+}
+
+async function findExistingPeriodForConstruct(
+  db: OkoDb,
+  zid: number,
+  period: PackageConstructInput["period"],
+  packageKind: "OKO" | "BALANCE"
+): Promise<{
+  eid: number;
+  name: string;
+  period_status: string | null;
+  package_kind: string | null;
+} | null> {
+  if (period.quarter != null && period.year != null) {
+    const byQy = (await db
+      .prepare(
+        `SELECT eid, name, period_status, package_kind
+         FROM periods
+         WHERE zid = ?
+           AND quarter = ?
+           AND year = ?
+           AND COALESCE(package_kind, 'OKO') = ?
+         ORDER BY eid DESC
+         LIMIT 1`
+      )
+      .get(zid, period.quarter, period.year, packageKind)) as
+      | {
+          eid: number;
+          name: string;
+          period_status: string | null;
+          package_kind: string | null;
+        }
+      | undefined;
+    if (byQy) return byQy;
+  }
+
+  const name = String(period.name ?? "").trim();
+  if (!name) return null;
+  const row = (await db
+    .prepare(
+      `SELECT eid, name, period_status, package_kind
+       FROM periods
+       WHERE zid = ? AND name = ? AND COALESCE(package_kind, 'OKO') = ?
+       ORDER BY eid DESC
+       LIMIT 1`
+    )
+    .get(zid, name, packageKind)) as
+    | {
+        eid: number;
+        name: string;
+        period_status: string | null;
+        package_kind: string | null;
+      }
+    | undefined;
+  return row ?? null;
+}
+
+async function previewOneConstructTarget(
+  db: OkoDb,
+  zid: number,
+  input: PackageConstructInput,
+  formIds: string[]
+): Promise<PackageConstructRowResult> {
+  const org = (await db
+    .prepare("SELECT name FROM organizations WHERE zid = ?")
+    .get(zid)) as { name: string } | undefined;
+  if (!org) {
+    return {
+      zid,
+      organizationName: `Организация ${zid}`,
+      periodName: constructPeriodLabel(input.period),
+      status: "error",
+      periodCreated: false,
+      formsTotal: formIds.length,
+      formsCreated: 0,
+      formsSkipped: 0,
+      warnings: [],
+      error: "Организация не найдена",
+    };
+  }
+
+  const packageKind = input.period.packageKind === "BALANCE" ? "BALANCE" : "OKO";
+  const existing = await findExistingPeriodForConstruct(
+    db,
+    zid,
+    input.period,
+    packageKind
+  );
+  const warnings: string[] = [];
+  let periodCreated = false;
+  let eid: number | undefined;
+  let formsSkipped = 0;
+  let formsCreated = formIds.length;
+
+  if (existing) {
+    eid = Number(existing.eid);
+    if (!input.period.reuseExisting) {
+      return {
+        zid,
+        organizationName: org.name,
+        eid,
+        periodName: existing.name,
+        status: "error",
+        periodCreated: false,
+        formsTotal: formIds.length,
+        formsCreated: 0,
+        formsSkipped: 0,
+        warnings,
+        error: "Период с таким названием уже существует",
+      };
+    }
+    if (normalizePeriodStatus(existing.period_status) === "closed") {
+      return {
+        zid,
+        organizationName: org.name,
+        eid,
+        periodName: existing.name,
+        status: "error",
+        periodCreated: false,
+        formsTotal: formIds.length,
+        formsCreated: 0,
+        formsSkipped: 0,
+        warnings,
+        error: "Период закрыт — создание/дозаведение недоступно",
+      };
+    }
+    warnings.push("Период уже есть — будут дозаведены недостающие формы");
+    const existingTemplates = await existingTemplatesForPackage(db, zid, eid);
+    formsSkipped = formIds.filter((id) => existingTemplates.has(id)).length;
+    formsCreated = Math.max(0, formIds.length - formsSkipped);
+    if (!input.options?.createInstances) {
+      formsCreated = 0;
+      warnings.push("Создание пустых форм отключено");
+    } else if (formsCreated === 0) {
+      warnings.push("Все выбранные формы уже заведены");
+    }
+  } else {
+    periodCreated = true;
+    if (!input.options?.createInstances) {
+      formsCreated = 0;
+      warnings.push("Будет создан только период без пустых форм");
+    }
+  }
+
+  return {
+    zid,
+    organizationName: org.name,
+    eid,
+    periodName: constructPeriodLabel(input.period),
+    status: "ready",
+    periodCreated,
+    formsTotal: formIds.length,
+    formsCreated,
+    formsSkipped,
+    warnings,
+  };
+}
+
+export async function previewPackageConstruction(
+  db: OkoDb,
+  raw: PackageConstructInput
+): Promise<PackageConstructResult> {
+  const input = normalizeConstructInput(raw);
+  const formIds = await resolveConstructFormIds(db, input.forms);
+  const rows: PackageConstructRowResult[] = [];
+  for (const t of input.targets) {
+    rows.push(await previewOneConstructTarget(db, t.zid, input, formIds));
+  }
+  return {
+    summary: {
+      targets: rows.length,
+      periodsCreated: rows.filter((r) => r.status === "ready" && r.periodCreated).length,
+      formsCreated: rows
+        .filter((r) => r.status === "ready")
+        .reduce((n, r) => n + r.formsCreated, 0),
+      skipped: rows.reduce((n, r) => n + r.formsSkipped, 0),
+      errors: rows.filter((r) => r.status === "error").length,
+    },
+    rows,
+  };
+}
+
+async function constructOnePackage(
+  db: OkoDb,
+  zid: number,
+  input: PackageConstructInput,
+  formIds: string[]
+): Promise<PackageConstructRowResult> {
+  const preview = await previewOneConstructTarget(db, zid, input, formIds);
+  if (preview.status === "error") return preview;
+
+  const packageKind = input.period.packageKind === "BALANCE" ? "BALANCE" : "OKO";
+  let eid = preview.eid;
+  let periodCreated = false;
+
+  try {
+    if (eid == null) {
+      const period = await createPeriod(db, {
+        zid,
+        name: input.period.name!,
+        periodStart: input.period.periodStart,
+        periodEnd: input.period.periodEnd,
+        quarter: input.period.quarter,
+        year: input.period.year,
+        packageKind,
+        methodologyReleaseId: input.period.methodologyReleaseId,
+        collectionUnitZid: input.period.collectionUnitZid,
+      });
+      eid = period.eid;
+      periodCreated = true;
+    }
+
+    if (input.forms.mode === "selected") {
+      await replacePeriodFormSet(db, eid, formIds);
+    } else if (periodCreated) {
+      // createPeriod already snapshots full catalog
+    } else {
+      // reuse existing: ensure set covers selected forms (full catalog mode keeps existing set)
+      await ensurePeriodFormSet(db, eid);
+    }
+
+    let formsCreated = 0;
+    let formsSkipped = 0;
+    if (input.options?.createInstances !== false) {
+      const pkg = await createReportPackage(db, zid, eid);
+      formsCreated = pkg.created;
+      formsSkipped = pkg.skipped;
+    }
+
+    return {
+      zid,
+      organizationName: preview.organizationName,
+      eid,
+      periodName: constructPeriodLabel(input.period),
+      status: "created",
+      periodCreated,
+      formsTotal: formIds.length,
+      formsCreated,
+      formsSkipped,
+      warnings: preview.warnings,
+    };
+  } catch (e) {
+    return {
+      zid,
+      organizationName: preview.organizationName,
+      eid,
+      periodName: constructPeriodLabel(input.period),
+      status: "error",
+      periodCreated,
+      formsTotal: formIds.length,
+      formsCreated: 0,
+      formsSkipped: 0,
+      warnings: preview.warnings,
+      error: e instanceof Error ? e.message : "Ошибка создания комплекта",
+    };
+  }
+}
+
+export async function constructPackages(
+  db: OkoDb,
+  raw: PackageConstructInput
+): Promise<PackageConstructResult> {
+  const input = normalizeConstructInput(raw);
+  const formIds = await resolveConstructFormIds(db, input.forms);
+  const continueOnError = input.options?.continueOnError !== false;
+  const rows: PackageConstructRowResult[] = [];
+
+  for (const t of input.targets) {
+    const row = await constructOnePackage(db, t.zid, input, formIds);
+    rows.push(row);
+    if (row.status === "error" && !continueOnError) break;
+  }
+
+  return {
+    summary: {
+      targets: rows.length,
+      periodsCreated: rows.filter((r) => r.periodCreated && r.status === "created").length,
+      formsCreated: rows
+        .filter((r) => r.status === "created")
+        .reduce((n, r) => n + r.formsCreated, 0),
+      skipped: rows.reduce((n, r) => n + r.formsSkipped, 0),
+      errors: rows.filter((r) => r.status === "error").length,
+    },
+    rows,
   };
 }
 

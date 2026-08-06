@@ -236,6 +236,120 @@ export interface PackageDashboardRow {
   packageComment?: string | null;
 }
 
+export type BpStatusUi =
+  | "not_started"
+  | "collecting"
+  | "pending_curator_approval"
+  | "curator_approved"
+  | "completed";
+
+export interface PackageWorkspaceRow {
+  zid: number;
+  eid: number;
+  organizationName: string;
+  organizationCode: string | null;
+  periodName: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  periodStatus: "open" | "closed";
+  packageKind: "OKO" | "BALANCE";
+  total: number;
+  filled: number;
+  draft: number;
+  submitted: number;
+  percent: number;
+  bpId: string | null;
+  bpStatus: BpStatusUi | null;
+  curatorUserId: number | null;
+  curatorName: string | null;
+  bpLastChangedAt: string | null;
+  bpIteration: number | null;
+  hasBlockers: boolean;
+  methodologyReleaseId: string | null;
+}
+
+export interface PackageWorkspaceDetail {
+  row: PackageWorkspaceRow;
+  completeness: PackageCompleteness;
+  bp: {
+    id: string;
+    eid: number;
+    zid: number;
+    packageKind: "OKO" | "BALANCE";
+    status: BpStatusUi;
+    curatorUserId: number | null;
+    deadlineAt: string | null;
+    iteration: number;
+    note: string | null;
+    lastChangedAt: string | null;
+    lastChangedBy: string | null;
+    createdAt?: string;
+    organizationName?: string | null;
+    periodName?: string | null;
+    curatorName?: string | null;
+  } | null;
+  blockers: {
+    blocked: boolean;
+    missingExplanations: Array<{
+      ruleNumber: number;
+      formId?: string | null;
+      message: string | null;
+    }>;
+  } | null;
+  childOrgCount: number;
+}
+
+export interface PackageConstructInput {
+  mode: "single" | "bulk";
+  targets: Array<{ zid: number }>;
+  period: {
+    name?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    quarter?: number;
+    year?: number;
+    packageKind?: "OKO" | "BALANCE";
+    reuseExisting?: boolean;
+    methodologyReleaseId?: string | null;
+    collectionUnitZid?: number | null;
+  };
+  forms: {
+    mode: "all" | "selected";
+    formIds?: string[];
+  };
+  options?: {
+    createInstances?: boolean;
+    continueOnError?: boolean;
+  };
+}
+
+export interface PackageConstructRowResult {
+  zid: number;
+  organizationName: string;
+  eid?: number;
+  periodName: string;
+  status: "ready" | "created" | "skipped" | "error";
+  periodCreated: boolean;
+  formsTotal: number;
+  formsCreated: number;
+  formsSkipped: number;
+  warnings: string[];
+  error?: string;
+}
+
+export interface PackageConstructResult {
+  summary: {
+    targets: number;
+    periodsCreated: number;
+    formsCreated: number;
+    skipped: number;
+    errors: number;
+  };
+  rows: PackageConstructRowResult[];
+}
+
+export type PackageConstructPreview = PackageConstructResult;
+
 export interface CreatePackageResult {
   created: number;
   skipped: number;

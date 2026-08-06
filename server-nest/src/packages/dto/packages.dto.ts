@@ -131,6 +131,105 @@ export class PackageImportDto extends PackageZidEidDto {
   };
 }
 
+export class PackageConstructTargetDto {
+  @ApiProperty()
+  @IsNumber()
+  zid!: number;
+}
+
+export class PackageConstructPeriodDto {
+  @ApiPropertyOptional({ description: "Derived from quarter+year when omitted" })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  periodStart?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  periodEnd?: string;
+
+  @ApiPropertyOptional({ description: "Отчётный квартал 1–4" })
+  @IsOptional()
+  @IsNumber()
+  quarter?: number;
+
+  @ApiPropertyOptional({ description: "Отчётный год" })
+  @IsOptional()
+  @IsNumber()
+  year?: number;
+
+  @ApiPropertyOptional({ enum: ["OKO", "BALANCE"] })
+  @IsOptional()
+  @IsString()
+  packageKind?: "OKO" | "BALANCE";
+
+  @ApiPropertyOptional({ description: "Reuse existing period with same quarter+year+kind" })
+  @IsOptional()
+  @IsBoolean()
+  reuseExisting?: boolean;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  methodologyReleaseId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  collectionUnitZid?: number | null;
+}
+
+export class PackageConstructFormsDto {
+  @ApiProperty({ enum: ["all", "selected"] })
+  @IsString()
+  @IsNotEmpty()
+  mode!: "all" | "selected";
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  formIds?: string[];
+}
+
+export class PackageConstructOptionsDto {
+  @ApiPropertyOptional({ description: "Create empty form instances (default true)" })
+  @IsOptional()
+  @IsBoolean()
+  createInstances?: boolean;
+
+  @ApiPropertyOptional({ description: "Continue bulk on per-row errors (default true)" })
+  @IsOptional()
+  @IsBoolean()
+  continueOnError?: boolean;
+}
+
+export class PackageConstructDto {
+  @ApiProperty({ enum: ["single", "bulk"] })
+  @IsString()
+  @IsNotEmpty()
+  mode!: "single" | "bulk";
+
+  @ApiProperty({ type: [PackageConstructTargetDto] })
+  @IsArray()
+  targets!: PackageConstructTargetDto[];
+
+  @ApiProperty({ type: PackageConstructPeriodDto })
+  period!: PackageConstructPeriodDto;
+
+  @ApiProperty({ type: PackageConstructFormsDto })
+  forms!: PackageConstructFormsDto;
+
+  @ApiPropertyOptional({ type: PackageConstructOptionsDto })
+  @IsOptional()
+  options?: PackageConstructOptionsDto;
+}
+
 export class CreateUserDto {
   @ApiProperty()
   @IsString()

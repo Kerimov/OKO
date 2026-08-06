@@ -85,6 +85,37 @@ export function formatPeriod(start: string, end: string): string {
   return start || end;
 }
 
+/** Calendar quarter 1..4 → inclusive ISO date range. */
+export function quarterDateRange(
+  quarter: number,
+  year: number
+): { periodStart: string; periodEnd: string } {
+  const q = Math.min(4, Math.max(1, Math.trunc(quarter)));
+  const y = Math.trunc(year);
+  const startMonth = (q - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lastDay = new Date(y, endMonth, 0).getDate();
+  return {
+    periodStart: `${y}-${pad(startMonth)}-01`,
+    periodEnd: `${y}-${pad(endMonth)}-${pad(lastDay)}`,
+  };
+}
+
+export function quarterPeriodName(quarter: number, year: number): string {
+  const q = Math.min(4, Math.max(1, Math.trunc(quarter)));
+  return `${q} квартал ${Math.trunc(year)}`;
+}
+
+export function currentReportingQuarter(now = new Date()): {
+  quarter: number;
+  year: number;
+} {
+  const month = now.getMonth(); // 0-11
+  const quarter = Math.floor(month / 3) + 1;
+  return { quarter, year: now.getFullYear() };
+}
+
 export function formStatusLabel(status?: "draft" | "submitted"): string {
   return status === "submitted" ? "Сдано" : "Черновик";
 }

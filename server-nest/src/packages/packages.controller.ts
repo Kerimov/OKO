@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpException,
@@ -16,24 +17,127 @@ import type { Request } from "express";
 import { getDb } from "../../../server/src/db.js";
 import {
   createReportPackage,
+  constructPackages,
   deleteReportPackage,
   getPackageCompleteness,
   getPackagesDashboard,
+  getPackageWorkspace,
+  getPackageWorkspaceDetail,
   importReportPackage,
+  previewPackageConstruction,
 } from "../../../server/src/packages.js";
 import {
   assertOrgZidParam,
+  userZid,
 } from "../../../server/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
-import { PackageImportDto, PackageZidEidDto } from "./dto/packages.dto.js";
+import {
+  PackageConstructDto,
+  PackageImportDto,
+  PackageZidEidDto,
+} from "./dto/packages.dto.js";
 import { assertPackageSubmittedChecks } from "../../../server/src/instance-submit.js";
 import type { OkoFormInstance } from "../../../server/src/types.js";
+
+function assertConstructAccess(req: Request, body: PackageConstructDto): void {
+  const scoped = userZid(req);
+  if (scoped == null) return; // admin
+  if (body.mode === "bulk") {
+    throw new ForbiddenException({ error: "Массовое создание доступно только администратору" });
+  }
+  const targets = body.targets ?? [];
+  if (targets.length !== 1 || Number(targets[0]?.zid) !== scoped) {
+    throw new ForbiddenException({ error: "Можно создавать комплект только для своей организации" });
+  }
+}
 
 @ApiTags("packages")
 @ApiBearerAuth()
 @Controller("packages")
 export class PackagesController {
+  @Get("workspace")
+  @ApiOperation({ summary: "Рабочий список комплектов (орг × период + БП + прогресс)" })
+  @ApiQuery({ name: "zid", required: false })
+  async workspace(@Req() req: Request, @Query("zid") zidRaw?: string) {
+    try {
+      const scoped = userZid(req);
+      let zid: number | undefined;
+      if (scoped != null) {
+        zid = scoped;
+      } else if (zidRaw != null && zidRaw !== "") {
+        zid = Number(zidRaw);
+        if (!Number.isFinite(zid)) {
+          throw new BadRequestException({ error: "invalid zid" });
+        }
+      }
+      return getPackageWorkspace(await getDb(), zid != null ? { zid } : undefined);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "workspace failed");
+    }
+  }
+
+  @Get("workspace/detail")
+  @ApiOperation({ summary: "Карточка комплекта: полнота, БП, блокеры" })
+  @ApiQuery({ name: "zid", required: true })
+  @ApiQuery({ name: "eid", required: true })
+  @ApiQuery({ name: "packageKind", required: false })
+  async workspaceDetail(
+    @Req() req: Request,
+    @Query("zid") zidRaw: string,
+    @Query("eid") eidRaw: string,
+    @Query("packageKind") packageKind?: string
+  ) {
+    const zid = Number(zidRaw);
+    const eid = Number(eidRaw);
+    if (!Number.isFinite(zid) || !Number.isFinite(eid)) {
+      throw new BadRequestException({ error: "zid and eid required" });
+    }
+    try {
+      assertOrgZidParam(req, zid);
+      const detail = await getPackageWorkspaceDetail(
+        await getDb(),
+        zid,
+        eid,
+        packageKind === "BALANCE" ? "BALANCE" : packageKind === "OKO" ? "OKO" : undefined
+      );
+      if (!detail) {
+        throw new BadRequestException({ error: "Package not found" });
+      }
+      return detail;
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "workspace detail failed");
+    }
+  }
+
+  @Post("construct/preview")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Предпросмотр конструктора комплектов" })
+  async constructPreview(@Req() req: Request, @Body() body: PackageConstructDto) {
+    try {
+      assertConstructAccess(req, body);
+      return previewPackageConstruction(await getDb(), body);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "construct preview failed");
+    }
+  }
+
+  @Post("construct")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Создать комплекты (один или массово)" })
+  async construct(@Req() req: Request, @Body() body: PackageConstructDto) {
+    try {
+      assertConstructAccess(req, body);
+      return constructPackages(await getDb(), body);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "construct failed");
+    }
+  }
+
   @Get("completeness")
   @ApiOperation({ summary: "Полнота комплекта (76 форм)" })
   @ApiQuery({ name: "zid", required: true })

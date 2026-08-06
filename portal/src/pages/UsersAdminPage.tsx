@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../apiClient";
-import type { PsdRole, UserDto } from "../auth";
+import { psdRoleLabelRu, type PsdRole, type UserDto } from "../auth";
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
@@ -297,7 +297,7 @@ export function UsersAdminPage() {
                     <td>{u.username}</td>
                     <td>{u.displayName ?? "—"}</td>
                     <td>{roleLabel(u.role)}</td>
-                    <td>{u.psdRole ?? "—"}</td>
+                    <td>{u.psdRole ? psdRoleLabelRu(u.psdRole) : "—"}</td>
                     <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
                     <td>{u.active ? "активен" : "отключён"}</td>
                   </tr>

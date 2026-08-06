@@ -11,6 +11,7 @@ import { listOrganizations } from "../packagesApi";
 import { OrgSelect, type IdOrEmpty } from "../components/OrgPeriodSelects";
 import { isBackendMode } from "../storage";
 import type { Organization } from "../types";
+import { unitKindLabel } from "../uiLabels";
 
 function previewComposite(parts: {
   headCode: string;
@@ -29,6 +30,19 @@ function previewComposite(parts: {
     segs.push(parts.unitCode.trim());
   }
   return `${head}@${segs.join(".")}`;
+}
+
+function orgNameByZid(
+  zid: number | null | undefined,
+  orgs: Organization[],
+  units: CollectionUnitDto[]
+): string {
+  if (zid == null) return "—";
+  const fromOrg = orgs.find((o) => o.zid === zid);
+  if (fromOrg) return fromOrg.name;
+  const fromUnit = units.find((u) => u.zid === zid);
+  if (fromUnit) return fromUnit.name;
+  return `№ ${zid}`;
 }
 
 export function CollectionUnitsPage() {
@@ -140,14 +154,15 @@ export function CollectionUnitsPage() {
   };
 
   if (!backend) {
-    return <p className="hint">Единицы сбора доступны только в backend-режиме.</p>;
+    return <p className="tools-hint">Единицы сбора доступны только в backend-режиме.</p>;
   }
 
   return (
     <div className="page">
       <h1>Единицы сбора</h1>
-      <p className="hint">
-        Иерархия организация / филиал / подразделение. Составной код: head@company.branch.unit
+      <p className="tools-hint">
+        Иерархия организация / филиал / подразделение. Составной код:
+        головная@компания.филиал.подразделение
       </p>
       {error && <p className="error">{error}</p>}
       {status && <p className="ok">{status}</p>}
@@ -160,26 +175,27 @@ export function CollectionUnitsPage() {
         <table className="data-table" style={{ marginTop: 8 }}>
           <thead>
             <tr>
-              <th>ZID</th>
               <th>Наименование</th>
               <th>Вид</th>
               <th>Код</th>
               <th>Составной</th>
-              <th>Parent</th>
+              <th>Родитель</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {units.map((u) => (
               <tr key={u.zid}>
-                <td>{u.zid}</td>
-                <td>{u.name}</td>
-                <td>{u.unitKind}</td>
+                <td>
+                  {u.name}
+                  <div className="table-sub">код орг. {u.zid}</div>
+                </td>
+                <td>{unitKindLabel(u.unitKind)}</td>
                 <td>{u.code ?? "—"}</td>
                 <td>
                   <code>{u.compositeCode ?? "—"}</code>
                 </td>
-                <td>{u.parentZid ?? "—"}</td>
+                <td>{orgNameByZid(u.parentZid, orgs, units)}</td>
                 <td>
                   <Link
                     to={`/package?zid=${u.zid}`}
@@ -201,7 +217,7 @@ export function CollectionUnitsPage() {
             ))}
             {!units.length && (
               <tr>
-                <td colSpan={7}>Нет единиц</td>
+                <td colSpan={6}>Нет единиц</td>
               </tr>
             )}
           </tbody>
@@ -230,9 +246,9 @@ export function CollectionUnitsPage() {
                 value={unitKind}
                 onChange={(e) => setUnitKind(e.target.value as CollectionUnitKind)}
               >
-                <option value="organization">organization</option>
-                <option value="branch">branch</option>
-                <option value="unit">unit</option>
+                <option value="organization">Организация</option>
+                <option value="branch">Филиал</option>
+                <option value="unit">Подразделение</option>
               </select>
             </label>
             <label>
@@ -240,7 +256,7 @@ export function CollectionUnitsPage() {
               <input value={code} onChange={(e) => setCode(e.target.value)} />
             </label>
             <OrgSelect
-              label="Parent"
+              label="Родитель"
               value={parentZid}
               onChange={setParentZid}
               allowEmpty
@@ -248,7 +264,7 @@ export function CollectionUnitsPage() {
               orgs={orgs}
             />
             <OrgSelect
-              label="Head"
+              label="Головная"
               value={headZid}
               onChange={setHeadZid}
               allowEmpty
@@ -256,15 +272,15 @@ export function CollectionUnitsPage() {
               orgs={orgs}
             />
             <label>
-              Head code
+              Код головной
               <input value={headCode} onChange={(e) => setHeadCode(e.target.value)} />
             </label>
             <label>
-              Branch code
+              Код филиала
               <input value={branchCode} onChange={(e) => setBranchCode(e.target.value)} />
             </label>
             <label>
-              Unit code
+              Код подразделения
               <input value={unitCode} onChange={(e) => setUnitCode(e.target.value)} />
             </label>
           </div>

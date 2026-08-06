@@ -133,6 +133,49 @@ export async function snapshotPeriodFormSet(
   return forms.length;
 }
 
+/**
+ * Replace period form set with an explicit list of catalog forms.
+ * Unknown / archived formIds are skipped. Returns applied count.
+ */
+export async function replacePeriodFormSet(
+  db: OkoDb,
+  eid: number,
+  formIds: string[]
+): Promise<number> {
+  await migratePeriodLifecycle(db);
+  const unique = [...new Set(formIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    const err = new Error("formIds required");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const placeholders = unique.map(() => "?").join(",");
+  const forms = (await db
+    .prepare(
+      `SELECT form_id, COALESCE(schema_version, 1) AS schema_version
+       FROM form_templates
+       WHERE form_id IN (${placeholders}) AND COALESCE(archived, 0) = 0
+       ORDER BY sort_order, form_id`
+    )
+    .all(...unique)) as Array<{ form_id: string; schema_version: number }>;
+
+  if (forms.length === 0) {
+    const err = new Error("None of the selected forms exist in the catalog");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
+  const ins = db.prepare(
+    `INSERT INTO period_form_set (eid, form_id, schema_version) VALUES (?, ?, ?)`
+  );
+  for (const f of forms) {
+    await ins.run(eid, f.form_id, f.schema_version);
+  }
+  return forms.length;
+}
+
 export async function listPeriodFormSet(
   db: OkoDb,
   eid: number

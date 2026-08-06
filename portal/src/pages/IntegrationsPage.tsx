@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { canMutateData } from "../auth";
+import { canMutateData, psdRoleLabelRu, resolveUiPsdRole } from "../auth";
 import {
   applyTransfers,
   createSvod,
@@ -22,7 +22,7 @@ import { listOrganizations, listPeriods } from "../packagesApi";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
 import type { Organization, ReportingPeriod } from "../types";
-import { orgOptionLabel, packageKindLabel, periodOptionLabel } from "../uiLabels";
+import { orgOptionLabel, packageKindLabel, periodOptionLabel, transferKindLabel } from "../uiLabels";
 
 type HubTab = "ports" | "svods" | "transfers" | "minfin";
 
@@ -214,16 +214,16 @@ export function IntegrationsPage() {
   };
 
   if (!backend) {
-    return <p className="hint">Интеграции доступны только в backend-режиме.</p>;
+    return <p className="tools-hint">Интеграции доступны только в backend-режиме.</p>;
   }
 
   return (
     <div className="page">
       <h1>Интеграции и своды</h1>
-      <p className="hint">
-        Админ-хаб ПСД. Реальные адаптеры DO/SAP/ЭЦП — stub до артефактов Заказчика (см.{" "}
+      <p className="tools-hint">
+        Админ-хаб ПСД. Реальные адаптеры DO/SAP/ЭЦП — заглушки до артефактов заказчика (см.{" "}
         <code>docs/PSD-INTEGRATIONS.md</code>). Роль:{" "}
-        {auth.user?.psdRole ?? auth.user?.role ?? "—"}
+        {psdRoleLabelRu(resolveUiPsdRole(auth.user))}
         {!canMutate ? " · только чтение" : ""}
       </p>
 
@@ -238,7 +238,14 @@ export function IntegrationsPage() {
             {t.label}
           </button>
         ))}
-        <button type="button" onClick={() => void load()} disabled={busy}>
+      </div>
+      <div style={{ marginBottom: "0.75rem" }}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void load()}
+          disabled={busy}
+        >
           Обновить
         </button>
       </div>
@@ -344,14 +351,19 @@ export function IntegrationsPage() {
               </tr>
             </thead>
             <tbody>
-              {svods.map((s) => (
+              {svods.map((s) => {
+                const period =
+                  allPeriods.find((p) => p.eid === s.eid) ??
+                  svodPeriods.find((p) => p.eid === s.eid);
+                return (
                 <tr key={s.id}>
                   <td>{s.code}</td>
                   <td>{s.name}</td>
-                  <td>{s.eid}</td>
+                  <td>{period ? periodOptionLabel(period) : `Период ${s.eid}`}</td>
                   <td>{packageKindLabel(s.packageKind)}</td>
                 </tr>
-              ))}
+                );
+              })}
               {!svods.length && (
                 <tr>
                   <td colSpan={4}>Пока пусто</td>
@@ -377,7 +389,7 @@ export function IntegrationsPage() {
             <tbody>
               {transfers.map((t) => (
                 <tr key={t.id}>
-                  <td>{t.kind}</td>
+                  <td>{transferKindLabel(t.kind)}</td>
                   <td>
                     {t.sourceForm}
                     {t.sourceColumn ? `.${t.sourceColumn}` : ""}

@@ -187,22 +187,22 @@ export function PsdReportsPage() {
   };
 
   if (!backend) {
-    return <p className="hint">Отчёты ПСД доступны только в backend-режиме.</p>;
+    return <p className="tools-hint">Отчёты ПСД доступны только в backend-режиме.</p>;
   }
 
   return (
     <div className="page">
       <h1>Отчёты ПСД</h1>
-      <p className="hint">
+      <p className="tools-hint">
         Безопасные предустановки для сопровождения (без произвольного SQL). МинФин: шаблон
         <code> 12345/ШаблоныФорм-МинФин.xlsx</code>, маппинги из БД (или fallback excel_mappings).
       </p>
       {error && <p className="error">{error}</p>}
       {result && <p className="ok">{result}</p>}
 
-      <section className="card" style={{ marginBottom: 16 }}>
+      <section className="tools-section">
         <h2>Предустановки</h2>
-        <div className="tools-grid" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        <div className="tools-grid">
           <label>
             Отчёт
             <select value={code} onChange={(e) => setCode(e.target.value)}>
@@ -245,6 +245,7 @@ export function PsdReportsPage() {
           <button
             type="button"
             className="btn btn-secondary"
+            style={{ alignSelf: "end" }}
             disabled={busy || typeof zid !== "number" || typeof eid !== "number"}
             onClick={() => void runPreset()}
           >
@@ -259,7 +260,7 @@ export function PsdReportsPage() {
           </p>
         )}
         {table && (
-          <div style={{ overflow: "auto", marginTop: 12 }}>
+          <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -282,9 +283,9 @@ export function PsdReportsPage() {
         )}
       </section>
 
-      <section className="card">
-        <h2>МинФин export</h2>
-        <div className="tools-grid" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+      <section className="tools-section">
+        <h2>Экспорт МинФин</h2>
+        <div className="tools-grid">
           <label>
             Шаблон
             <select
@@ -294,7 +295,7 @@ export function PsdReportsPage() {
             >
               {templates.map((name) => (
                 <option key={name} value={name}>
-                  {name === "default" ? "default (ШаблоныФорм-МинФин.xlsx)" : name}
+                  {name === "default" ? "по умолчанию (ШаблоныФорм-МинФин.xlsx)" : name}
                 </option>
               ))}
             </select>
@@ -302,6 +303,7 @@ export function PsdReportsPage() {
           <button
             type="button"
             className="btn btn-secondary"
+            style={{ alignSelf: "end" }}
             disabled={
               busy || !canMutate || typeof zid !== "number" || typeof eid !== "number"
             }

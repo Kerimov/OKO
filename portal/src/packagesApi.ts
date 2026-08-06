@@ -120,6 +120,8 @@ export async function createPeriod(input: {
   name: string;
   periodStart?: string;
   periodEnd?: string;
+  quarter?: number;
+  year?: number;
   methodologyReleaseId?: string | null;
   packageKind?: "OKO" | "BALANCE";
   collectionUnitZid?: number | null;
@@ -139,8 +141,8 @@ export async function createPeriod(input: {
     name: input.name.trim(),
     periodStart: input.periodStart || null,
     periodEnd: input.periodEnd || null,
-    quarter: null,
-    year: null,
+    quarter: input.quarter ?? null,
+    year: input.year ?? null,
     periodStatus: "open",
     methodologyReleaseId: input.methodologyReleaseId ?? null,
     packageKind: input.packageKind === "BALANCE" ? "BALANCE" : "OKO",
@@ -256,6 +258,109 @@ export async function fetchPackageCompleteness(
 
 export async function fetchPackagesDashboard(): Promise<PackageDashboardRow[]> {
   return apiFetch<PackageDashboardRow[]>("/api/packages/dashboard");
+}
+
+export async function fetchPackageWorkspace(zid?: number): Promise<
+  import("./types").PackageWorkspaceRow[]
+> {
+  if (isBackendMode()) {
+    const q = zid != null ? `?zid=${zid}` : "";
+    return apiFetch(`/api/packages/workspace${q}`);
+  }
+  // Local fallback: synthesize from orgs + periods + completeness
+  const orgs = await listOrganizations();
+  const periods = await listPeriods(zid);
+  const rows: import("./types").PackageWorkspaceRow[] = [];
+  for (const p of periods) {
+    const org = orgs.find((o) => o.zid === p.zid);
+    if (!org) continue;
+    const c = await fetchPackageCompleteness(p.zid, p.eid);
+    rows.push({
+      zid: p.zid,
+      eid: p.eid,
+      organizationName: org.name,
+      organizationCode: org.code ?? null,
+      periodName: p.name,
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      periodStatus: p.periodStatus === "closed" ? "closed" : "open",
+      packageKind: p.packageKind === "BALANCE" ? "BALANCE" : "OKO",
+      total: c.total,
+      filled: c.filled,
+      draft: c.draft,
+      submitted: c.submitted,
+      percent: c.total > 0 ? Math.round((c.filled / c.total) * 100) : 0,
+      bpId: null,
+      bpStatus: null,
+      curatorUserId: null,
+      curatorName: null,
+      bpLastChangedAt: null,
+      bpIteration: null,
+      hasBlockers: false,
+      methodologyReleaseId: p.methodologyReleaseId ?? null,
+    });
+  }
+  return rows;
+}
+
+export async function fetchPackageWorkspaceDetail(
+  zid: number,
+  eid: number,
+  packageKind?: "OKO" | "BALANCE"
+): Promise<import("./types").PackageWorkspaceDetail> {
+  if (isBackendMode()) {
+    const q = new URLSearchParams({
+      zid: String(zid),
+      eid: String(eid),
+    });
+    if (packageKind) q.set("packageKind", packageKind);
+    return apiFetch(`/api/packages/workspace/detail?${q.toString()}`);
+  }
+  const rows = await fetchPackageWorkspace(zid);
+  const row = rows.find((r) => r.eid === eid);
+  if (!row) throw new Error("Комплект не найден");
+  const completeness = await fetchPackageCompleteness(zid, eid);
+  return {
+    row: {
+      ...row,
+      total: completeness.total,
+      filled: completeness.filled,
+      draft: completeness.draft,
+      submitted: completeness.submitted,
+      percent:
+        completeness.total > 0
+          ? Math.round((completeness.filled / completeness.total) * 100)
+          : 0,
+    },
+    completeness,
+    bp: null,
+    blockers: null,
+    childOrgCount: 0,
+  };
+}
+
+export async function previewPackageConstruct(
+  input: import("./types").PackageConstructInput
+): Promise<import("./types").PackageConstructPreview> {
+  if (!isBackendMode()) {
+    throw new Error("Конструктор комплектов доступен только в backend-режиме");
+  }
+  return apiFetch("/api/packages/construct/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function constructPackages(
+  input: import("./types").PackageConstructInput
+): Promise<import("./types").PackageConstructResult> {
+  if (!isBackendMode()) {
+    throw new Error("Конструктор комплектов доступен только в backend-режиме");
+  }
+  return apiFetch("/api/packages/construct", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function createReportPackage(

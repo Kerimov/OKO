@@ -18,6 +18,7 @@ import type { Organization, ReportingPeriod } from "../types";
 import type { IdOrEmpty } from "../components/OrgPeriodSelects";
 import {
   checkRunSummary,
+  formatDateTimeRu,
   orgOptionLabel,
   packageKindLabel,
   periodOptionLabel,
@@ -165,13 +166,13 @@ export function CheckExplanationsPage() {
   };
 
   if (!backend) {
-    return <p className="hint">Объяснения проверок доступны только в backend-режиме.</p>;
+    return <p className="tools-hint">Объяснения проверок доступны только в backend-режиме.</p>;
   }
 
   return (
     <div className="page">
       <h1>Объяснения проверок</h1>
-      <p className="hint">
+      <p className="tools-hint">
         Блокеры согласования и журнал неуспешных проверок по комплекту. Без объяснения куратор не
         сможет согласовать БП.
       </p>
@@ -345,7 +346,7 @@ export function CheckExplanationsPage() {
                 <td>#{ex.ruleNumber}</td>
                 <td>{ex.explanation}</td>
                 <td>{ex.author ?? "—"}</td>
-                <td>{ex.updatedAt}</td>
+                <td>{formatDateTimeRu(ex.updatedAt)}</td>
               </tr>
             ))}
             {!explanations.length && (
@@ -378,7 +379,7 @@ export function CheckExplanationsPage() {
                   value={ruleNumber}
                   onChange={(e) => setRuleNumber(e.target.value)}
                   inputMode="numeric"
-                  placeholder="Нет failed-правил — введите номер"
+                  placeholder="Нет правил с ошибками — введите номер"
                 />
               )}
             </label>
