@@ -39,6 +39,7 @@ import {
 import type { KontrAgent, RashRule } from "../types";
 import { useAuth } from "../useAuth";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 type KontrDraft = {
   id: number | null;
@@ -352,7 +353,7 @@ export function RefsAdminPage() {
     e.preventDefault();
     if (!admin || !selectedKind) return;
     if (isLoanGroup) {
-      setError("Группы KZS/НЗС редактируются через «Сводка и импорт → Справочники»");
+      setError("Группы KZS/НЗС редактируются через «Обмен и операции → Справочники»");
       return;
     }
     setBusy(true);
@@ -620,7 +621,7 @@ export function RefsAdminPage() {
               Классификаторы расшифровок правятся поверх bundled JSON
               {backend ? " (настройки API)" : " (localStorage)"}. Контрагенты — через API.
               KZS/НЗС — только через{" "}
-              <Link to="/tools?tab=references">Сводка и импорт → Справочники</Link>. Связанный
+              <Link to="/tools?tab=references">Обмен и операции → Справочники</Link>. Связанный
               редактор: <Link to="/admin/rash">Расшифровки</Link>.
             </p>
           </details>
@@ -650,37 +651,41 @@ export function RefsAdminPage() {
       {!loading && (
         <div className="forms-workbench refs-admin">
           <aside className="refs-admin-list">
-            <label className="refs-sr-only" htmlFor="refs-dir-search">
-              Поиск справочника
-            </label>
-            <input
-              id="refs-dir-search"
-              className="search-input"
-              placeholder="Поиск справочника…"
-              aria-label="Поиск справочника"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <div className="refs-filter-chips" role="group" aria-label="Фильтр списка">
-              {(
-                [
-                  ["used", "Используемые"],
-                  ["all", "Все"],
-                  ["edited", "С правками"],
-                  ["technical", "Технические"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`refs-chip${dirFilter === id ? " is-active" : ""}`}
-                  aria-pressed={dirFilter === id}
-                  onClick={() => setDirFilter(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <CollapsibleFilters
+              activeCount={countActiveFilters(q.trim().length > 0, dirFilter !== "used")}
+            >
+              <label className="refs-sr-only" htmlFor="refs-dir-search">
+                Поиск справочника
+              </label>
+              <input
+                id="refs-dir-search"
+                className="search-input"
+                placeholder="Поиск справочника…"
+                aria-label="Поиск справочника"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <div className="refs-filter-chips" role="group" aria-label="Фильтр списка">
+                {(
+                  [
+                    ["used", "Используемые"],
+                    ["all", "Все"],
+                    ["edited", "С правками"],
+                    ["technical", "Технические"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`refs-chip${dirFilter === id ? " is-active" : ""}`}
+                    aria-pressed={dirFilter === id}
+                    onClick={() => setDirFilter(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </CollapsibleFilters>
             <p className="refs-list-count">
               Показано <strong>{visibleDirs.length}</strong>
             </p>
@@ -780,17 +785,22 @@ export function RefsAdminPage() {
                     </div>
                   </div>
                   <div className="refs-detail-actions">
-                    <label className="refs-sr-only" htmlFor="refs-item-search">
-                      Фильтр записей
-                    </label>
-                    <input
-                      id="refs-item-search"
-                      className="search-input"
-                      placeholder="Фильтр записей…"
-                      aria-label="Фильтр записей"
-                      value={itemQ}
-                      onChange={(e) => setItemQ(e.target.value)}
-                    />
+                    <CollapsibleFilters
+                      title="Фильтр записей"
+                      activeCount={countActiveFilters(itemQ.trim().length > 0)}
+                    >
+                      <label className="refs-sr-only" htmlFor="refs-item-search">
+                        Фильтр записей
+                      </label>
+                      <input
+                        id="refs-item-search"
+                        className="search-input"
+                        placeholder="Фильтр записей…"
+                        aria-label="Фильтр записей"
+                        value={itemQ}
+                        onChange={(e) => setItemQ(e.target.value)}
+                      />
+                    </CollapsibleFilters>
                     {isKontr && (
                       <>
                         <button
@@ -864,7 +874,7 @@ export function RefsAdminPage() {
                 {isLoanGroup && (
                   <p className="tools-hint">
                     Группа управляется пакетом займов/НЗС. Импорт и правка:{" "}
-                    <Link to="/tools?tab=references">Сводка и импорт → Справочники</Link>.
+                    <Link to="/tools?tab=references">Обмен и операции → Справочники</Link>.
                   </p>
                 )}
 

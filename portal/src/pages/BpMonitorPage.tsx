@@ -12,6 +12,7 @@ import { listOrganizations, listPeriods } from "../packagesApi";
 import type { Organization, ReportingPeriod } from "../types";
 import type { IdOrEmpty } from "../components/OrgPeriodSelects";
 import { orgOptionLabel, packageKindLabel, periodOptionLabel, BP_STATUS_LABEL, formatDateTimeRu } from "../uiLabels";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 type BpStatus =
   | "not_started"
@@ -211,7 +212,15 @@ export function BpMonitorPage() {
       </p>
 
       <section className="tools-section">
-        <div className="tools-grid">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(
+            filterStatus !== "",
+            filterKind !== "",
+            typeof filterZid === "number",
+            typeof filterEid === "number"
+          )}
+          bodyClassName="tools-grid"
+        >
           <label>
             Статус
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
@@ -272,7 +281,7 @@ export function BpMonitorPage() {
               {loading ? "Загрузка…" : "Обновить"}
             </button>
           </div>
-        </div>
+        </CollapsibleFilters>
       </section>
 
       {error && <p className="error">{error}</p>}

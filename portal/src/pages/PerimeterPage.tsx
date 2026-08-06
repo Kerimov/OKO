@@ -9,6 +9,7 @@ import {
 } from "../psdApi";
 import { isBackendMode } from "../storage";
 import { unitKindLabel } from "../uiLabels";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 export function PerimeterPage() {
   const backend = isBackendMode();
@@ -80,7 +81,10 @@ export function PerimeterPage() {
       </div>
 
       <section className="tools-section">
-        <div className="tools-grid">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(q.trim().length > 0)}
+          bodyClassName="tools-grid"
+        >
           <label>
             Фильтр
             <input
@@ -97,7 +101,7 @@ export function PerimeterPage() {
           >
             Обновить
           </button>
-        </div>
+        </CollapsibleFilters>
         {tab === "kontr" && (
           <div className="tools-grid" style={{ marginTop: "0.75rem" }}>
             <label>

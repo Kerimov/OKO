@@ -13,6 +13,7 @@ import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 export function AggregationEditorPage() {
   const access = useAdminAccess();
@@ -157,23 +158,27 @@ export function AggregationEditorPage() {
       {status && <div className="status-msg">{status}</div>}
 
       <section className="admin-section">
-        <h2>Фильтр</h2>
-        <label>
-          Сводная организация
-          <select
-            value={filterParent}
-            onChange={(e) =>
-              setFilterParent(e.target.value === "" ? "" : Number(e.target.value))
-            }
-          >
-            <option value="">Все</option>
-            {parentOptions.map((o) => (
-              <option key={o.zid} value={o.zid}>
-                {o.name} {o.code ? `(${o.code})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CollapsibleFilters
+          title="Фильтр"
+          activeCount={countActiveFilters(filterParent !== "")}
+        >
+          <label>
+            Сводная организация
+            <select
+              value={filterParent}
+              onChange={(e) =>
+                setFilterParent(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            >
+              <option value="">Все</option>
+              {parentOptions.map((o) => (
+                <option key={o.zid} value={o.zid}>
+                  {o.name} {o.code ? `(${o.code})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </CollapsibleFilters>
       </section>
 
       <section className="admin-section">

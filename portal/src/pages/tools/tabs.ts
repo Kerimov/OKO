@@ -7,6 +7,8 @@ export type ToolsTabId =
   | "references"
   | "advanced";
 
+export type ExchangeMode = "export" | "upload";
+
 export const TOOLS_TABS: Array<{
   id: ToolsTabId;
   label: string;
@@ -15,17 +17,17 @@ export const TOOLS_TABS: Array<{
   {
     id: "overview",
     label: "Обзор",
-    hint: "Контекст рабочего комплекта и полнота заполнения",
+    hint: "Сценарии: отправить дочкам, принять, проверить, собрать свод",
   },
   {
     id: "exchange",
     label: "Обмен",
-    hint: "Импорт и экспорт комплекта (JSON/ZIP), сравнение форм и ячеек",
+    hint: "Выгрузка комплектов из списка и загрузка файлов drag-and-drop",
   },
   {
     id: "quality",
     label: "Контроль",
-    hint: "Пересчёт и увязки по текущему комплекту организации/периода",
+    hint: "Пересчёт и увязки по текущему комплекту",
   },
   {
     id: "saldo",
@@ -44,7 +46,11 @@ export const TOOLS_TABS: Array<{
   },
   {
     id: "advanced",
-    label: "Расширенное",
-    hint: "Ограничения и обходные пути вместо ручной агрегации экземпляров",
+    label: "Служебное",
+    hint: "Ограничения и обходные пути",
   },
 ];
+
+export function parseExchangeMode(raw: string | null): ExchangeMode {
+  return raw === "upload" ? "upload" : "export";
+}

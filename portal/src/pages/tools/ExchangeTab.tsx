@@ -1,38 +1,609 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { verdictLabel, type PackageCellDiff, type PackageDiffRow } from "../../engine/packageDiff";
-import { readReportPackageFile } from "../../engine/packageExport";
+import { CollapsibleFilters, countActiveFilters } from "../../components/CollapsibleFilters";
+import {
+  buildPackageCellDiffs,
+  buildPackageDiff,
+  verdictLabel,
+  type PackageCellDiff,
+  type PackageDiffRow,
+} from "../../engine/packageDiff";
+import {
+  readReportPackagesFromFile,
+  type ReportPackage,
+} from "../../engine/packageExport";
+import { downloadBlob } from "../../engine/zipStore";
+import {
+  exportReportPackagesBulk,
+  fetchPackageWorkspace,
+  importReportPackage,
+  importReportPackagesBulk,
+  type BulkImportPackageResult,
+} from "../../packagesApi";
+import { listInstances, loadInstance } from "../../storage";
+import type { OkoFormInstance, PackageWorkspaceRow } from "../../types";
+import { bpStatusLabel, packageKindLabel } from "../../uiLabels";
+import { exportPackageToExcel } from "../../engine/exportExcel";
+import { loadSchema } from "../../api";
+import type { ExchangeMode } from "./tabs";
 
-type PendingPackage = Awaited<ReturnType<typeof readReportPackageFile>>;
+function formatExchangeAt(iso: string | null | undefined): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
 
-export interface ExchangeTabProps {
-  work: {
-    zid: number | null;
-    eid: number | null;
-    formCount: number;
+function rowKey(r: { zid: number; eid: number }): string {
+  return `${r.zid}:${r.eid}`;
+}
+
+function isPackageFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith(".json") ||
+    name.endsWith(".zip") ||
+    file.type === "application/json" ||
+    file.type === "application/zip" ||
+    file.type === "application/x-zip-compressed"
+  );
+}
+
+async function loadPackageInstances(zid: number, eid: number): Promise<OkoFormInstance[]> {
+  const summaries = await listInstances({ zid, eid });
+  const instances: OkoFormInstance[] = [];
+  for (const s of summaries) {
+    const inst = await loadInstance(s.instanceId);
+    if (inst) instances.push({ ...inst, zid, eid });
+  }
+  return instances;
+}
+
+type UploadMarkFilter = "" | "imported" | "pending";
+
+function useWorkspacePackageList() {
+  const [workspaceRows, setWorkspaceRows] = useState<PackageWorkspaceRow[]>([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [bulkSearch, setBulkSearch] = useState("");
+  const [bulkPeriod, setBulkPeriod] = useState("");
+  const [bulkKind, setBulkKind] = useState("");
+  const [bulkBp, setBulkBp] = useState("");
+  const [bulkOnlyFilled, setBulkOnlyFilled] = useState(false);
+  const [uploadMark, setUploadMark] = useState<UploadMarkFilter>("");
+
+  const reloadWorkspace = useCallback(async () => {
+    setWorkspaceLoading(true);
+    try {
+      setWorkspaceRows(await fetchPackageWorkspace());
+    } catch (e) {
+      // Keep previous rows — clearing the list on a transient error looks like
+      // «комплекты пропали».
+      throw e instanceof Error
+        ? e
+        : new Error("Не удалось загрузить список комплектов");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }, []);
+
+  const periodOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of workspaceRows) {
+      const key = r.periodName || String(r.eid);
+      if (!map.has(key)) map.set(key, key);
+    }
+    return [...map.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [workspaceRows]);
+
+  const filteredRows = useMemo(() => {
+    const q = bulkSearch.trim().toLowerCase();
+    return workspaceRows.filter((r) => {
+      if (bulkPeriod && (r.periodName || String(r.eid)) !== bulkPeriod) return false;
+      if (bulkKind && r.packageKind !== bulkKind) return false;
+      if (bulkBp && r.bpStatus !== bulkBp) return false;
+      if (bulkOnlyFilled && !(r.total > 0 && r.filled >= r.total)) return false;
+      if (uploadMark === "imported" && !r.lastImportedAt) return false;
+      if (uploadMark === "pending" && r.lastImportedAt) return false;
+      if (!q) return true;
+      return (
+        r.organizationName.toLowerCase().includes(q) ||
+        (r.organizationCode ?? "").toLowerCase().includes(q) ||
+        (r.periodName ?? "").toLowerCase().includes(q) ||
+        String(r.zid).includes(q) ||
+        String(r.eid).includes(q)
+      );
+    });
+  }, [
+    workspaceRows,
+    bulkSearch,
+    bulkPeriod,
+    bulkKind,
+    bulkBp,
+    bulkOnlyFilled,
+    uploadMark,
+  ]);
+
+  return {
+    workspaceRows,
+    workspaceLoading,
+    reloadWorkspace,
+    periodOptions,
+    filteredRows,
+    filters: {
+      bulkSearch,
+      setBulkSearch,
+      bulkPeriod,
+      setBulkPeriod,
+      bulkKind,
+      setBulkKind,
+      bulkBp,
+      setBulkBp,
+      bulkOnlyFilled,
+      setBulkOnlyFilled,
+      uploadMark,
+      setUploadMark,
+    },
   };
-  exportZip: boolean;
-  onExportZipChange: (value: boolean) => void;
+}
+
+function ExchangeMarksCell({
+  row,
+  showExported = true,
+}: {
+  row: PackageWorkspaceRow;
+  showExported?: boolean;
+}) {
+  const importVersionNum = Number(row.importVersion ?? 0);
+  const importVersion =
+    row.lastImportedAt && importVersionNum > 0 ? importVersionNum : null;
+  return (
+    <>
+      <div className="exchange-marks">
+        {row.lastImportedAt ? (
+          <span
+            className="status-badge accepted"
+            title={
+              formatExchangeAt(row.lastImportedAt) +
+              (importVersion != null ? ` · версия ${importVersion}` : "")
+            }
+          >
+            Загружено
+            {importVersion != null ? ` · v${importVersion}` : ""}
+          </span>
+        ) : (
+          <span className="status-badge draft" title="Файл ещё не принимали">
+            Не загружено
+          </span>
+        )}
+        {showExported && row.lastExportedAt ? (
+          <span
+            className="status-badge collecting"
+            title={formatExchangeAt(row.lastExportedAt)}
+          >
+            Выгружено
+          </span>
+        ) : null}
+      </div>
+      <div className="table-sub">
+        {row.lastImportedAt
+          ? [
+              formatExchangeAt(row.lastImportedAt),
+              importVersion != null ? `версия ${importVersion}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : showExported && row.lastExportedAt
+            ? `выгрузка ${formatExchangeAt(row.lastExportedAt)}`
+            : "—"}
+      </div>
+    </>
+  );
+}
+
+function WorkspaceFilters({
+  periodOptions,
+  filters,
+  showUploadMarkFilter,
+}: {
+  periodOptions: string[];
+  filters: ReturnType<typeof useWorkspacePackageList>["filters"];
+  showUploadMarkFilter?: boolean;
+}) {
+  const {
+    bulkSearch,
+    setBulkSearch,
+    bulkPeriod,
+    setBulkPeriod,
+    bulkKind,
+    setBulkKind,
+    bulkBp,
+    setBulkBp,
+    bulkOnlyFilled,
+    setBulkOnlyFilled,
+    uploadMark,
+    setUploadMark,
+  } = filters;
+
+  return (
+    <CollapsibleFilters
+      activeCount={countActiveFilters(
+        bulkSearch.trim().length > 0,
+        bulkPeriod !== "",
+        bulkKind !== "",
+        bulkBp !== "",
+        bulkOnlyFilled,
+        Boolean(showUploadMarkFilter && uploadMark)
+      )}
+      bodyClassName="tools-grid"
+    >
+      <label>
+        Поиск
+        <input
+          type="search"
+          value={bulkSearch}
+          onChange={(e) => setBulkSearch(e.target.value)}
+          placeholder="Организация или период…"
+        />
+      </label>
+      <label>
+        Период
+        <select value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)}>
+          <option value="">Все</option>
+          {periodOptions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Тип
+        <select value={bulkKind} onChange={(e) => setBulkKind(e.target.value)}>
+          <option value="">Все</option>
+          <option value="OKO">{packageKindLabel("OKO")}</option>
+          <option value="BALANCE">{packageKindLabel("BALANCE")}</option>
+        </select>
+      </label>
+      <label>
+        Статус БП
+        <select value={bulkBp} onChange={(e) => setBulkBp(e.target.value)}>
+          <option value="">Все</option>
+          <option value="not_started">{bpStatusLabel("not_started")}</option>
+          <option value="collecting">{bpStatusLabel("collecting")}</option>
+          <option value="pending_curator_approval">
+            {bpStatusLabel("pending_curator_approval")}
+          </option>
+          <option value="curator_approved">{bpStatusLabel("curator_approved")}</option>
+          <option value="completed">{bpStatusLabel("completed")}</option>
+        </select>
+      </label>
+      {showUploadMarkFilter && (
+        <label>
+          Загрузка
+          <select
+            value={uploadMark}
+            onChange={(e) => setUploadMark(e.target.value as UploadMarkFilter)}
+          >
+            <option value="">Все</option>
+            <option value="pending">Не загружено</option>
+            <option value="imported">Уже загружено</option>
+          </select>
+        </label>
+      )}
+      <label className="checkbox-inline" style={{ alignSelf: "end" }}>
+        <input
+          type="checkbox"
+          checked={bulkOnlyFilled}
+          onChange={(e) => setBulkOnlyFilled(e.target.checked)}
+        />
+        Только полные
+      </label>
+    </CollapsibleFilters>
+  );
+}
+
+function WorkspacePackagesTable({
+  rows,
+  loading,
+  selectable,
+  checkedKeys,
+  busy,
+  onToggle,
+  highlightImported,
+  showExportedMark = true,
+}: {
+  rows: PackageWorkspaceRow[];
+  loading: boolean;
+  selectable?: boolean;
+  checkedKeys?: Set<string>;
+  busy?: boolean;
+  onToggle?: (key: string, checked: boolean) => void;
+  highlightImported?: boolean;
+  showExportedMark?: boolean;
+}) {
+  if (loading) {
+    return <p className="hint-text">Загрузка комплектов…</p>;
+  }
+  return (
+    <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
+      <table className="form-table" style={{ minWidth: "42rem" }}>
+        <thead>
+          <tr>
+            {selectable ? <th style={{ width: "2.5rem" }} /> : null}
+            <th>Организация</th>
+            <th>Период</th>
+            <th>Тип</th>
+            <th>Формы</th>
+            <th>Обмен</th>
+            <th>БП</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const key = rowKey(r);
+            const imported = Boolean(r.lastImportedAt);
+            return (
+              <tr
+                key={key}
+                className={
+                  highlightImported && imported ? "exchange-row-imported" : undefined
+                }
+              >
+                {selectable ? (
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={checkedKeys?.has(key) ?? false}
+                      disabled={busy}
+                      onChange={(e) => onToggle?.(key, e.target.checked)}
+                      aria-label={`Выбрать ${r.organizationName}`}
+                    />
+                  </td>
+                ) : null}
+                <td>
+                  <div>{r.organizationName}</div>
+                  <div className="table-sub">
+                    ZID {r.zid}
+                    {r.organizationCode ? ` · ${r.organizationCode}` : ""}
+                  </div>
+                </td>
+                <td>
+                  <div>{r.periodName}</div>
+                  <div className="table-sub">EID {r.eid}</div>
+                </td>
+                <td>{packageKindLabel(r.packageKind)}</td>
+                <td>
+                  {r.filled}/{r.total} · сдано {r.submitted}
+                  <div className="table-sub">{r.percent}%</div>
+                </td>
+                <td>
+                  <ExchangeMarksCell row={r} showExported={showExportedMark} />
+                </td>
+                <td>
+                  {r.bpStatus ? (
+                    <span className={`status-badge ${r.bpStatus}`}>
+                      {bpStatusLabel(r.bpStatus)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {!rows.length && (
+            <tr>
+              <td colSpan={selectable ? 7 : 6}>Нет комплектов по фильтрам</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export interface PackageExportTabProps {
+  onStatus?: (message: string) => void;
+}
+
+export function PackageExportTab({ onStatus }: PackageExportTabProps) {
+  const list = useWorkspacePackageList();
+  const [busy, setBusy] = useState(false);
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    void list.reloadWorkspace().catch((e) => {
+      onStatus?.(e instanceof Error ? e.message : "Не удалось загрузить список комплектов");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const checkedRows = useMemo(
+    () => list.filteredRows.filter((r) => checkedKeys.has(rowKey(r))),
+    [list.filteredRows, checkedKeys]
+  );
+  const singleSelected = checkedRows.length === 1 ? checkedRows[0]! : null;
+  const allFilteredChecked =
+    list.filteredRows.length > 0 &&
+    list.filteredRows.every((r) => checkedKeys.has(rowKey(r)));
+
+  const toggleChecked = (key: string, checked: boolean) => {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredChecked) {
+      setCheckedKeys((prev) => {
+        const next = new Set(prev);
+        for (const r of list.filteredRows) next.delete(rowKey(r));
+        return next;
+      });
+      return;
+    }
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      for (const r of list.filteredRows) next.add(rowKey(r));
+      return next;
+    });
+  };
+
+  const handleDownloadSelected = async () => {
+    if (!checkedRows.length) {
+      onStatus?.("Отметьте один или несколько комплектов для скачивания");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await exportReportPackagesBulk(
+        checkedRows.map((r) => ({ zid: r.zid, eid: r.eid }))
+      );
+      downloadBlob(result.blob, result.filename);
+      await list.reloadWorkspace().catch(() => undefined);
+      onStatus?.(
+        checkedRows.length === 1
+          ? `Скачан комплект: ${checkedRows[0]!.organizationName} → ${result.filename}`
+          : `Скачано комплектов: ${result.exported}` +
+              (result.failed ? ` · ошибок ${result.failed}` : "") +
+              ` → ${result.filename}`
+      );
+    } catch (e) {
+      onStatus?.(e instanceof Error ? e.message : "Ошибка выгрузки");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExcelSelected = async () => {
+    if (!singleSelected) {
+      onStatus?.("Для Excel отметьте ровно один комплект");
+      return;
+    }
+    setBusy(true);
+    try {
+      const instances = await loadPackageInstances(singleSelected.zid, singleSelected.eid);
+      if (!instances.length) {
+        onStatus?.("В выбранном комплекте нет форм");
+        return;
+      }
+      const schemas = new Map(
+        await Promise.all(
+          [...new Set(instances.map((i) => i.templateId))].map(
+            async (id) => [id, await loadSchema(id)] as const
+          )
+        )
+      );
+      await exportPackageToExcel(instances, schemas);
+      onStatus?.(
+        `Excel: ${singleSelected.organizationName} · ${instances.length} форм`
+      );
+    } catch (e) {
+      onStatus?.(e instanceof Error ? e.message : "Ошибка Excel");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="tools-section">
+      <h2>Выгрузить комплекты</h2>
+      <p>
+        Отметьте один или несколько комплектов и скачайте ZIP — внутри отдельный файл на
+        каждую организацию и <code>manifest.json</code>.
+      </p>
+      <p className="hint-text">
+        Создание комплектов — в <Link to="/package">Комплектах</Link>. Обратная загрузка —
+        переключатель «Загрузить» выше.
+      </p>
+
+      <WorkspaceFilters periodOptions={list.periodOptions} filters={list.filters} />
+
+      <div
+        className="toolbar-actions"
+        style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
+      >
+        <label className="checkbox-inline">
+          <input
+            type="checkbox"
+            checked={allFilteredChecked}
+            disabled={list.workspaceLoading || list.filteredRows.length === 0}
+            onChange={toggleSelectAllFiltered}
+          />
+          Выбрать все ({list.filteredRows.length})
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy || checkedRows.length === 0}
+          onClick={() => void handleDownloadSelected()}
+        >
+          {busy
+            ? "Выгрузка…"
+            : checkedRows.length <= 1
+              ? `Скачать${checkedRows.length === 1 ? " комплект" : ""} (${checkedRows.length})`
+              : `Скачать выбранные (${checkedRows.length})`}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy || !singleSelected}
+          onClick={() => void handleExcelSelected()}
+          title="Excel только для одного отмеченного комплекта"
+        >
+          Excel
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={list.workspaceLoading || busy}
+          onClick={() =>
+            void list.reloadWorkspace().catch((e) => {
+              onStatus?.(
+                e instanceof Error ? e.message : "Не удалось обновить список"
+              );
+            })
+          }
+        >
+          Обновить список
+        </button>
+      </div>
+
+      <WorkspacePackagesTable
+        rows={list.filteredRows}
+        loading={list.workspaceLoading}
+        selectable
+        checkedKeys={checkedKeys}
+        busy={busy}
+        onToggle={toggleChecked}
+      />
+    </section>
+  );
+}
+
+type DropJob = {
+  id: string;
+  fileName: string;
+  status: "queued" | "parsing" | "importing" | "done" | "error";
+  detail?: string;
+};
+
+export interface PackageUploadTabProps {
   importOverwrite: boolean;
   onImportOverwriteChange: (value: boolean) => void;
-  importing: boolean;
-  busy: boolean;
-  pending: {
-    package: PendingPackage | null;
-    diffRows: PackageDiffRow[];
-    selectedIds: Set<string>;
-    cellDiffs: PackageCellDiff[];
-    showCellDiffs: boolean;
-  };
-  onShowCellDiffsChange: (value: boolean) => void;
-  onPackageJson: () => void;
-  onPackageExcel: () => void;
-  onImportPreview: (file: File) => void;
-  onAcceptPartial: () => void;
-  onImportAll: () => void;
-  onCancelPending: () => void;
-  onSelectByVerdict: (predicate: (r: PackageDiffRow) => boolean) => void;
-  onToggleImportId: (templateId: string) => void;
-  onClearSelection: () => void;
+  onStatus?: (message: string) => void;
+  onImported?: () => void;
   inbox?: {
     backend: boolean;
     items: Array<{
@@ -54,104 +625,457 @@ export interface ExchangeTabProps {
   };
 }
 
-export function ExchangeTab({
-  work,
-  exportZip,
-  onExportZipChange,
+export function PackageUploadTab({
   importOverwrite,
   onImportOverwriteChange,
-  importing,
-  busy,
-  pending,
-  onShowCellDiffsChange,
-  onPackageJson,
-  onPackageExcel,
-  onImportPreview,
-  onAcceptPartial,
-  onImportAll,
-  onCancelPending,
-  onSelectByVerdict,
-  onToggleImportId,
-  onClearSelection,
+  onStatus,
+  onImported,
   inbox,
-}: ExchangeTabProps) {
+}: PackageUploadTabProps) {
+  const list = useWorkspacePackageList();
+  const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [jobs, setJobs] = useState<DropJob[]>([]);
+  const [bulkImportReport, setBulkImportReport] = useState<BulkImportPackageResult | null>(
+    null
+  );
+  const [pendingPackage, setPendingPackage] = useState<ReportPackage | null>(null);
+  const [pendingName, setPendingName] = useState("");
+  const [pendingTarget, setPendingTarget] = useState<{ zid: number; eid: number } | null>(
+    null
+  );
+  const [diffRows, setDiffRows] = useState<PackageDiffRow[]>([]);
+  const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
+  const [cellDiffs, setCellDiffs] = useState<PackageCellDiff[]>([]);
+  const [showCellDiffs, setShowCellDiffs] = useState(false);
+  const dragDepth = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void list.reloadWorkspace().catch((e) => {
+      onStatus?.(e instanceof Error ? e.message : "Не удалось загрузить список комплектов");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshList = async () => {
+    try {
+      await list.reloadWorkspace();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const importedCount = useMemo(
+    () => list.workspaceRows.filter((r) => r.lastImportedAt).length,
+    [list.workspaceRows]
+  );
+  const pendingCount = list.workspaceRows.length - importedCount;
+
+  const updateJob = useCallback((id: string, patch: Partial<DropJob>) => {
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  const openSinglePreview = async (pkg: ReportPackage, name: string) => {
+    const zid = pkg.zid != null ? Number(pkg.zid) : NaN;
+    const eid = pkg.eid != null ? Number(pkg.eid) : NaN;
+    if (!Number.isFinite(zid) || !Number.isFinite(eid)) {
+      throw new Error(
+        "В файле нет zid/eid — выгрузите комплект заново из портала или положите файл в очередь."
+      );
+    }
+    const local = await loadPackageInstances(zid, eid);
+    const rows = buildPackageDiff(pkg, local, { zid, eid });
+    setPendingPackage(pkg);
+    setPendingName(name);
+    setPendingTarget({ zid, eid });
+    setDiffRows(rows);
+    setSelectedImportIds(
+      new Set(
+        rows
+          .filter((r) => r.selectedDefault && r.verdict !== "only-local")
+          .map((r) => r.templateId)
+      )
+    );
+    setCellDiffs(buildPackageCellDiffs(pkg, local));
+    setShowCellDiffs(false);
+    setBulkImportReport(null);
+    onStatus?.(
+      `Сравнение: ${pkg.organization || name} → орг. ${zid}, период ${eid} · ` +
+        `${rows.filter((r) => r.verdict === "changed").length} изменённых, ` +
+        `${rows.filter((r) => r.verdict === "new").length} новых`
+    );
+  };
+
+  const processFiles = async (rawFiles: FileList | File[]) => {
+    const files = [...rawFiles].filter(isPackageFile);
+    if (!files.length) {
+      onStatus?.("Нужны файлы .json или .zip");
+      return;
+    }
+
+    const newJobs: DropJob[] = files.map((f, i) => ({
+      id: `${Date.now()}-${i}-${f.name}`,
+      fileName: f.name,
+      status: "queued",
+    }));
+    setJobs(newJobs);
+    setBulkImportReport(null);
+    setPendingPackage(null);
+    setBusy(true);
+
+    try {
+      const packages: Array<{ name: string; package: ReportPackage; jobId: string }> = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
+        const job = newJobs[i]!;
+        updateJob(job.id, { status: "parsing", detail: "чтение…" });
+        try {
+          const fromFile = await readReportPackagesFromFile(file);
+          if (!fromFile.length) {
+            updateJob(job.id, { status: "error", detail: "в файле нет комплектов" });
+            continue;
+          }
+          updateJob(job.id, {
+            status: "queued",
+            detail:
+              fromFile.length === 1
+                ? `1 комплект`
+                : `${fromFile.length} комплектов в архиве`,
+          });
+          for (const entry of fromFile) {
+            packages.push({ ...entry, jobId: job.id });
+          }
+        } catch (e) {
+          updateJob(job.id, {
+            status: "error",
+            detail: e instanceof Error ? e.message : "ошибка чтения",
+          });
+        }
+      }
+
+      if (!packages.length) {
+        onStatus?.("Не удалось разобрать ни одного комплекта");
+        return;
+      }
+
+      // Один комплект — сравнение перед приёмом
+      if (packages.length === 1) {
+        const only = packages[0]!;
+        updateJob(only.jobId, { status: "done", detail: "готово к сравнению" });
+        await openSinglePreview(only.package, only.name);
+        return;
+      }
+
+      // Куча файлов — сразу принимаем
+      for (const job of newJobs) {
+        if (job.status !== "error") {
+          updateJob(job.id, { status: "importing", detail: "загрузка…" });
+        }
+      }
+
+      const result = await importReportPackagesBulk(
+        packages.map(({ name, package: pkg }) => ({ name, package: pkg })),
+        { overwrite: importOverwrite }
+      );
+      setBulkImportReport(result);
+
+      const byJob = new Map<string, { ok: number; fail: number; msgs: string[] }>();
+      for (const pkg of packages) {
+        if (!byJob.has(pkg.jobId)) byJob.set(pkg.jobId, { ok: 0, fail: 0, msgs: [] });
+      }
+      for (let i = 0; i < result.results.length; i++) {
+        const r = result.results[i]!;
+        const jobId = packages[i]?.jobId;
+        if (!jobId) continue;
+        const bucket = byJob.get(jobId)!;
+        if (r.ok) bucket.ok += 1;
+        else {
+          bucket.fail += 1;
+          if (r.error) bucket.msgs.push(r.error);
+        }
+      }
+      for (const [jobId, bucket] of byJob) {
+        if (bucket.fail && !bucket.ok) {
+          updateJob(jobId, {
+            status: "error",
+            detail: bucket.msgs[0] ?? `ошибок ${bucket.fail}`,
+          });
+        } else if (bucket.fail) {
+          updateJob(jobId, {
+            status: "done",
+            detail: `загружено ${bucket.ok}, ошибок ${bucket.fail}`,
+          });
+        } else {
+          updateJob(jobId, {
+            status: "done",
+            detail: bucket.ok ? `загружено (${bucket.ok})` : "загружено",
+          });
+        }
+      }
+
+      await refreshList();
+      onImported?.();
+      onStatus?.(
+        `Загружено комплектов: ${result.imported}` +
+          (result.failed ? ` · ошибок ${result.failed}` : "") +
+          ` · форм +${result.created}/≈${result.updated}`
+      );
+    } catch (e) {
+      onStatus?.(e instanceof Error ? e.message : "Ошибка загрузки");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAcceptPartial = async () => {
+    if (!pendingPackage || !pendingTarget) return;
+    const ids = [...selectedImportIds];
+    if (!ids.length) {
+      onStatus?.("Выберите хотя бы одну форму");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await importReportPackage(
+        pendingTarget.zid,
+        pendingTarget.eid,
+        pendingPackage,
+        importOverwrite,
+        ids
+      );
+      setPendingPackage(null);
+      setDiffRows([]);
+      setSelectedImportIds(new Set());
+      await refreshList();
+      onImported?.();
+      onStatus?.(
+        `Принято: +${result.created} / ≈${result.updated}, пропуск ${result.skipped}` +
+          (result.errors.length ? `. ${result.errors.slice(0, 2).join("; ")}` : "")
+      );
+    } catch (e) {
+      onStatus?.(e instanceof Error ? e.message : "Ошибка импорта");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAcceptAllPending = async () => {
+    if (!pendingPackage || !pendingTarget) return;
+    setBusy(true);
+    try {
+      const result = await importReportPackage(
+        pendingTarget.zid,
+        pendingTarget.eid,
+        pendingPackage,
+        importOverwrite
+      );
+      setPendingPackage(null);
+      setDiffRows([]);
+      setSelectedImportIds(new Set());
+      await refreshList();
+      onImported?.();
+      onStatus?.(
+        `Принят весь комплект: +${result.created} / ≈${result.updated}, пропуск ${result.skipped}`
+      );
+    } catch (e) {
+      onStatus?.(e instanceof Error ? e.message : "Ошибка импорта");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDragEnter = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth.current += 1;
+    setDragOver(true);
+  };
+
+  const onDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setDragOver(false);
+    }
+  };
+
+  const onDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth.current = 0;
+    setDragOver(false);
+    if (busy) return;
+    const files = e.dataTransfer.files;
+    if (files?.length) void processFiles(files);
+  };
+
   return (
-    <section className="tools-section">
-      <h2>Обмен комплектами</h2>
-      <p>
-        Выгрузите комплект форм на диск или примите комплект дочерней организации.
-        Аналог Access «Сохранить на диск» / «Принять комплект». В файл дополнительно
-        кладётся справочник правил — при импорте он <strong>не перезаписывает</strong>{" "}
-        локальные правила, применяются только данные форм.
-      </p>
-      <p className="hint-text">
-        Рабочий контекст: организация {work.zid ?? "—"}, период {work.eid ?? "—"}.
-        Задаётся в разделе <Link to="/package">Комплект</Link>.
-      </p>
-      <div className="toolbar-actions" style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => void onPackageJson()}
-          disabled={work.formCount === 0}
-        >
-          Скачать комплект ({work.formCount})
-          {exportZip ? " ZIP" : " JSON"}
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => void onPackageExcel()}
-          disabled={busy || work.formCount === 0}
-        >
-          Excel
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={importing}
-          onClick={() => document.getElementById("import-package-file")?.click()}
-        >
-          {importing ? "Импорт…" : "Принять комплект…"}
-        </button>
-        <input
-          id="import-package-file"
-          type="file"
-          accept=".json,.zip,application/json,application/zip"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void onImportPreview(file);
-            e.target.value = "";
+    <>
+      <section className="tools-section">
+        <h2>Загрузить комплекты</h2>
+        <p>
+          Перетащите сюда один или много файлов <code>.json</code> / <code>.zip</code>.
+          Система разберёт архивы и примет каждый комплект в организацию/период по{" "}
+          <code>zid/eid</code> внутри файла. Один файл — сначала сравнение форм.
+        </p>
+
+        <label className="checkbox-inline" style={{ marginBottom: "0.75rem" }}>
+          <input
+            type="checkbox"
+            checked={importOverwrite}
+            onChange={(e) => onImportOverwriteChange(e.target.checked)}
+            disabled={busy}
+          />
+          Перезаписывать уже существующие формы
+        </label>
+
+        <div
+          className={`exchange-dropzone${dragOver ? " is-dragover" : ""}${busy ? " is-busy" : ""}`}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onClick={() => {
+            if (!busy) fileInputRef.current?.click();
           }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (!busy) fileInputRef.current?.click();
+            }
+          }}
+          aria-label="Зона загрузки комплектов"
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.zip,application/json,application/zip"
+            multiple
+            hidden
+            disabled={busy}
+            onChange={(e) => {
+              const files = e.target.files;
+              if (files?.length) void processFiles(files);
+              e.target.value = "";
+            }}
+          />
+          <div className="exchange-dropzone-title">
+            {busy
+              ? "Обработка файлов…"
+              : dragOver
+                ? "Отпустите файлы"
+                : "Перетащите файлы сюда"}
+          </div>
+          <div className="exchange-dropzone-hint">
+            или нажмите, чтобы выбрать · можно сразу много JSON и ZIP
+          </div>
+        </div>
+
+        {jobs.length > 0 && (
+          <div className="table-wrap" style={{ marginTop: "1rem" }}>
+            <table className="form-table" style={{ minWidth: "28rem" }}>
+              <thead>
+                <tr>
+                  <th>Файл</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((j) => (
+                  <tr key={j.id}>
+                    <td>
+                      <code>{j.fileName}</code>
+                    </td>
+                    <td>
+                      {j.status === "queued" && (j.detail || "в очереди")}
+                      {j.status === "parsing" && (j.detail || "разбор…")}
+                      {j.status === "importing" && (j.detail || "загрузка…")}
+                      {j.status === "done" && (
+                        <span className="status-badge accepted">
+                          {j.detail?.startsWith("готово к сравнению")
+                            ? j.detail
+                            : j.detail || "Загружено"}
+                        </span>
+                      )}
+                      {j.status === "error" && (
+                        <span style={{ color: "var(--danger, #b91c1c)" }}>
+                          {j.detail || "ошибка"}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="tools-section">
+        <h2>
+          Комплекты{" "}
+          <span className="cat-count">
+            загружено {importedCount} · ждут {pendingCount}
+          </span>
+        </h2>
+        <p className="hint-text">
+          Та же таблица, что при выгрузке: видно, какие комплекты уже приняты обратно.
+        </p>
+
+        <WorkspaceFilters
+          periodOptions={list.periodOptions}
+          filters={list.filters}
+          showUploadMarkFilter
         />
-      </div>
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
-          checked={exportZip}
-          onChange={(e) => onExportZipChange(e.target.checked)}
+
+        <div
+          className="toolbar-actions"
+          style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
+        >
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={list.workspaceLoading || busy}
+            onClick={() =>
+              void list.reloadWorkspace().catch((e) => {
+                onStatus?.(
+                  e instanceof Error ? e.message : "Не удалось обновить список"
+                );
+              })
+            }
+          >
+            Обновить список
+          </button>
+        </div>
+
+        <WorkspacePackagesTable
+          rows={list.filteredRows}
+          loading={list.workspaceLoading}
+          highlightImported
+          showExportedMark={false}
         />
-        Экспорт в ZIP (JSON внутри; как архив Access)
-      </label>
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
-          checked={importOverwrite}
-          onChange={(e) => onImportOverwriteChange(e.target.checked)}
-        />
-        Перезаписать существующие формы комплекта (иначе — только новые шаблоны)
-      </label>
-      {pending.package && (
-        <div className="package-partial-accept" style={{ marginTop: "1rem" }}>
-          <h3 style={{ margin: "0 0 0.5rem", fontSize: "1rem" }}>
-            Принять частично ({pending.package.organization || "комплект"},{" "}
-            {pending.package.instances.length} форм в файле)
-          </h3>
-          <p className="hint-text" style={{ marginBottom: "0.5rem" }}>
-            Сравнение с рабочим комплектом (орг. {work.zid}, период {work.eid}). Отметьте формы
-            для принятия — аналог Access «Принять частично».
-          </p>
+      </section>
+
+      {pendingPackage && pendingTarget && (
+        <section className="tools-section">
+          <h2>
+            Сравнение перед приёмом
+            <span className="cat-count">
+              {pendingPackage.organization || pendingName} → орг. {pendingTarget.zid},
+              период {pendingTarget.eid}
+            </span>
+          </h2>
           <div
             className="toolbar-actions"
             style={{ marginBottom: "0.5rem", flexWrap: "wrap", gap: "0.5rem" }}
@@ -160,7 +1084,17 @@ export function ExchangeTab({
               type="button"
               className="btn btn-secondary"
               onClick={() =>
-                onSelectByVerdict((r) => r.verdict === "new" || r.verdict === "changed")
+                setSelectedImportIds(
+                  new Set(
+                    diffRows
+                      .filter(
+                        (r) =>
+                          r.verdict !== "only-local" &&
+                          (r.verdict === "new" || r.verdict === "changed")
+                      )
+                      .map((r) => r.templateId)
+                  )
+                )
               }
             >
               Новые и изменённые
@@ -168,38 +1102,51 @@ export function ExchangeTab({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => onSelectByVerdict(() => true)}
+              onClick={() =>
+                setSelectedImportIds(
+                  new Set(
+                    diffRows
+                      .filter((r) => r.verdict !== "only-local")
+                      .map((r) => r.templateId)
+                  )
+                )
+              }
             >
               Все из файла
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={onClearSelection}
+              onClick={() => setSelectedImportIds(new Set())}
             >
               Снять все
             </button>
             <button
               type="button"
               className="btn btn-primary"
-              disabled={importing || pending.selectedIds.size === 0}
-              onClick={() => void onAcceptPartial()}
+              disabled={busy || selectedImportIds.size === 0}
+              onClick={() => void handleAcceptPartial()}
             >
-              {importing ? "Принятие…" : `Принять выбранные (${pending.selectedIds.size})`}
+              Принять выбранные ({selectedImportIds.size})
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={importing}
-              onClick={() => void onImportAll()}
+              disabled={busy}
+              onClick={() => void handleAcceptAllPending()}
             >
               Принять весь комплект
             </button>
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={importing}
-              onClick={onCancelPending}
+              disabled={busy}
+              onClick={() => {
+                setPendingPackage(null);
+                setDiffRows([]);
+                setCellDiffs([]);
+                setSelectedImportIds(new Set());
+              }}
             >
               Отмена
             </button>
@@ -216,7 +1163,7 @@ export function ExchangeTab({
                 </tr>
               </thead>
               <tbody>
-                {pending.diffRows.map((row) => {
+                {diffRows.map((row) => {
                   const canSelect = row.verdict !== "only-local";
                   return (
                     <tr key={row.templateId}>
@@ -224,9 +1171,15 @@ export function ExchangeTab({
                         {canSelect ? (
                           <input
                             type="checkbox"
-                            checked={pending.selectedIds.has(row.templateId)}
-                            onChange={() => onToggleImportId(row.templateId)}
-                            aria-label={`Принять ${row.templateId}`}
+                            checked={selectedImportIds.has(row.templateId)}
+                            onChange={() => {
+                              setSelectedImportIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(row.templateId)) next.delete(row.templateId);
+                                else next.add(row.templateId);
+                                return next;
+                              });
+                            }}
                           />
                         ) : (
                           "—"
@@ -255,17 +1208,16 @@ export function ExchangeTab({
               </tbody>
             </table>
           </div>
-          {pending.cellDiffs.length > 0 && (
+          {cellDiffs.length > 0 && (
             <div style={{ marginTop: "0.75rem" }}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => onShowCellDiffsChange(!pending.showCellDiffs)}
+                onClick={() => setShowCellDiffs(!showCellDiffs)}
               >
-                {pending.showCellDiffs ? "Скрыть" : "Показать"} сравнение ячеек (frmCompare,{" "}
-                {pending.cellDiffs.length})
+                {showCellDiffs ? "Скрыть" : "Показать"} расхождения ячеек ({cellDiffs.length})
               </button>
-              {pending.showCellDiffs && (
+              {showCellDiffs && (
                 <div
                   className="table-wrap"
                   style={{ marginTop: "0.5rem", maxHeight: "16rem", overflow: "auto" }}
@@ -281,9 +1233,9 @@ export function ExchangeTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {(pending.selectedIds.size
-                        ? pending.cellDiffs.filter((d) => pending.selectedIds.has(d.templateId))
-                        : pending.cellDiffs
+                      {(selectedImportIds.size
+                        ? cellDiffs.filter((d) => selectedImportIds.has(d.templateId))
+                        : cellDiffs
                       )
                         .slice(0, 300)
                         .map((d, i) => (
@@ -303,26 +1255,67 @@ export function ExchangeTab({
               )}
             </div>
           )}
-        </div>
+        </section>
       )}
-      {work.formCount === 0 && work.zid != null && work.eid != null && (
-        <p className="hint-text" style={{ marginTop: "0.75rem" }}>
-          Формы для организации {work.zid}, периода {work.eid} не найдены. В разделе{" "}
-          <Link to="/package">Комплект</Link> выберите эту организацию и период, затем
-          нажмите «Завести пустые формы».
-        </p>
+
+      {bulkImportReport && (
+        <section className="tools-section">
+          <h2>
+            Результат загрузки{" "}
+            <span className="cat-count">
+              {bulkImportReport.imported} загружено / {bulkImportReport.failed} ошибок
+            </span>
+          </h2>
+          <div className="table-wrap">
+            <table className="form-table" style={{ minWidth: "36rem" }}>
+              <thead>
+                <tr>
+                  <th>Файл</th>
+                  <th>Организация</th>
+                  <th>ZID/EID</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkImportReport.results.map((r, i) => (
+                  <tr key={`${r.name}-${i}`}>
+                    <td>
+                      <code>{r.name}</code>
+                    </td>
+                    <td>{r.organization || "—"}</td>
+                    <td>
+                      {r.zid != null && r.eid != null ? `${r.zid} / ${r.eid}` : "—"}
+                    </td>
+                    <td>
+                      {r.ok ? (
+                        <span className="status-badge accepted">
+                          Загружено
+                          <span className="table-sub" style={{ display: "block" }}>
+                            +{r.created ?? 0} / ≈{r.updated ?? 0}
+                          </span>
+                        </span>
+                      ) : (
+                        r.error ?? "ошибка"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {inbox?.backend && (
-        <div style={{ marginTop: "1.5rem" }}>
-          <h3>Inbox (карантин)</h3>
+        <section className="tools-section">
+          <h2>Очередь входящих</h2>
           <p className="hint-text">
-            Загрузка в quarantine с SHA-256, проверкой ZID/EID и последующим accept в
-            текущий комплект. Только admin.
+            Запасной путь: сначала в очередь с проверкой, затем принять вручную. Обычно
+            достаточно зоны выше.
           </p>
           <div className="toolbar-actions" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
             <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
-              В inbox…
+              В очередь…
               <input
                 type="file"
                 accept=".json,.zip,application/json,application/zip"
@@ -361,11 +1354,6 @@ export function ExchangeTab({
                         <div className="table-sub">
                           <code>{item.sha256.slice(0, 12)}…</code>
                         </div>
-                        {(item.warnings.length > 0 || item.validationErrors.length > 0) && (
-                          <div className="table-sub">
-                            {[...item.validationErrors, ...item.warnings].slice(0, 2).join("; ")}
-                          </div>
-                        )}
                       </td>
                       <td>{item.status}</td>
                       <td>{item.instanceCount}</td>
@@ -375,7 +1363,7 @@ export function ExchangeTab({
                             <button
                               type="button"
                               className="btn btn-secondary"
-                              disabled={busy || work.zid == null || work.eid == null}
+                              disabled={busy}
                               onClick={() => inbox.onPreview(item.id)}
                             >
                               Превью
@@ -383,7 +1371,7 @@ export function ExchangeTab({
                             <button
                               type="button"
                               className="btn btn-primary"
-                              disabled={busy || importing || work.zid == null || work.eid == null}
+                              disabled={busy}
                               onClick={() => inbox.onAccept(item.id)}
                             >
                               Принять
@@ -405,8 +1393,51 @@ export function ExchangeTab({
               </table>
             </div>
           )}
-        </div>
+        </section>
       )}
-    </section>
+    </>
   );
 }
+
+export interface ExchangeTabProps extends PackageUploadTabProps {
+  mode: ExchangeMode;
+  onModeChange: (mode: ExchangeMode) => void;
+}
+
+export function ExchangeTab({
+  mode,
+  onModeChange,
+  ...uploadProps
+}: ExchangeTabProps) {
+  return (
+    <>
+      <div className="tools-subtabs" role="tablist" aria-label="Обмен комплектами">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "export"}
+          className={mode === "export" ? "active" : undefined}
+          onClick={() => onModeChange("export")}
+        >
+          Выгрузить
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "upload"}
+          className={mode === "upload" ? "active" : undefined}
+          onClick={() => onModeChange("upload")}
+        >
+          Загрузить
+        </button>
+      </div>
+      {mode === "export" ? (
+        <PackageExportTab onStatus={uploadProps.onStatus} />
+      ) : (
+        <PackageUploadTab {...uploadProps} />
+      )}
+    </>
+  );
+}
+
+

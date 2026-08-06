@@ -62,7 +62,7 @@ export function breadcrumbsForPath(
   }
 
   if (parts[0] === "tools") {
-    return [home, { label: "Сводка и импорт" }];
+    return [home, { label: "Обмен и операции" }];
   }
 
   if (parts[0] === "settings") {

@@ -177,6 +177,9 @@ export interface PackageWorkspaceRow {
   bpIteration: number | null;
   hasBlockers: boolean;
   methodologyReleaseId: string | null;
+  lastExportedAt: string | null;
+  lastImportedAt: string | null;
+  importVersion: number;
 }
 
 export interface PackageWorkspaceDetail {
@@ -1109,6 +1112,24 @@ export async function getPackageWorkspace(
     ])
   );
 
+  let exchangeByKey = new Map<
+    string,
+    {
+      lastExportedAt: string | null;
+      lastImportedAt: string | null;
+      importVersion: number;
+    }
+  >();
+  try {
+    const { listPackageExchange, migratePackageExchange } = await import(
+      "./packageExchange.js"
+    );
+    await migratePackageExchange(db);
+    exchangeByKey = await listPackageExchange(db, { zid: opts?.zid });
+  } catch {
+    /* marks are optional — do not break the package list */
+  }
+
   const rows: PackageWorkspaceRow[] = [];
   for (const p of periods) {
     const zid = Number(p.zid);
@@ -1143,6 +1164,8 @@ export async function getPackageWorkspace(
       }
     }
 
+    const exchange = exchangeByKey.get(`${zid}:${eid}`);
+
     rows.push({
       zid,
       eid,
@@ -1166,6 +1189,9 @@ export async function getPackageWorkspace(
       bpIteration: bp ? Number(bp.iteration ?? 0) : null,
       hasBlockers,
       methodologyReleaseId: p.methodology_release_id ?? null,
+      lastExportedAt: exchange?.lastExportedAt ?? null,
+      lastImportedAt: exchange?.lastImportedAt ?? null,
+      importVersion: exchange?.importVersion ?? 0,
     });
   }
   return rows;
@@ -1416,6 +1442,230 @@ export async function deleteReportPackagesBulk(
   }
 
   return { deleted, failed, deletedInstances, results };
+}
+
+export interface BulkExportPackageItem {
+  zid: number;
+  eid: number;
+}
+
+export interface BulkExportManifestEntry {
+  zid: number;
+  eid: number;
+  organizationName: string;
+  organizationCode: string | null;
+  periodName: string;
+  packageKind: "OKO" | "BALANCE";
+  formCount: number;
+  filled: number;
+  submitted: number;
+  filename: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface BulkExportPackagesResult {
+  zip: Uint8Array;
+  filename: string;
+  exported: number;
+  failed: number;
+  manifest: {
+    exportedAt: string;
+    packages: BulkExportManifestEntry[];
+  };
+}
+
+const BULK_EXPORT_MAX = 200;
+
+function sanitizePackageFilePart(value: string, max = 40): string {
+  const cleaned = value
+    .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  return (cleaned || "oko").slice(0, max);
+}
+
+async function buildExportPackageForKey(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<{
+  json: string;
+  filename: string;
+  entry: BulkExportManifestEntry;
+}> {
+  const { listInstanceSummaries, loadInstance } = await import("./instances.js");
+  const { normalizePackageKind } = await import("./businessProcessTypes.js");
+
+  const period = (await db
+    .prepare(
+      `SELECT p.name, p.period_start, p.period_end, p.package_kind,
+              o.name AS org_name, o.code AS org_code
+       FROM periods p
+       JOIN organizations o ON o.zid = p.zid
+       WHERE p.eid = ? AND p.zid = ?`
+    )
+    .get(eid, zid)) as
+    | {
+        name: string;
+        period_start: string | null;
+        period_end: string | null;
+        package_kind: string | null;
+        org_name: string;
+        org_code: string | null;
+      }
+    | undefined;
+  if (!period) throw new Error("Период не найден");
+
+  const summaries = await listInstanceSummaries(db, { zid, eid });
+  const instances: OkoFormInstance[] = [];
+  let submitted = 0;
+  for (const s of summaries) {
+    const inst = await loadInstance(db, s.instanceId);
+    if (!inst) continue;
+    instances.push({ ...inst, zid, eid });
+    if (s.status === "submitted") submitted++;
+  }
+
+  const packageKind = normalizePackageKind(period.package_kind);
+  const orgPart = sanitizePackageFilePart(
+    period.org_code || period.org_name || `zid${zid}`
+  );
+  const periodPart = sanitizePackageFilePart(period.name || `eid${eid}`, 30);
+  const filename = `oko_package_${orgPart}_${periodPart}_z${zid}_e${eid}.json`;
+
+  const pkg = {
+    version: "1.2",
+    exportedAt: new Date().toISOString(),
+    organization: period.org_name,
+    periodStart: dateToString(period.period_start),
+    periodEnd: dateToString(period.period_end),
+    zid,
+    eid,
+    packageKind,
+    instanceCount: instances.length,
+    instances,
+  };
+
+  return {
+    json: JSON.stringify(pkg, null, 2),
+    filename,
+    entry: {
+      zid,
+      eid,
+      organizationName: period.org_name,
+      organizationCode: period.org_code,
+      periodName: period.name,
+      packageKind,
+      formCount: instances.length,
+      filled: instances.length,
+      submitted,
+      filename,
+      ok: true,
+    },
+  };
+}
+
+export async function exportReportPackagesBulk(
+  db: OkoDb,
+  items: BulkExportPackageItem[]
+): Promise<BulkExportPackagesResult> {
+  const { zipStoreFiles } = await import("./zipStore.js");
+
+  if (!Array.isArray(items) || items.length === 0) {
+    const err = new Error("Укажите хотя бы один комплект");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  if (items.length > BULK_EXPORT_MAX) {
+    const err = new Error(`За один раз можно выгрузить не более ${BULK_EXPORT_MAX} комплектов`);
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const seen = new Set<string>();
+  const unique: BulkExportPackageItem[] = [];
+  for (const raw of items) {
+    const zid = Number(raw?.zid);
+    const eid = Number(raw?.eid);
+    if (!Number.isFinite(zid) || !Number.isFinite(eid) || zid <= 0 || eid <= 0) continue;
+    const key = `${zid}:${eid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ zid, eid });
+  }
+  if (unique.length === 0) {
+    const err = new Error("Нет корректных пар zid/eid");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const exportedAt = new Date().toISOString();
+  const files: Array<{ name: string; data: string }> = [];
+  const manifestPackages: BulkExportManifestEntry[] = [];
+  let exported = 0;
+  let failed = 0;
+  const usedNames = new Set<string>();
+
+  for (const item of unique) {
+    try {
+      const built = await buildExportPackageForKey(db, item.zid, item.eid);
+      let name = built.filename;
+      if (usedNames.has(name)) {
+        name = name.replace(/\.json$/i, `_${exported + failed + 1}.json`);
+      }
+      usedNames.add(name);
+      files.push({ name, data: built.json });
+      manifestPackages.push({ ...built.entry, filename: name });
+      exported += 1;
+      try {
+        const { touchPackageExported } = await import("./packageExchange.js");
+        await touchPackageExported(db, item.zid, item.eid, exportedAt);
+      } catch {
+        /* exchange mark is best-effort */
+      }
+    } catch (e) {
+      failed += 1;
+      manifestPackages.push({
+        zid: item.zid,
+        eid: item.eid,
+        organizationName: "",
+        organizationCode: null,
+        periodName: "",
+        packageKind: "OKO",
+        formCount: 0,
+        filled: 0,
+        submitted: 0,
+        filename: "",
+        ok: false,
+        error: e instanceof Error ? e.message : "Ошибка выгрузки",
+      });
+    }
+  }
+
+  if (exported === 0) {
+    const err = new Error(
+      failed > 0
+        ? `Не удалось выгрузить ни одного комплекта (${failed} ошибок)`
+        : "Нет комплектов для выгрузки"
+    );
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const manifest = {
+    exportedAt,
+    packages: manifestPackages,
+  };
+  files.unshift({
+    name: "manifest.json",
+    data: JSON.stringify(manifest, null, 2),
+  });
+
+  const zip = zipStoreFiles(files);
+  const day = exportedAt.slice(0, 10);
+  const filename = `oko_packages_${day}_${exported}orgs.zip`;
+  return { zip, filename, exported, failed, manifest };
 }
 
 export async function createReportPackage(
@@ -2151,6 +2401,17 @@ export async function importReportPackage(
       }
     }
   });
+
+  // Mark exchange even when all forms were skipped (already present):
+  // bulk re-upload of an existing package must still count as «загружено».
+  if (result.created > 0 || result.updated > 0 || result.skipped > 0) {
+    try {
+      const { touchPackageImported } = await import("./packageExchange.js");
+      await touchPackageImported(db, targetZid, targetEid);
+    } catch {
+      /* exchange mark is best-effort */
+    }
+  }
 
   return result;
 }

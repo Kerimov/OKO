@@ -1,0 +1,865 @@
+{
+  "version": "1.0",
+  "source": "z261.tblRequiredSch",
+  "total": 143,
+  "items": [
+    {
+      "account": 100,
+      "rowNumber": 1,
+      "row": 100,
+      "rowOld": 100
+    },
+    {
+      "account": 200,
+      "rowNumber": 1,
+      "row": 200,
+      "rowOld": 200
+    },
+    {
+      "account": 300,
+      "rowNumber": 1,
+      "row": 300,
+      "rowOld": 300
+    },
+    {
+      "account": 400,
+      "rowNumber": 2,
+      "row": 100,
+      "rowOld": 100
+    },
+    {
+      "account": 400,
+      "rowNumber": 1,
+      "row": 400,
+      "rowOld": 400
+    },
+    {
+      "account": 400,
+      "rowNumber": 3,
+      "row": 4100,
+      "rowOld": 4100
+    },
+    {
+      "account": 400,
+      "rowNumber": 4,
+      "row": 9700,
+      "rowOld": 9700
+    },
+    {
+      "account": 500,
+      "rowNumber": 1,
+      "row": 500,
+      "rowOld": 500
+    },
+    {
+      "account": 500,
+      "rowNumber": 2,
+      "row": 9700,
+      "rowOld": 9700
+    },
+    {
+      "account": 600,
+      "rowNumber": 1,
+      "row": 5500,
+      "rowOld": 5500
+    },
+    {
+      "account": 600,
+      "rowNumber": 2,
+      "row": 5800,
+      "rowOld": 5800
+    },
+    {
+      "account": 700,
+      "rowNumber": 1,
+      "row": 700,
+      "rowOld": 700
+    },
+    {
+      "account": 800,
+      "rowNumber": 1,
+      "row": 800,
+      "rowOld": 800
+    },
+    {
+      "account": 890,
+      "rowNumber": 2,
+      "row": 5811,
+      "rowOld": 5811
+    },
+    {
+      "account": 890,
+      "rowNumber": 1,
+      "row": 7650,
+      "rowOld": 7650
+    },
+    {
+      "account": 1000,
+      "rowNumber": 1,
+      "row": 1000,
+      "rowOld": 1000
+    },
+    {
+      "account": 1100,
+      "rowNumber": 1,
+      "row": 1100,
+      "rowOld": 1100
+    },
+    {
+      "account": 1200,
+      "rowNumber": 1,
+      "row": 100,
+      "rowOld": 100
+    },
+    {
+      "account": 1200,
+      "rowNumber": 2,
+      "row": 300,
+      "rowOld": 300
+    },
+    {
+      "account": 1200,
+      "rowNumber": 3,
+      "row": 1000,
+      "rowOld": 1000
+    },
+    {
+      "account": 1300,
+      "rowNumber": 2,
+      "row": 200,
+      "rowOld": 200
+    },
+    {
+      "account": 1300,
+      "rowNumber": 1,
+      "row": 1000,
+      "rowOld": 1000
+    },
+    {
+      "account": 1600,
+      "rowNumber": 1,
+      "row": 100,
+      "rowOld": 100
+    },
+    {
+      "account": 1600,
+      "rowNumber": 2,
+      "row": 1600,
+      "rowOld": 1600
+    },
+    {
+      "account": 1900,
+      "rowNumber": 1,
+      "row": 1900,
+      "rowOld": 1900
+    },
+    {
+      "account": 2000,
+      "rowNumber": 1,
+      "row": 2000,
+      "rowOld": 2000
+    },
+    {
+      "account": 2100,
+      "rowNumber": 1,
+      "row": 2100,
+      "rowOld": 2100
+    },
+    {
+      "account": 2300,
+      "rowNumber": 1,
+      "row": 2300,
+      "rowOld": 2300
+    },
+    {
+      "account": 2900,
+      "rowNumber": 1,
+      "row": 2900,
+      "rowOld": 2900
+    },
+    {
+      "account": 3000,
+      "rowNumber": 1,
+      "row": 800,
+      "rowOld": 800
+    },
+    {
+      "account": 3100,
+      "rowNumber": 1,
+      "row": 9700,
+      "rowOld": 9700
+    },
+    {
+      "account": 4000,
+      "rowNumber": 1,
+      "row": 4300,
+      "rowOld": 4300
+    },
+    {
+      "account": 4100,
+      "rowNumber": 1,
+      "row": 4100,
+      "rowOld": 4100
+    },
+    {
+      "account": 4200,
+      "rowNumber": 1,
+      "row": 4200,
+      "rowOld": 4200
+    },
+    {
+      "account": 4400,
+      "rowNumber": 1,
+      "row": 4400,
+      "rowOld": 4400
+    },
+    {
+      "account": 4400,
+      "rowNumber": 2,
+      "row": 4500,
+      "rowOld": 4500
+    },
+    {
+      "account": 4500,
+      "rowNumber": 1,
+      "row": 4500,
+      "rowOld": 4500
+    },
+    {
+      "account": 4600,
+      "rowNumber": 1,
+      "row": 4600,
+      "rowOld": 4600
+    },
+    {
+      "account": 5000,
+      "rowNumber": 1,
+      "row": 5000,
+      "rowOld": 5000
+    },
+    {
+      "account": 5100,
+      "rowNumber": 1,
+      "row": 5100,
+      "rowOld": 5100
+    },
+    {
+      "account": 5200,
+      "rowNumber": 1,
+      "row": 5200,
+      "rowOld": 5200
+    },
+    {
+      "account": 5500,
+      "rowNumber": 1,
+      "row": 5500,
+      "rowOld": 5500
+    },
+    {
+      "account": 5500,
+      "rowNumber": 2,
+      "row": 5800,
+      "rowOld": 5800
+    },
+    {
+      "account": 5600,
+      "rowNumber": 1,
+      "row": 5000,
+      "rowOld": 5000
+    },
+    {
+      "account": 5600,
+      "rowNumber": 3,
+      "row": 5824,
+      "rowOld": 5824
+    },
+    {
+      "account": 5600,
+      "rowNumber": 2,
+      "row": 8100,
+      "rowOld": 8100
+    },
+    {
+      "account": 5700,
+      "rowNumber": 1,
+      "row": 5700,
+      "rowOld": 5700
+    },
+    {
+      "account": 5800,
+      "rowNumber": 1,
+      "row": 5500,
+      "rowOld": 5500
+    },
+    {
+      "account": 5800,
+      "rowNumber": 2,
+      "row": 5800,
+      "rowOld": 5800
+    },
+    {
+      "account": 6000,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 6000,
+      "rowNumber": 4,
+      "row": 6600,
+      "rowOld": 6600
+    },
+    {
+      "account": 6000,
+      "rowNumber": 5,
+      "row": 6700,
+      "rowOld": 6700
+    },
+    {
+      "account": 6000,
+      "rowNumber": 2,
+      "row": 7650,
+      "rowOld": 7650
+    },
+    {
+      "account": 6000,
+      "rowNumber": 3,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 6100,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 6100,
+      "rowNumber": 2,
+      "row": 7662,
+      "rowOld": 7662
+    },
+    {
+      "account": 6200,
+      "rowNumber": 1,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 6200,
+      "rowNumber": 2,
+      "row": 7620,
+      "rowOld": 7620
+    },
+    {
+      "account": 6200,
+      "rowNumber": 3,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 6300,
+      "rowNumber": 1,
+      "row": 7620,
+      "rowOld": 7620
+    },
+    {
+      "account": 6400,
+      "rowNumber": 1,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 6500,
+      "rowNumber": 1,
+      "row": 7610,
+      "rowOld": 7610
+    },
+    {
+      "account": 6700,
+      "rowNumber": 1,
+      "row": 6800,
+      "rowOld": 6800
+    },
+    {
+      "account": 6800,
+      "rowNumber": 1,
+      "row": 6800,
+      "rowOld": 6800
+    },
+    {
+      "account": 6900,
+      "rowNumber": 1,
+      "row": 6900,
+      "rowOld": 6900
+    },
+    {
+      "account": 7000,
+      "rowNumber": 1,
+      "row": 7000,
+      "rowOld": 7000
+    },
+    {
+      "account": 7100,
+      "rowNumber": 1,
+      "row": 7100,
+      "rowOld": 7100
+    },
+    {
+      "account": 7300,
+      "rowNumber": 1,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7300,
+      "rowNumber": 2,
+      "row": 7300,
+      "rowOld": 7300
+    },
+    {
+      "account": 7410,
+      "rowNumber": 1,
+      "row": 7930,
+      "rowOld": 7930
+    },
+    {
+      "account": 7420,
+      "rowNumber": 1,
+      "row": 7640,
+      "rowOld": 7640
+    },
+    {
+      "account": 7420,
+      "rowNumber": 2,
+      "row": 7650,
+      "rowOld": 7650
+    },
+    {
+      "account": 7500,
+      "rowNumber": 1,
+      "row": 7500,
+      "rowOld": 7500
+    },
+    {
+      "account": 7610,
+      "rowNumber": 2,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7610,
+      "rowNumber": 3,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7610,
+      "rowNumber": 1,
+      "row": 7660,
+      "rowOld": 7660
+    },
+    {
+      "account": 7620,
+      "rowNumber": 1,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 7630,
+      "rowNumber": 1,
+      "row": 7630,
+      "rowOld": 7630
+    },
+    {
+      "account": 7640,
+      "rowNumber": 1,
+      "row": 7670,
+      "rowOld": 7670
+    },
+    {
+      "account": 7650,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7650,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7650,
+      "rowNumber": 3,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 7660,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7660,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7670,
+      "rowNumber": 1,
+      "row": 7670,
+      "rowOld": 7670
+    },
+    {
+      "account": 7690,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7690,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7690,
+      "rowNumber": 3,
+      "row": 7600,
+      "rowOld": 7600
+    },
+    {
+      "account": 7810,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7810,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7820,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7820,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7820,
+      "rowNumber": 3,
+      "row": 7600,
+      "rowOld": 7600
+    },
+    {
+      "account": 7830,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7830,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7830,
+      "rowNumber": 3,
+      "row": 7600,
+      "rowOld": 7600
+    },
+    {
+      "account": 7840,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7840,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7850,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7850,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7850,
+      "rowNumber": 3,
+      "row": 7660,
+      "rowOld": 7660
+    },
+    {
+      "account": 7850,
+      "rowNumber": 4,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 7860,
+      "rowNumber": 3,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7860,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7860,
+      "rowNumber": 1,
+      "row": 7670,
+      "rowOld": 7670
+    },
+    {
+      "account": 7870,
+      "rowNumber": 1,
+      "row": 5800,
+      "rowOld": 5800
+    },
+    {
+      "account": 7870,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7870,
+      "rowNumber": 3,
+      "row": 7650,
+      "rowOld": 7650
+    },
+    {
+      "account": 7880,
+      "rowNumber": 3,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7880,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7880,
+      "rowNumber": 1,
+      "row": 7660,
+      "rowOld": 7660
+    },
+    {
+      "account": 7890,
+      "rowNumber": 1,
+      "row": 6000,
+      "rowOld": 6000
+    },
+    {
+      "account": 7890,
+      "rowNumber": 2,
+      "row": 6200,
+      "rowOld": 6200
+    },
+    {
+      "account": 7890,
+      "rowNumber": 3,
+      "row": 7600,
+      "rowOld": 7600
+    },
+    {
+      "account": 7910,
+      "rowNumber": 1,
+      "row": 7680,
+      "rowOld": 7680
+    },
+    {
+      "account": 7910,
+      "rowNumber": 2,
+      "row": 7910,
+      "rowOld": 7910
+    },
+    {
+      "account": 7920,
+      "rowNumber": 1,
+      "row": 7920,
+      "rowOld": 7920
+    },
+    {
+      "account": 7930,
+      "rowNumber": 1,
+      "row": 7920,
+      "rowOld": 7920
+    },
+    {
+      "account": 8200,
+      "rowNumber": 1,
+      "row": 5900,
+      "rowOld": 5900
+    },
+    {
+      "account": 8200,
+      "rowNumber": 2,
+      "row": 6300,
+      "rowOld": 6300
+    },
+    {
+      "account": 8300,
+      "rowNumber": 1,
+      "row": 9800,
+      "rowOld": 9800
+    },
+    {
+      "account": 8400,
+      "rowNumber": 1,
+      "row": 9400,
+      "rowOld": 9400
+    },
+    {
+      "account": 8500,
+      "rowNumber": 1,
+      "row": 8000,
+      "rowOld": 8000
+    },
+    {
+      "account": 8600,
+      "rowNumber": 1,
+      "row": 8200,
+      "rowOld": 8200
+    },
+    {
+      "account": 8700,
+      "rowNumber": 1,
+      "row": 8300,
+      "rowOld": 8300
+    },
+    {
+      "account": 8700,
+      "rowNumber": 2,
+      "row": 8431,
+      "rowOld": 8431
+    },
+    {
+      "account": 8700,
+      "rowNumber": 3,
+      "row": 8432,
+      "rowOld": 8432
+    },
+    {
+      "account": 8800,
+      "rowNumber": 1,
+      "row": 8421,
+      "rowOld": 8421
+    },
+    {
+      "account": 8800,
+      "rowNumber": 2,
+      "row": 8422,
+      "rowOld": 8422
+    },
+    {
+      "account": 8800,
+      "rowNumber": 3,
+      "row": 8431,
+      "rowOld": 8431
+    },
+    {
+      "account": 8800,
+      "rowNumber": 4,
+      "row": 8432,
+      "rowOld": 8432
+    },
+    {
+      "account": 8800,
+      "rowNumber": 5,
+      "row": 8440,
+      "rowOld": 8440
+    },
+    {
+      "account": 8900,
+      "rowNumber": 1,
+      "row": 9600,
+      "rowOld": 9600
+    },
+    {
+      "account": 9000,
+      "rowNumber": 1,
+      "row": 6600,
+      "rowOld": 6600
+    },
+    {
+      "account": 9200,
+      "rowNumber": 1,
+      "row": 6700,
+      "rowOld": 6700
+    },
+    {
+      "account": 9300,
+      "rowNumber": 1,
+      "row": 7300,
+      "rowOld": 7300
+    },
+    {
+      "account": 9300,
+      "rowNumber": 2,
+      "row": 7600,
+      "rowOld": 7600
+    },
+    {
+      "account": 9400,
+      "rowNumber": 1,
+      "row": 6600,
+      "rowOld": 6600
+    },
+    {
+      "account": 9500,
+      "rowNumber": 1,
+      "row": 6700,
+      "rowOld": 6700
+    },
+    {
+      "account": 9600,
+      "rowNumber": 1,
+      "row": 7670,
+      "rowOld": 7670
+    },
+    {
+      "account": 9600,
+      "rowNumber": 2,
+      "row": 7690,
+      "rowOld": 7690
+    },
+    {
+      "account": 9600,
+      "rowNumber": 3,
+      "row": 8600,
+      "rowOld": 8600
+    },
+    {
+      "account": 9600,
+      "rowNumber": 4,
+      "row": 9800,
+      "rowOld": 9800
+    }
+  ]
+}

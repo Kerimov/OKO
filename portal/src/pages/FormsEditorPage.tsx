@@ -16,6 +16,7 @@ import {
   type FormCellDefinitionDto,
 } from "../api";
 import { FormTable } from "../components/FormTable";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import {
   FormsWorkbenchInspector,
   type FormsWorkbenchSelection,
@@ -614,21 +615,26 @@ export function FormsEditorPage() {
               ◂
             </button>
           </div>
-          <input
-            type="search"
-            className="search-input"
-            placeholder="Поиск формы…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <label className="rash-check" style={{ marginTop: "0.5rem" }}>
+          <CollapsibleFilters
+            activeCount={countActiveFilters(search.trim().length > 0, showArchived)}
+            bodyClassName="forms-sidebar-filters"
+          >
             <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
+              type="search"
+              className="search-input"
+              placeholder="Поиск формы…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
-            Показать архив
-          </label>
+            <label className="rash-check" style={{ marginTop: "0.5rem" }}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Показать архив
+            </label>
+          </CollapsibleFilters>
           <ul className="forms-sidebar-list">
             {filteredForms.map((f) => (
               <li key={f.id}>

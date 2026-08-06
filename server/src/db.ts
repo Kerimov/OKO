@@ -41,6 +41,7 @@ import {
   seedOrganizationsFromAggCodes,
 } from "./aggregation.js";
 import { migratePackageInbox } from "./packageInbox.js";
+import { migratePackageExchange } from "./packageExchange.js";
 import { migrateMethodologyHistory } from "./methodology.js";
 import { migrateSpreadsheetTables, seedRecalcRulesFromJson } from "./spreadsheet.js";
 import { runNumberedMigrations } from "./migrations/runner.js";
@@ -64,6 +65,7 @@ async function initSchema(database: OkoDb): Promise<void> {
   await migrateUserTables(database);
   await migrateAggTables(database);
   await migratePackageInbox(database);
+  await migratePackageExchange(database);
   await migrateMethodologyHistory(database);
   await migrateSpreadsheetTables(database);
   await runNumberedMigrations(database);

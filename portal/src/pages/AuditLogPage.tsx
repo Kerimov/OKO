@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { fetchAuditPage, type AuditLogItem } from "../api";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 export function AuditLogPage() {
   const backend = isBackendMode();
@@ -77,7 +78,10 @@ export function AuditLogPage() {
 
       {error && <div className="error-box">{error}</div>}
 
-      <div className="checks-filters">
+      <CollapsibleFilters
+        activeCount={countActiveFilters(search.trim().length > 0)}
+        bodyClassName="checks-filters"
+      >
         <input
           type="search"
           placeholder="Поиск по действию, деталям…"
@@ -88,7 +92,7 @@ export function AuditLogPage() {
           }}
           className="search-input"
         />
-      </div>
+      </CollapsibleFilters>
 
       {loading ? (
         <p className="loading">Загрузка…</p>

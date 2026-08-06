@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import { loadCatalog, loadSchema } from "../api";
 import type { FormCatalog } from "../types";
 import { countInstances, createInstance } from "../storage";
@@ -93,7 +94,10 @@ export function HomePage() {
 
       {error && <div className="error-box">{error}</div>}
 
-      <div className="filters">
+      <CollapsibleFilters
+        activeCount={countActiveFilters(search.trim().length > 0, category !== "all")}
+        bodyClassName="filters"
+      >
         <input
           type="search"
           placeholder="Поиск по коду или названию…"
@@ -113,7 +117,7 @@ export function HomePage() {
             </option>
           ))}
         </select>
-      </div>
+      </CollapsibleFilters>
 
       {filtered.length === 0 ? (
         <p className="empty">Формы не найдены</p>

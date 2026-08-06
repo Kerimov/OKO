@@ -18,6 +18,7 @@ import {
   quarterDateRange,
   quarterPeriodName,
 } from "../utils";
+import { CollapsibleFilters, countActiveFilters } from "./CollapsibleFilters";
 
 type ConstructMode = "single" | "bulk";
 type FormsMode = "all" | "selected";
@@ -309,15 +310,20 @@ export function PackageConstructor({
         </div>
       ) : (
         <div style={{ marginBottom: 12 }}>
-          <div className="toolbar-actions" style={{ marginBottom: 8 }}>
+          <CollapsibleFilters
+            title="Поиск организаций"
+            activeCount={countActiveFilters(orgSearch.trim().length > 0)}
+          >
             <input
               type="search"
               className="search-input"
               placeholder="Поиск организаций…"
               value={orgSearch}
               onChange={(e) => setOrgSearch(e.target.value)}
-              style={{ minWidth: 220 }}
+              style={{ minWidth: 220, marginBottom: 8 }}
             />
+          </CollapsibleFilters>
+          <div className="toolbar-actions" style={{ marginBottom: 8 }}>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -490,7 +496,14 @@ export function PackageConstructor({
       </div>
       {formsMode === "selected" && (
         <>
-          <div className="tools-grid" style={{ marginBottom: 8 }}>
+          <CollapsibleFilters
+            title="Фильтр форм"
+            activeCount={countActiveFilters(
+              categoryFilter !== "",
+              formSearch.trim().length > 0
+            )}
+            bodyClassName="tools-grid"
+          >
             <label>
               Категория
               <select
@@ -514,7 +527,7 @@ export function PackageConstructor({
                 placeholder="Код или название…"
               />
             </label>
-          </div>
+          </CollapsibleFilters>
           <div className="toolbar-actions" style={{ marginBottom: 8 }}>
             <button
               type="button"

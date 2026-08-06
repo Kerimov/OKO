@@ -102,6 +102,14 @@ export class PackageBulkDeleteDto {
   items!: PackageZidEidDto[];
 }
 
+export class PackageBulkExportDto {
+  @ApiProperty({ type: [PackageZidEidDto], description: "Комплекты для выгрузки (zid+eid)" })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PackageZidEidDto)
+  items!: PackageZidEidDto[];
+}
+
 export class PackageWorkflowPutDto extends PackageZidEidDto {
   @ApiProperty({ enum: ["draft", "submitted", "returned", "corrected", "accepted"] })
   @IsString()

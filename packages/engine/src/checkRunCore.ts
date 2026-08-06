@@ -52,6 +52,31 @@ function parseCellValue(raw: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** True when the form has no meaningful numeric amounts (Access iCheckFilledForm gate). */
+export function isFormNumericallyEmpty(
+  rows: RowData[] | null | undefined,
+  options?: { ignoreKeys?: string[] }
+): boolean {
+  if (!rows?.length) return true;
+  const ignore = new Set(
+    (options?.ignoreKeys ?? ["num", "name", "code", "account", "id", "sort"]).map(
+      (k) => k.toLowerCase()
+    )
+  );
+  for (const row of rows) {
+    for (const [key, raw] of Object.entries(row)) {
+      if (ignore.has(key.toLowerCase())) continue;
+      if (raw === undefined || raw === null || raw === "") continue;
+      const s = String(raw).trim();
+      if (!s) continue;
+      // Balance Стр. text alone does not count as filled amounts
+      const n = parseFloat(s.replace(/\s/g, "").replace(",", "."));
+      if (Number.isFinite(n) && n !== 0) return false;
+    }
+  }
+  return true;
+}
+
 function parseConditionValue(raw: string): number | string {
   const n = parseFloat(raw.replace(",", "."));
   return Number.isFinite(n) ? n : raw;
@@ -268,5 +293,30 @@ export function runFormChecksWithData(
   mode: CheckMode = "period"
 ): CheckRunResult {
   const rules = pickRules(checks, { formId, mode, excludeAggr: true });
-  return runChecksOnInstances(rules, instances);
+  const result = runChecksOnInstances(rules, instances);
+
+  const target =
+    latestInstancePerTemplate(instances).find((i) => i.templateId === formId) ??
+    instances.find((i) => i.templateId === formId);
+  if (target && isFormNumericallyEmpty(target.rows)) {
+    const fillItem: CheckResultItem = {
+      number: 0,
+      expression: `iCheckFilledForm("${formId}")`,
+      message:
+        "Форма не заполнена: нет числовых данных. Увязки при пустых ячейках дают 0=0 и не означают готовность отчёта.",
+      passed: false,
+      left: 0,
+      right: 0,
+      failedClause: "форма пустая",
+      failedOp: "<>",
+    };
+    return {
+      total: result.total + 1,
+      passed: result.passed,
+      failed: result.failed + 1,
+      skipped: result.skipped,
+      items: [fillItem, ...result.items],
+    };
+  }
+  return result;
 }

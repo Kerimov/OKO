@@ -266,6 +266,10 @@ export interface PackageWorkspaceRow {
   bpIteration: number | null;
   hasBlockers: boolean;
   methodologyReleaseId: string | null;
+  lastExportedAt: string | null;
+  lastImportedAt: string | null;
+  /** Successful import count for this org/period (0 = never). */
+  importVersion: number;
 }
 
 export interface PackageWorkspaceDetail {

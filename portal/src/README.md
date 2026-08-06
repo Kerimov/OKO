@@ -16,7 +16,7 @@
 | `MyFormsPage.tsx` | `/my` | Список экземпляров |
 | `FormPage.tsx` | `/my/:id` | Редактор формы |
 | `PackagePage.tsx` | `/package` | Комплект ZID/EID |
-| `ToolsPage.tsx` | `/tools` | Пакетные операции (admin) |
+| `ToolsPage.tsx` | `/tools` | Обмен и операции (admin) |
 | `SettingsPage.tsx` | `/settings` | Настройки |
 | `InstructionsPage.tsx` | `/instructions` | Инструкция (markdown) |
 | `FormsEditorPage.tsx` | `/admin/forms` | Редактор шаблонов |

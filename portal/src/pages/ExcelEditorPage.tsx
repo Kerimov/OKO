@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 const EMPTY_MAPPING: ExcelMapping = {
   formName: "",
@@ -137,39 +138,49 @@ export function ExcelEditorPage() {
 
       <div className="checks-layout">
         <section className="checks-list-panel">
-          <div className="checks-filters">
-            <input
-              type="search"
-              placeholder="Поиск…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setOffset(0);
-              }}
-              className="search-input"
-            />
-            <input
-              placeholder="Код формы, напр. N01_1"
-              value={formFilter}
-              onChange={(e) => {
-                setFormFilter(e.target.value);
-                setOffset(0);
-              }}
-              className="category-select"
-            />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
-              Импорт из файла
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                setSelected(null);
-                setDraft({ ...EMPTY_MAPPING });
-              }}
+          <div className="checks-list-toolbar">
+            <CollapsibleFilters
+              activeCount={countActiveFilters(
+                search.trim().length > 0,
+                formFilter.trim().length > 0
+              )}
+              bodyClassName="checks-filters"
             >
-              + Новая
-            </button>
+              <input
+                type="search"
+                placeholder="Поиск…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setOffset(0);
+                }}
+                className="search-input"
+              />
+              <input
+                placeholder="Код формы, напр. N01_1"
+                value={formFilter}
+                onChange={(e) => {
+                  setFormFilter(e.target.value);
+                  setOffset(0);
+                }}
+                className="category-select"
+              />
+            </CollapsibleFilters>
+            <div className="checks-filters-actions">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
+                Импорт из файла
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setSelected(null);
+                  setDraft({ ...EMPTY_MAPPING });
+                }}
+              >
+                + Новая
+              </button>
+            </div>
           </div>
 
           {loading ? (

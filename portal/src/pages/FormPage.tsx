@@ -95,7 +95,13 @@ export function FormPage() {
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [kontrAgents, setKontrAgents] = useState<KontrAgent[]>([]);
   const [status, setStatus] = useState("");
+  const [statusTone, setStatusTone] = useState<"ok" | "error">("ok");
   const [error, setError] = useState("");
+
+  const showStatus = useCallback((message: string, tone: "ok" | "error" = "ok") => {
+    setStatusTone(tone);
+    setStatus(message);
+  }, []);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
   const [importingXlsx, setImportingXlsx] = useState(false);
@@ -294,7 +300,7 @@ export function FormPage() {
     setInstance(updated);
     void saveInstance(updated)
       .then(() => {
-        setStatus(`Добавлены строки из шаблона: ${added}`);
+        showStatus(`Добавлены строки из шаблона: ${added}`, "ok");
         setTimeout(() => setStatus(""), 4000);
       })
       .catch(() => {
@@ -605,7 +611,7 @@ export function FormPage() {
         await persist({ rashEntries: nextEntries });
       }
       setRashModal(null);
-      setStatus("Расшифровка сохранена");
+      showStatus("Расшифровка сохранена", "ok");
       setTimeout(() => setStatus(""), 3000);
     },
     [
@@ -634,7 +640,7 @@ export function FormPage() {
   const handleSave = useCallback(async () => {
     if (!instance || isLocked) return;
     await persist();
-    setStatus("Сохранено " + new Date().toLocaleTimeString("ru-RU"));
+    showStatus("Сохранено " + new Date().toLocaleTimeString("ru-RU"), "ok");
     setTimeout(() => setStatus(""), 3000);
   }, [instance, isLocked, persist]);
 
@@ -653,8 +659,9 @@ export function FormPage() {
       const errors = issues.filter((i) => i.severity === "error");
       if (errors.length > 0) {
         setRashIssues(issues);
-        setStatus(
-          `Сдача заблокирована: ${errors.length} ошибок расшифровки. Исправьте и повторите.`
+        showStatus(
+          `Сдача заблокирована: ${errors.length} ошибок расшифровки. Исправьте и повторите.`,
+          "error"
         );
         return;
       }
@@ -666,7 +673,7 @@ export function FormPage() {
     try {
       const updated = await setInstanceStatus(instance.instanceId, "submitted");
       setInstance(updated);
-      setStatus("Форма сдана");
+      showStatus("Форма сдана", "ok");
     } catch (e) {
       if (e instanceof ApiError && e.status === 422) {
         const body = e.body as {
@@ -676,10 +683,23 @@ export function FormPage() {
         };
         const result = body?.result ?? body?.message?.result;
         if (result) setCheckResult(result);
-        setStatus(e.message);
+        const failCount = result?.failed ?? 0;
+        const emptyForm = result?.items?.some(
+          (i) => i.number === 0 && String(i.expression).includes("iCheckFilledForm")
+        );
+        showStatus(
+          emptyForm
+            ? "Сдача заблокирована: форма не заполнена"
+            : failCount > 0
+              ? `Сдача заблокирована: ошибок увязок ${failCount}`
+              : e.message === "checks_failed"
+                ? "Сдача заблокирована: есть ошибки проверок"
+                : e.message,
+          "error"
+        );
         return;
       }
-      setStatus(e instanceof Error ? e.message : "Не удалось сдать форму");
+      showStatus(e instanceof Error ? e.message : "Не удалось сдать форму", "error");
     }
   };
 
@@ -688,7 +708,7 @@ export function FormPage() {
     if (!confirm("Вернуть форму в черновик?")) return;
     const updated = await setInstanceStatus(instance.instanceId, "draft");
     setInstance(updated);
-    setStatus("Форма возвращена в черновик");
+    showStatus("Форма возвращена в черновик", "ok");
   };
 
   const handleReset = async () => {
@@ -705,7 +725,7 @@ export function FormPage() {
     }
     await persist({ rows: fresh, signatures: sigs });
     setCheckResult(null);
-    setStatus("Данные сброшены к шаблону");
+    showStatus("Данные сброшены к шаблону", "ok");
   };
 
   const handleDelete = async () => {
@@ -739,7 +759,7 @@ export function FormPage() {
         rows,
         signatures,
       });
-      setStatus("PDF сохранён");
+      showStatus("PDF сохранён", "ok");
       setTimeout(() => setStatus(""), 3000);
     } catch {
       setError("Не удалось сформировать PDF");
@@ -755,7 +775,7 @@ export function FormPage() {
       const next = await recalcForm(schema, rows);
       setRows(next);
       await persist({ rows: next });
-      setStatus("Строки пересчитаны");
+      showStatus("Строки пересчитаны", "ok");
       setTimeout(() => setStatus(""), 3000);
     } catch {
       setError("Ошибка пересчёта");
@@ -775,7 +795,7 @@ export function FormPage() {
         meta,
         rows,
       });
-      setStatus("Файл Excel сохранён");
+      showStatus("Файл Excel сохранён", "ok");
       setTimeout(() => setStatus(""), 3000);
     } catch {
       setError("Не удалось сформировать Excel");
@@ -799,10 +819,11 @@ export function FormPage() {
         kontrAgents
       );
       setRashIssues(issues);
-      setStatus(
+      showStatus(
         issues.length === 0
           ? "Расшифровки: замечаний нет"
-          : `Расшифровки: ${issues.filter((i) => i.severity === "error").length} ошибок, ${issues.filter((i) => i.severity === "warning").length} предупреждений`
+          : `Расшифровки: ${issues.filter((i) => i.severity === "error").length} ошибок, ${issues.filter((i) => i.severity === "warning").length} предупреждений`,
+        issues.some((i) => i.severity === "error") ? "error" : "ok"
       );
       setTimeout(() => setStatus(""), 5000);
     } catch {
@@ -821,20 +842,33 @@ export function FormPage() {
       const serverResult = await runInstanceChecks(instance.instanceId, "period");
       if (serverResult) {
         setCheckResult(serverResult);
-        setStatus(
-          serverResult.failed === 0 && serverResult.skipped === 0
+        const hasFillError = serverResult.items.some(
+          (i) => i.number === 0 && String(i.expression).includes("iCheckFilledForm")
+        );
+        const ok = serverResult.failed === 0 && serverResult.skipped === 0;
+        showStatus(
+          ok
             ? "Проверка пройдена (сервер)"
-            : `Ошибок увязок: ${serverResult.failed}` +
-              (serverResult.skipped ? `, не разобрано: ${serverResult.skipped}` : "")
+            : hasFillError
+              ? "Форма пустая — увязки 0=0 не считаются заполнением"
+              : `Ошибок увязок: ${serverResult.failed}` +
+                (serverResult.skipped ? `, не разобрано: ${serverResult.skipped}` : ""),
+          ok ? "ok" : "error"
         );
       } else {
         const all = await loadAllInstances();
         const result = await runFormChecks(schema.id, all);
         setCheckResult(result);
-        setStatus(
+        const hasFillError = result.items.some(
+          (i) => i.number === 0 && String(i.expression).includes("iCheckFilledForm")
+        );
+        showStatus(
           result.failed === 0
             ? "Проверка пройдена"
-            : `Ошибок увязок: ${result.failed}`
+            : hasFillError
+              ? "Форма пустая — увязки 0=0 не считаются заполнением"
+              : `Ошибок увязок: ${result.failed}`,
+          result.failed === 0 ? "ok" : "error"
         );
       }
       setTimeout(() => setStatus(""), 5000);
@@ -909,8 +943,9 @@ export function FormPage() {
     if (!xlsxPreview || isLocked) return;
     setRows(xlsxPreview.proposedRows);
     await persist({ rows: xlsxPreview.proposedRows });
-    setStatus(
-      `Импорт Excel: лист «${xlsxPreview.sheetName}», строк ${xlsxPreview.matchedRows}, изменений ${xlsxPreview.diffs.length}`
+    showStatus(
+      `Импорт Excel: лист «${xlsxPreview.sheetName}», строк ${xlsxPreview.matchedRows}, изменений ${xlsxPreview.diffs.length}`,
+      "ok"
     );
     setXlsxPreview(null);
     setXlsxBuffer(null);
@@ -1129,7 +1164,14 @@ export function FormPage() {
           </div>
         </div>
       </div>
-      {status && <div className="status-bar">{status}</div>}
+      {status && (
+        <div
+          className={`status-bar${statusTone === "error" ? " status-bar-error" : ""}`}
+          role={statusTone === "error" ? "alert" : "status"}
+        >
+          {status}
+        </div>
+      )}
       {!canMutate && (
         <div className="status-bar status-locked">Режим аудитора — только чтение.</div>
       )}

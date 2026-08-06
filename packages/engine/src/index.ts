@@ -28,6 +28,7 @@ export {
 export {
   evalContextFromInstances,
   formsUsedByFormChecks,
+  isFormNumericallyEmpty,
   latestInstancePerTemplate,
   runChecksOnInstances,
   runFormChecksWithData,
@@ -97,6 +98,16 @@ export {
   type AggrAccountValidation,
   type TempAccountRow,
 } from "./aggrSetAccount.js";
+
+export {
+  checkRequiredSch,
+  indexRequiredSch,
+  indexRequiredRowMinSlots,
+  type RequiredSchCheckResult,
+  type RequiredSchIssue,
+  type RequiredSchItem,
+  type RequiredRowSlotItem,
+} from "./requiredSchCheck.js";
 
 export {
   BALANCE_AFTER_COL,

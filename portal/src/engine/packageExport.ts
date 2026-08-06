@@ -137,3 +137,39 @@ export async function readReportPackageFile(file: File): Promise<ReportPackage> 
   const text = await file.text();
   return parseReportPackageFile(text);
 }
+
+/**
+ * Read one or many ReportPackages from a JSON file or a ZIP
+ * (bulk export: several oko_package_*.json + optional manifest.json).
+ */
+export async function readReportPackagesFromFile(
+  file: File
+): Promise<Array<{ name: string; package: ReportPackage }>> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".zip")) {
+    const { unzipAllPackageJson } = await import("./zipRead");
+    const entries = await unzipAllPackageJson(await file.arrayBuffer());
+    const packages: Array<{ name: string; package: ReportPackage }> = [];
+    for (const entry of entries) {
+      try {
+        const parsed = JSON.parse(entry.text) as { instances?: unknown };
+        // Skip non-package JSON (e.g. empty objects)
+        if (!parsed.instances || !Array.isArray(parsed.instances)) continue;
+        packages.push({
+          name: entry.name.split("/").pop() ?? entry.name,
+          package: parseReportPackageFile(entry.text),
+        });
+      } catch {
+        /* skip invalid entry */
+      }
+    }
+    if (!packages.length) {
+      throw new Error("В ZIP нет распознанных комплектов OKO");
+    }
+    return packages;
+  }
+  const text = await file.text();
+  const pkg = parseReportPackageFile(text);
+  return [{ name: file.name, package: pkg }];
+}
+

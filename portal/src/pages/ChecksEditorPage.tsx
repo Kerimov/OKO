@@ -22,6 +22,7 @@ import {
 } from "../engine/instanceIndex";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 const EMPTY_RULE: CheckRule = {
   number: 0,
@@ -221,50 +222,61 @@ export function ChecksEditorPage() {
 
       <div className="checks-layout">
         <section className="checks-list-panel">
-          <div className="checks-filters">
-            <input
-              type="search"
-              placeholder="Поиск по №, выражению, сообщению…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setOffset(0);
-              }}
-              className="search-input"
-            />
-            <input
-              placeholder="Форма, напр. N01_1"
-              value={formFilter}
-              onChange={(e) => {
-                setFormFilter(e.target.value);
-                setOffset(0);
-              }}
-              className="category-select"
-            />
-            <label className="check-flag">
+          <div className="checks-list-toolbar">
+            <CollapsibleFilters
+              activeCount={countActiveFilters(
+                search.trim().length > 0,
+                formFilter.trim().length > 0,
+                onlyPeriod
+              )}
+              bodyClassName="checks-filters"
+            >
               <input
-                type="checkbox"
-                checked={onlyPeriod}
+                type="search"
+                placeholder="Поиск по №, выражению, сообщению…"
+                value={search}
                 onChange={(e) => {
-                  setOnlyPeriod(e.target.checked);
+                  setSearch(e.target.value);
                   setOffset(0);
                 }}
+                className="search-input"
               />
-              Только для периода
-            </label>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
-              Импорт из файла
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                setSelected(null);
-                setDraft({ ...EMPTY_RULE, number: (items[0]?.number ?? 0) + 1 });
-              }}
-            >
-              + Новая
-            </button>
+              <input
+                placeholder="Форма, напр. N01_1"
+                value={formFilter}
+                onChange={(e) => {
+                  setFormFilter(e.target.value);
+                  setOffset(0);
+                }}
+                className="category-select"
+              />
+              <label className="check-flag">
+                <input
+                  type="checkbox"
+                  checked={onlyPeriod}
+                  onChange={(e) => {
+                    setOnlyPeriod(e.target.checked);
+                    setOffset(0);
+                  }}
+                />
+                Только для периода
+              </label>
+            </CollapsibleFilters>
+            <div className="checks-filters-actions">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
+                Импорт из файла
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setSelected(null);
+                  setDraft({ ...EMPTY_RULE, number: (items[0]?.number ?? 0) + 1 });
+                }}
+              >
+                + Новая
+              </button>
+            </div>
           </div>
 
           {loading ? (

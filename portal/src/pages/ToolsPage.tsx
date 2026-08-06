@@ -28,17 +28,7 @@ import {
   type CheckRunResult,
 } from "../engine/checkEngine";
 import { getCompleteness, type CompletenessItem } from "../engine/completeness";
-import { exportPackageToExcel } from "../engine/exportExcel";
-import {
-  downloadReportPackage,
-  readReportPackageFile,
-} from "../engine/packageExport";
-import {
-  buildPackageCellDiffs,
-  buildPackageDiff,
-  type PackageCellDiff,
-  type PackageDiffRow,
-} from "../engine/packageDiff";
+import { readReportPackageFile } from "../engine/packageExport";
 import {
   downloadLoansNzsPackage,
   importLoansNzsPackage,
@@ -60,7 +50,6 @@ import {
   loadWorkContext,
   listOrganizations,
   listPeriods,
-  importReportPackage,
   listPackageInbox,
   receivePackageInbox,
   acceptPackageInbox,
@@ -108,9 +97,16 @@ import { OverviewTab } from "./tools/OverviewTab";
 import { QualityTab } from "./tools/QualityTab";
 import { ReferencesTab } from "./tools/ReferencesTab";
 import { SaldoTab } from "./tools/SaldoTab";
-import { TOOLS_TABS, type ToolsTabId } from "./tools/tabs";
+import {
+  parseExchangeMode,
+  TOOLS_TABS,
+  type ExchangeMode,
+  type ToolsTabId,
+} from "./tools/tabs";
 
 function parseToolsTab(raw: string | null): ToolsTabId {
+  // Legacy deep-links from when export/upload were top-level tabs
+  if (raw === "export" || raw === "upload") return "exchange";
   if (raw && TOOLS_TABS.some((t) => t.id === raw)) return raw as ToolsTabId;
   return "overview";
 }
@@ -120,17 +116,48 @@ export function ToolsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const auth = useAuth();
   const activeTab = parseToolsTab(searchParams.get("tab"));
-  const setActiveTab = (id: ToolsTabId) => {
+  const exchangeMode = parseExchangeMode(
+    searchParams.get("mode") ??
+      (searchParams.get("tab") === "upload" ? "upload" : null)
+  );
+
+  const setActiveTab = (id: ToolsTabId, opts?: { exchangeMode?: ExchangeMode }) => {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (id === "overview") next.delete("tab");
-        else next.set("tab", id);
+        if (id === "overview") {
+          next.delete("tab");
+          next.delete("mode");
+        } else {
+          next.set("tab", id);
+          if (id === "exchange") {
+            const mode = opts?.exchangeMode ?? "export";
+            if (mode === "upload") next.set("mode", "upload");
+            else next.delete("mode");
+          } else {
+            next.delete("mode");
+          }
+        }
         return next;
       },
       { replace: true }
     );
   };
+
+  useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (raw !== "export" && raw !== "upload") return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", "exchange");
+        if (raw === "upload") next.set("mode", "upload");
+        else next.delete("mode");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams]);
   const [summaries, setSummaries] = useState<InstanceSummary[]>([]);
   const [checkResult, setCheckResult] = useState<CheckRunResult | null>(null);
   const [checking, setChecking] = useState(false);
@@ -191,15 +218,6 @@ export function ToolsPage() {
   const [workEid, setWorkEid] = useState<number | null>(null);
   const [recalcReport, setRecalcReport] = useState<RecalcPackageItem[] | null>(null);
   const [importOverwrite, setImportOverwrite] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [pendingPackage, setPendingPackage] = useState<
-    Awaited<ReturnType<typeof readReportPackageFile>> | null
-  >(null);
-  const [packageDiffRows, setPackageDiffRows] = useState<PackageDiffRow[]>([]);
-  const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
-  const [packageCellDiffs, setPackageCellDiffs] = useState<PackageCellDiff[]>([]);
-  const [showCellDiffs, setShowCellDiffs] = useState(false);
-  const [exportZip, setExportZip] = useState(true);
   const [n99RenameId, setN99RenameId] = useState<number | "">("");
   const [n99RenameTo, setN99RenameTo] = useState("");
   const [loansPkg, setLoansPkg] = useState<LoansNzsPackage | null>(null);
@@ -758,126 +776,6 @@ export function ToolsPage() {
     }
   };
 
-  const handlePackageJson = async () => {
-    if (periodInstances.length === 0) {
-      setStatus("Нет форм за текущий период");
-      return;
-    }
-    try {
-      await downloadReportPackage(periodInstances, undefined, { zip: exportZip });
-      setStatus(
-        `Экспорт комплекта: ${periodInstances.length} форм (${exportZip ? "ZIP" : "JSON"}). ` +
-          "Справочник правил кладётся в файл для передачи; при импорте применяются только данные форм."
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка экспорта комплекта");
-    }
-  };
-
-  const handleImportPackagePreview = async (file: File) => {
-    if (workZid == null || workEid == null) {
-      setStatus("Выберите организацию и период в разделе Комплект");
-      return;
-    }
-    try {
-      const pkg = await readReportPackageFile(file);
-      const rows = buildPackageDiff(pkg, periodInstances, {
-        zid: workZid,
-        eid: workEid,
-      });
-      setPendingPackage(pkg);
-      setPackageDiffRows(rows);
-      setSelectedImportIds(
-        new Set(rows.filter((r) => r.selectedDefault && r.verdict !== "only-local").map((r) => r.templateId))
-      );
-      const cells = buildPackageCellDiffs(pkg, periodInstances);
-      setPackageCellDiffs(cells);
-      setShowCellDiffs(false);
-      setStatus(
-        `Сравнение комплекта: ${pkg.instances.length} форм в файле, ${rows.filter((r) => r.verdict === "changed").length} изменённых, ${rows.filter((r) => r.verdict === "new").length} новых, ячеек с расхождением ${cells.length}`
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка чтения комплекта");
-    }
-  };
-
-  const toggleImportId = (templateId: string) => {
-    setSelectedImportIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(templateId)) next.delete(templateId);
-      else next.add(templateId);
-      return next;
-    });
-  };
-
-  const selectImportByVerdict = (predicate: (r: PackageDiffRow) => boolean) => {
-    setSelectedImportIds(
-      new Set(
-        packageDiffRows
-          .filter((r) => r.verdict !== "only-local" && predicate(r))
-          .map((r) => r.templateId)
-      )
-    );
-  };
-
-  const handleAcceptPartial = async () => {
-    if (!pendingPackage || workZid == null || workEid == null) return;
-    const ids = [...selectedImportIds];
-    if (ids.length === 0) {
-      setStatus("Выберите хотя бы одну форму для принятия");
-      return;
-    }
-    setImporting(true);
-    try {
-      const result = await importReportPackage(
-        workZid,
-        workEid,
-        pendingPackage,
-        importOverwrite,
-        ids
-      );
-      await refresh();
-      setPendingPackage(null);
-      setPackageDiffRows([]);
-      setSelectedImportIds(new Set());
-      const errPart =
-        result.errors.length > 0 ? ` Ошибки: ${result.errors.slice(0, 3).join("; ")}` : "";
-      setStatus(
-        `Принято частично: создано ${result.created}, обновлено ${result.updated}, пропущено ${result.skipped}.${errPart}`
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка импорта");
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleImportPackageAll = async () => {
-    if (!pendingPackage || workZid == null || workEid == null) return;
-    setImporting(true);
-    try {
-      const result = await importReportPackage(
-        workZid,
-        workEid,
-        pendingPackage,
-        importOverwrite
-      );
-      await refresh();
-      setPendingPackage(null);
-      setPackageDiffRows([]);
-      setSelectedImportIds(new Set());
-      const errPart =
-        result.errors.length > 0 ? ` Ошибки: ${result.errors.slice(0, 3).join("; ")}` : "";
-      setStatus(
-        `Импорт: создано ${result.created}, обновлено ${result.updated}, пропущено ${result.skipped}.${errPart}`
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка импорта");
-    } finally {
-      setImporting(false);
-    }
-  };
-
   const handleExportLoansNzs = async () => {
     try {
       const out = await downloadLoansNzsPackage(loansPkg ?? undefined);
@@ -965,29 +863,6 @@ export function ToolsPage() {
       .catch((e) =>
         setStatus(e instanceof Error ? e.message : "Ошибка переименования")
       );
-  };
-
-  const handlePackageExcel = async () => {
-    if (periodInstances.length === 0) {
-      setStatus("Нет форм за текущий период");
-      return;
-    }
-    setBusy(true);
-    try {
-      const schemas = new Map(
-        await Promise.all(
-          [...new Set(periodInstances.map((i) => i.templateId))].map(
-            async (id) => [id, await loadSchema(id)] as const
-          )
-        )
-      );
-      await exportPackageToExcel(periodInstances, schemas);
-      setStatus(`Файл Excel сохранён (${periodInstances.length} форм)`);
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка выгрузки Excel");
-    } finally {
-      setBusy(false);
-    }
   };
 
   const handleSaldo = async () => {
@@ -1085,10 +960,12 @@ export function ToolsPage() {
 
   return (
     <div className="tools-page">
-      <h1>Сводка и импорт</h1>
+      <h1>Обмен и операции</h1>
       <p className="tools-intro">
-        Операции над рабочим комплектом организации и периода. Контекст задаётся в{" "}
-        <Link to="/package">Комплект</Link>. Редакторы методологии:{" "}
+        Выгрузка и приём комплектов, контроль качества, сальдо и свод. Рабочий
+        комплект для одиночных операций задаётся в{" "}
+        <Link to="/package">Комплектах</Link>. Массовая выгрузка для дочек не зависит
+        от текущего выбора. Редакторы методологии:{" "}
         <Link to="/admin/forms">формы</Link>,{" "}
         <Link to="/admin/checks">увязки</Link>,{" "}
         <Link to="/admin/saldo">сальдо</Link>,{" "}
@@ -1125,8 +1002,12 @@ export function ToolsPage() {
           Сменить комплект
         </Link>
       </div>
+      <p className="tools-hint" style={{ marginTop: "-0.25rem" }}>
+        Панель выше — контекст для «Текущий комплект», контроля и сальдо. Массовая
+        выгрузка и приём файлов — вкладка «Обмен» (Выгрузить / Загрузить).
+      </p>
 
-      <nav className="tools-tabs" role="tablist" aria-label="Разделы сводки и импорта">
+      <nav className="tools-tabs" role="tablist" aria-label="Разделы обмена и операций">
         {TOOLS_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -1164,39 +1045,12 @@ export function ToolsPage() {
 
       {activeTab === "exchange" && (
         <ExchangeTab
-          work={{
-            zid: workZid,
-            eid: workEid,
-            formCount: periodInstances.length,
-          }}
-          exportZip={exportZip}
-          onExportZipChange={setExportZip}
+          mode={exchangeMode}
+          onModeChange={(mode) => setActiveTab("exchange", { exchangeMode: mode })}
           importOverwrite={importOverwrite}
           onImportOverwriteChange={setImportOverwrite}
-          importing={importing}
-          busy={busy}
-          pending={{
-            package: pendingPackage,
-            diffRows: packageDiffRows,
-            selectedIds: selectedImportIds,
-            cellDiffs: packageCellDiffs,
-            showCellDiffs,
-          }}
-          onShowCellDiffsChange={setShowCellDiffs}
-          onPackageJson={handlePackageJson}
-          onPackageExcel={handlePackageExcel}
-          onImportPreview={handleImportPackagePreview}
-          onAcceptPartial={handleAcceptPartial}
-          onImportAll={handleImportPackageAll}
-          onCancelPending={() => {
-            setPendingPackage(null);
-            setPackageDiffRows([]);
-            setPackageCellDiffs([]);
-            setSelectedImportIds(new Set());
-          }}
-          onSelectByVerdict={selectImportByVerdict}
-          onToggleImportId={toggleImportId}
-          onClearSelection={() => setSelectedImportIds(new Set())}
+          onStatus={setStatus}
+          onImported={() => void refresh()}
           inbox={
             backend
               ? {
@@ -1215,95 +1069,74 @@ export function ToolsPage() {
                         await receivePackageInbox({
                           rawJson,
                           filename: file.name,
-                          targetZid: workZid,
-                          targetEid: workEid,
+                          targetZid: pkg.zid ?? workZid,
+                          targetEid: pkg.eid ?? workEid,
                         });
                         setInboxItems(await listPackageInbox());
-                        setStatus(`Inbox: загружен ${file.name}`);
+                        setStatus(`В очередь: ${file.name}`);
                       } catch (e) {
                         setStatus(
-                          e instanceof Error ? e.message : "Ошибка загрузки в inbox"
+                          e instanceof Error ? e.message : "Ошибка загрузки в очередь"
                         );
                       }
                     })();
                   },
                   onPreview: (id) => {
-                    if (workZid == null || workEid == null) {
-                      setStatus("Сначала выберите организацию и период");
-                      return;
-                    }
                     void (async () => {
                       try {
-                        const [preview, detail] = await Promise.all([
-                          previewPackageInbox(id, { zid: workZid, eid: workEid }),
-                          getPackageInboxDetail(id),
-                        ]);
-                        const pkg = {
-                          version: detail.packageJson.version || "1.2",
-                          exportedAt: detail.receivedAt,
-                          organization:
-                            detail.packageJson.organization ||
-                            detail.organization ||
-                            "",
-                          periodStart:
-                            detail.packageJson.periodStart ||
-                            detail.periodStart ||
-                            "",
-                          periodEnd:
-                            detail.packageJson.periodEnd || detail.periodEnd || "",
-                          zid: detail.packageJson.zid ?? detail.pkgZid,
-                          eid: detail.packageJson.eid ?? detail.pkgEid,
-                          instanceCount: detail.packageJson.instances.length,
-                          instances: detail.packageJson.instances,
-                          rules: detail.packageJson.rules as never,
-                        };
-                        const rows = preview.diff as PackageDiffRow[];
-                        setPendingPackage(pkg);
-                        setPackageDiffRows(rows);
-                        setSelectedImportIds(
-                          new Set(
-                            rows
-                              .filter(
-                                (r) =>
-                                  r.selectedDefault && r.verdict !== "only-local"
-                              )
-                              .map((r) => r.templateId)
-                          )
-                        );
-                        setPackageCellDiffs(
-                          buildPackageCellDiffs(pkg, periodInstances)
-                        );
-                        setShowCellDiffs(false);
+                        const detail = await getPackageInboxDetail(id);
+                        const zid =
+                          Number(detail.packageJson.zid ?? detail.pkgZid ?? workZid) ||
+                          null;
+                        const eid =
+                          Number(detail.packageJson.eid ?? detail.pkgEid ?? workEid) ||
+                          null;
+                        if (zid == null || eid == null) {
+                          setStatus(
+                            "В файле очереди нет zid/eid — выберите комплект в «Комплектах»"
+                          );
+                          return;
+                        }
+                        const preview = await previewPackageInbox(id, { zid, eid });
                         setStatus(
-                          `Inbox превью: +${preview.summary.new} новых, ~${preview.summary.changed} изменённых, =${preview.summary.same} совпадений, локально ${preview.summary.onlyLocal}`
+                          `Очередь превью → орг. ${zid}, период ${eid}: +${preview.summary.new} новых, ~${preview.summary.changed} изменённых`
                         );
                       } catch (e) {
                         setStatus(
-                          e instanceof Error ? e.message : "Ошибка превью inbox"
+                          e instanceof Error ? e.message : "Ошибка превью очереди"
                         );
                       }
                     })();
                   },
                   onAccept: (id) => {
-                    if (workZid == null || workEid == null) {
-                      setStatus("Сначала выберите организацию и период");
-                      return;
-                    }
                     void (async () => {
                       try {
+                        const detail = await getPackageInboxDetail(id);
+                        const zid =
+                          Number(detail.packageJson.zid ?? detail.pkgZid ?? workZid) ||
+                          null;
+                        const eid =
+                          Number(detail.packageJson.eid ?? detail.pkgEid ?? workEid) ||
+                          null;
+                        if (zid == null || eid == null) {
+                          setStatus(
+                            "В файле очереди нет zid/eid — выберите комплект в «Комплектах»"
+                          );
+                          return;
+                        }
                         const r = await acceptPackageInbox(id, {
-                          zid: workZid,
-                          eid: workEid,
+                          zid,
+                          eid,
                           overwrite: importOverwrite,
                         });
                         setInboxItems(await listPackageInbox());
                         await refresh();
                         setStatus(
-                          `Inbox принят: +${r.result.created} / ≈${r.result.updated}, пропуск ${r.result.skipped}`
+                          `Очередь принята → ${zid}/${eid}: +${r.result.created} / ≈${r.result.updated}`
                         );
                       } catch (e) {
                         setStatus(
-                          e instanceof Error ? e.message : "Ошибка приёма inbox"
+                          e instanceof Error ? e.message : "Ошибка приёма из очереди"
                         );
                       }
                     })();
@@ -1313,7 +1146,7 @@ export function ToolsPage() {
                       try {
                         await rejectPackageInbox(id, "Отклонено оператором");
                         setInboxItems(await listPackageInbox());
-                        setStatus("Inbox: отклонено");
+                        setStatus("Очередь: отклонено");
                       } catch (e) {
                         setStatus(
                           e instanceof Error ? e.message : "Ошибка отклонения"

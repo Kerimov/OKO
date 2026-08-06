@@ -18,6 +18,53 @@ import type { ImportPackageResult } from "./engine/packageImport";
 const LOCAL_ORGS_KEY = "oko-local-orgs";
 const LOCAL_PERIODS_KEY = "oko-local-periods";
 const LOCAL_WORK_CTX_KEY = "oko-work-context";
+const LOCAL_EXCHANGE_KEY = "oko-package-exchange";
+
+type LocalExchangeMap = Record<
+  string,
+  {
+    lastExportedAt?: string | null;
+    lastImportedAt?: string | null;
+    importVersion?: number;
+  }
+>;
+
+function exchangeKey(zid: number, eid: number): string {
+  return `${zid}:${eid}`;
+}
+
+function readLocalExchange(): LocalExchangeMap {
+  try {
+    const raw = localStorage.getItem(LOCAL_EXCHANGE_KEY);
+    if (raw) return JSON.parse(raw) as LocalExchangeMap;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+function writeLocalExchange(map: LocalExchangeMap): void {
+  localStorage.setItem(LOCAL_EXCHANGE_KEY, JSON.stringify(map));
+}
+
+function touchLocalExported(zid: number, eid: number, at = new Date().toISOString()): void {
+  const map = readLocalExchange();
+  const prev = map[exchangeKey(zid, eid)] ?? {};
+  map[exchangeKey(zid, eid)] = { ...prev, lastExportedAt: at };
+  writeLocalExchange(map);
+}
+
+function touchLocalImported(zid: number, eid: number, at = new Date().toISOString()): void {
+  const map = readLocalExchange();
+  const prev = map[exchangeKey(zid, eid)] ?? {};
+  const prevVersion = Number(prev.importVersion ?? 0);
+  map[exchangeKey(zid, eid)] = {
+    ...prev,
+    lastImportedAt: at,
+    importVersion: prevVersion + 1,
+  };
+  writeLocalExchange(map);
+}
 
 function readLocalOrgs(): Organization[] {
   try {
@@ -271,11 +318,13 @@ export async function fetchPackageWorkspace(zid?: number): Promise<
   // Local fallback: synthesize from orgs + periods + completeness
   const orgs = await listOrganizations();
   const periods = await listPeriods(zid);
+  const exchange = readLocalExchange();
   const rows: import("./types").PackageWorkspaceRow[] = [];
   for (const p of periods) {
     const org = orgs.find((o) => o.zid === p.zid);
     if (!org) continue;
     const c = await fetchPackageCompleteness(p.zid, p.eid);
+    const mark = exchange[exchangeKey(p.zid, p.eid)];
     rows.push({
       zid: p.zid,
       eid: p.eid,
@@ -299,6 +348,9 @@ export async function fetchPackageWorkspace(zid?: number): Promise<
       bpIteration: null,
       hasBlockers: false,
       methodologyReleaseId: p.methodologyReleaseId ?? null,
+      lastExportedAt: mark?.lastExportedAt ?? null,
+      lastImportedAt: mark?.lastImportedAt ?? null,
+      importVersion: Number(mark?.importVersion ?? 0),
     });
   }
   return rows;
@@ -504,6 +556,103 @@ export async function deleteReportPackagesBulk(
   return { deleted, failed, deletedInstances, results };
 }
 
+export async function exportReportPackagesBulk(
+  items: Array<{ zid: number; eid: number }>
+): Promise<{ blob: Blob; filename: string; exported: number; failed: number }> {
+  if (!items.length) throw new Error("Выберите хотя бы один комплект");
+
+  if (isBackendMode()) {
+    const { apiFetchRaw } = await import("./apiClient");
+    const res = await apiFetchRaw("/api/packages/export/bulk", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { error?: string; message?: string };
+        message = body.error || body.message || message;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const match = /filename="?([^";]+)"?/i.exec(cd);
+    const filename = match?.[1] ?? `oko_packages_${items.length}orgs.zip`;
+    const exported = Number(res.headers.get("X-Packages-Exported") ?? items.length);
+    const failed = Number(res.headers.get("X-Packages-Failed") ?? 0);
+    return { blob, filename, exported, failed };
+  }
+
+  // Local fallback: build ZIP in browser
+  const { buildReportPackage } = await import("./engine/packageExport");
+  const { zipStoreFiles } = await import("./engine/zipStore");
+  const { listInstances, loadInstance } = await import("./storage");
+  const files: Array<{ name: string; data: string }> = [];
+  const manifestPackages: Array<Record<string, unknown>> = [];
+  let exported = 0;
+  let failed = 0;
+  const exportedAt = new Date().toISOString();
+  for (const item of items) {
+    try {
+      const summaries = await listInstances({ zid: item.zid, eid: item.eid });
+      const instances = [];
+      for (const s of summaries) {
+        const inst = await loadInstance(s.instanceId);
+        if (inst) instances.push(inst);
+      }
+      if (!instances.length) {
+        failed += 1;
+        manifestPackages.push({
+          zid: item.zid,
+          eid: item.eid,
+          ok: false,
+          error: "Нет форм",
+        });
+        continue;
+      }
+      const pkg = await buildReportPackage(instances);
+      const org = (pkg.organization || `zid${item.zid}`)
+        .replace(/[^\wа-яА-ЯёЁ.-]+/gi, "_")
+        .slice(0, 30);
+      const filename = `oko_package_${org}_z${item.zid}_e${item.eid}.json`;
+      files.push({ name: filename, data: JSON.stringify(pkg, null, 2) });
+      manifestPackages.push({
+        zid: item.zid,
+        eid: item.eid,
+        organizationName: pkg.organization,
+        periodStart: pkg.periodStart,
+        periodEnd: pkg.periodEnd,
+        formCount: instances.length,
+        filename,
+        ok: true,
+      });
+      exported += 1;
+      touchLocalExported(item.zid, item.eid, exportedAt);
+    } catch (e) {
+      failed += 1;
+      manifestPackages.push({
+        zid: item.zid,
+        eid: item.eid,
+        ok: false,
+        error: e instanceof Error ? e.message : "Ошибка",
+      });
+    }
+  }
+  if (exported === 0) throw new Error("Не удалось выгрузить ни одного комплекта");
+  files.unshift({
+    name: "manifest.json",
+    data: JSON.stringify({ exportedAt, packages: manifestPackages }, null, 2),
+  });
+  const zip = zipStoreFiles(files);
+  const filename = `oko_packages_${exportedAt.slice(0, 10)}_${exported}orgs.zip`;
+  const blob = new Blob([zip], { type: "application/zip" });
+  return { blob, filename, exported, failed };
+}
+
 export async function importReportPackage(
   zid: number,
   eid: number,
@@ -541,7 +690,100 @@ export async function importReportPackage(
   for (const inst of instances) {
     await saveInstance(inst);
   }
+  if (result.created > 0 || result.updated > 0 || result.skipped > 0) {
+    touchLocalImported(zid, eid);
+  }
   return result;
+}
+
+export interface BulkImportPackageItemResult {
+  name: string;
+  zid: number | null;
+  eid: number | null;
+  organization: string;
+  ok: boolean;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  error?: string;
+}
+
+export interface BulkImportPackageResult {
+  imported: number;
+  failed: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  results: BulkImportPackageItemResult[];
+}
+
+function resolvePackageTarget(
+  pkg: ReportPackage,
+  fallback?: { zid: number; eid: number } | null
+): { zid: number; eid: number } {
+  const zid = pkg.zid != null ? Number(pkg.zid) : fallback?.zid;
+  const eid = pkg.eid != null ? Number(pkg.eid) : fallback?.eid;
+  if (zid == null || eid == null || !Number.isFinite(zid) || !Number.isFinite(eid)) {
+    throw new Error(
+      `В файле «${pkg.organization || "комплект"}» нет zid/eid — укажите комплект в списке или выгрузите пакет заново`
+    );
+  }
+  return { zid, eid };
+}
+
+/** Import one or many packages; target zid/eid taken from each file (optional fallback). */
+export async function importReportPackagesBulk(
+  packages: Array<{ name: string; package: ReportPackage }>,
+  options: {
+    overwrite: boolean;
+    fallbackTarget?: { zid: number; eid: number } | null;
+  }
+): Promise<BulkImportPackageResult> {
+  const results: BulkImportPackageItemResult[] = [];
+  let imported = 0;
+  let failed = 0;
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const item of packages) {
+    try {
+      const target = resolvePackageTarget(item.package, options.fallbackTarget);
+      const result = await importReportPackage(
+        target.zid,
+        target.eid,
+        item.package,
+        options.overwrite
+      );
+      imported += 1;
+      created += result.created;
+      updated += result.updated;
+      skipped += result.skipped;
+      results.push({
+        name: item.name,
+        zid: target.zid,
+        eid: target.eid,
+        organization: item.package.organization,
+        ok: true,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        error: result.errors.length ? result.errors.slice(0, 2).join("; ") : undefined,
+      });
+    } catch (e) {
+      failed += 1;
+      results.push({
+        name: item.name,
+        zid: item.package.zid ?? null,
+        eid: item.package.eid ?? null,
+        organization: item.package.organization,
+        ok: false,
+        error: e instanceof Error ? e.message : "Ошибка импорта",
+      });
+    }
+  }
+
+  return { imported, failed, created, updated, skipped, results };
 }
 
 export interface PackageInboxItem {

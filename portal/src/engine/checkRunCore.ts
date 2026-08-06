@@ -2,6 +2,7 @@
 export {
   evalContextFromInstances,
   formsUsedByFormChecks,
+  isFormNumericallyEmpty,
   latestInstancePerTemplate,
   runFormChecksWithData,
   type CheckMode,

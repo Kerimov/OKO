@@ -43,6 +43,12 @@ export function CheckResultsPanel({ result, loading }: Props) {
         <p className="check-ok">Все проверки пройдены.</p>
       ) : (
         <>
+          {failed.some((i) => i.number === 0 && i.expression?.includes("iCheckFilledForm")) && (
+            <p className="check-warn" style={{ marginBottom: "0.75rem" }}>
+              Форма пустая: увязки с пустыми ячейками дают 0=0 и проходят формально.
+              Заполните данные (или расшифровки), затем проверьте снова.
+            </p>
+          )}
           {failed.length > 0 && (
             <div className="check-table-wrap">
               <h3 className="check-table-title">Ошибки увязок</h3>

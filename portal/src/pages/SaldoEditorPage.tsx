@@ -15,6 +15,7 @@ import {
 } from "../api";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 type Tab = "rules" | "correspondence";
 
@@ -270,52 +271,63 @@ export function SaldoEditorPage() {
       {tab === "rules" ? (
         <div className="checks-layout">
           <section className="checks-list-panel">
-            <div className="checks-filters">
-              <input
-                type="search"
-                placeholder="Поиск по №, имени, форме…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setOffset(0);
-                }}
-                className="search-input"
-              />
-              <input
-                placeholder="Форма, напр. N01_1"
-                value={formFilter}
-                onChange={(e) => {
-                  setFormFilter(e.target.value);
-                  setOffset(0);
-                }}
-                className="category-select"
-              />
-              <select
-                value={saldoType}
-                onChange={(e) => {
-                  setSaldoType(e.target.value as "" | "t" | "s" | "g");
-                  setOffset(0);
-                }}
-                className="category-select"
+            <div className="checks-list-toolbar">
+              <CollapsibleFilters
+                activeCount={countActiveFilters(
+                  search.trim().length > 0,
+                  formFilter.trim().length > 0,
+                  saldoType !== ""
+                )}
+                bodyClassName="checks-filters"
               >
-                <option value="">Все типы</option>
-                <option value="t">Текущий</option>
-                <option value="s">Сальдо</option>
-                <option value="g">Год</option>
-              </select>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimportRules}>
-                Импорт из файла
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setSelected(null);
-                  setDraft({ ...EMPTY_RULE, number: (items[0]?.number ?? 0) + 1 });
-                }}
-              >
-                + Новое
-              </button>
+                <input
+                  type="search"
+                  placeholder="Поиск по №, имени, форме…"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setOffset(0);
+                  }}
+                  className="search-input"
+                />
+                <input
+                  placeholder="Форма, напр. N01_1"
+                  value={formFilter}
+                  onChange={(e) => {
+                    setFormFilter(e.target.value);
+                    setOffset(0);
+                  }}
+                  className="category-select"
+                />
+                <select
+                  value={saldoType}
+                  onChange={(e) => {
+                    setSaldoType(e.target.value as "" | "t" | "s" | "g");
+                    setOffset(0);
+                  }}
+                  className="category-select"
+                >
+                  <option value="">Все типы</option>
+                  <option value="t">Текущий</option>
+                  <option value="s">Сальдо</option>
+                  <option value="g">Год</option>
+                </select>
+              </CollapsibleFilters>
+              <div className="checks-filters-actions">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimportRules}>
+                  Импорт из файла
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setSelected(null);
+                    setDraft({ ...EMPTY_RULE, number: (items[0]?.number ?? 0) + 1 });
+                  }}
+                >
+                  + Новое
+                </button>
+              </div>
             </div>
 
             {loading ? (

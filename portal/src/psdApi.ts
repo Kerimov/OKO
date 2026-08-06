@@ -414,7 +414,15 @@ export async function runPackageChecks(input: {
   packageKind: PackageKind;
   passed: number;
   failed: number;
-  results: Array<{ code: string; passed: boolean; message: string }>;
+  results: Array<{
+    code: string;
+    passed: boolean;
+    message: string;
+    left?: number | null;
+    right?: number | null;
+    requiresExplanation?: boolean;
+    checkType?: string;
+  }>;
 }> {
   return apiFetch("/api/psd-checks/package-run", {
     method: "POST",

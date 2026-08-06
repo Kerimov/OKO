@@ -21,6 +21,7 @@ import {
   saveWorkContext,
 } from "../packagesApi";
 import {
+  ensureBusinessProcess,
   getBpApprovalBlockers,
   runPackageChecks,
   transitionBusinessProcess,
@@ -48,6 +49,7 @@ import { formatPeriod, formStatusLabel, currentReportingQuarter, quarterDateRang
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
 import { PackageConstructor } from "../components/PackageConstructor";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 type WorkspaceTab = "overview" | "forms" | "bp" | "setup" | "create";
 type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
@@ -167,7 +169,14 @@ export function PackagePage() {
   const canDeletePackage =
     admin || (orgZid != null && typeof zid === "number" && zid === orgZid);
 
+  const canBulkSelect = !auditorRo;
   const canBulkDelete = canMutate && !auditorRo && (admin || orgZid != null);
+  const canBulkStartCollection =
+    backend &&
+    canMutate &&
+    !auditorRo &&
+    (psdRole === "business_process_manager" || psdRole === "support_specialist");
+  const canBulkRunChecks = backend && canMutate && !auditorRo;
 
   const syncUrl = useCallback(
     (nextZid: number, nextEid: number) => {
@@ -241,7 +250,13 @@ export function PackagePage() {
           syncUrl(initial.zid, initial.eid);
           await saveWorkContext({ zid: initial.zid, eid: initial.eid });
           await loadDetail(initial.zid, initial.eid, initial.packageKind);
+        } else {
+          setStatus("Комплектов пока нет — создайте организацию и период");
         }
+      } catch (e) {
+        setStatus(
+          e instanceof Error ? e.message : "Не удалось загрузить список комплектов"
+        );
       } finally {
         setLoading(false);
       }
@@ -285,23 +300,31 @@ export function PackagePage() {
     return { packages: filteredRows.length, filled, submitted };
   }, [filteredRows]);
 
-  const deletableFilteredRows = useMemo(
+  const selectableFilteredRows = useMemo(
     () =>
-      filteredRows.filter((r) => {
-        if (r.periodStatus === "closed") return false;
-        if (admin) return true;
-        return orgZid != null && r.zid === orgZid;
-      }),
-    [filteredRows, admin, orgZid]
+      canBulkSelect
+        ? filteredRows.filter((r) => orgZid == null || r.zid === orgZid)
+        : [],
+    [filteredRows, canBulkSelect, orgZid]
   );
 
-  const allDeletableChecked =
-    deletableFilteredRows.length > 0 &&
-    deletableFilteredRows.every((r) => checkedKeys.has(rowKey(r)));
+  const allSelectableChecked =
+    selectableFilteredRows.length > 0 &&
+    selectableFilteredRows.every((r) => checkedKeys.has(rowKey(r)));
 
   const checkedRows = useMemo(
     () => filteredRows.filter((r) => checkedKeys.has(rowKey(r))),
     [filteredRows, checkedKeys]
+  );
+
+  const checkedDeletableRows = useMemo(
+    () =>
+      checkedRows.filter((r) => {
+        if (r.periodStatus === "closed") return false;
+        if (admin) return true;
+        return orgZid != null && r.zid === orgZid;
+      }),
+    [checkedRows, admin, orgZid]
   );
 
   const formItems = useMemo(() => {
@@ -355,10 +378,16 @@ export function PackagePage() {
   }, [selectedRow, canMutate, periodClosed, bp, bpActions]);
 
   const refreshAll = async () => {
-    const list = await loadList();
-    if (typeof zid === "number" && typeof eid === "number") {
-      const hit = list.find((r) => r.zid === zid && r.eid === eid);
-      await loadDetail(zid, eid, hit?.packageKind);
+    try {
+      const list = await loadList();
+      if (typeof zid === "number" && typeof eid === "number") {
+        const hit = list.find((r) => r.zid === zid && r.eid === eid);
+        await loadDetail(zid, eid, hit?.packageKind);
+      }
+    } catch (e) {
+      setStatus(
+        e instanceof Error ? e.message : "Не удалось обновить список комплектов"
+      );
     }
   };
 
@@ -505,33 +534,134 @@ export function PackagePage() {
     });
   };
 
-  const toggleSelectAllDeletable = () => {
-    if (allDeletableChecked) {
+  const toggleSelectAllSelectable = () => {
+    if (allSelectableChecked) {
       setCheckedKeys((prev) => {
         const next = new Set(prev);
-        for (const r of deletableFilteredRows) next.delete(rowKey(r));
+        for (const r of selectableFilteredRows) next.delete(rowKey(r));
         return next;
       });
       return;
     }
     setCheckedKeys((prev) => {
       const next = new Set(prev);
-      for (const r of deletableFilteredRows) next.add(rowKey(r));
+      for (const r of selectableFilteredRows) next.add(rowKey(r));
       return next;
     });
   };
 
-  const handleBulkDelete = async () => {
-    if (!canBulkDelete || checkedRows.length === 0) return;
-    const toDelete = checkedRows.filter((r) => {
+  const clearSelection = () => setCheckedKeys(new Set());
+
+  const handleBulkStartCollection = async () => {
+    if (!canBulkStartCollection || checkedRows.length === 0) return;
+    const targets = checkedRows.filter((r) => {
       if (r.periodStatus === "closed") return false;
-      if (admin) return true;
-      return orgZid != null && r.zid === orgZid;
+      const status = r.bpStatus ?? "not_started";
+      return status === "not_started";
     });
-    if (!toDelete.length) {
-      setStatus("Нет комплектов, доступных для удаления (закрытые периоды пропускаются)");
+    if (!targets.length) {
+      setStatus(
+        "Нет выбранных комплектов со статусом «Не начат» (закрытые периоды пропускаются)"
+      );
       return;
     }
+    if (
+      !confirm(`Запустить сбор для выбранных комплектов: ${targets.length}?`)
+    ) {
+      return;
+    }
+    setBusy(true);
+    setBpBusy(true);
+    setStatus("");
+    let started = 0;
+    const errors: string[] = [];
+    try {
+      for (const r of targets) {
+        try {
+          const process = await ensureBusinessProcess({
+            zid: r.zid,
+            eid: r.eid,
+            packageKind: r.packageKind,
+          });
+          if (process.status === "not_started") {
+            await transitionBusinessProcess(process.id, "start");
+          }
+          started += 1;
+        } catch (e) {
+          errors.push(
+            `${r.organizationName}: ${e instanceof Error ? e.message : "ошибка"}`
+          );
+        }
+      }
+      await refreshAll();
+      setStatus(
+        `Сбор запущен: ${started}/${targets.length}` +
+          (errors.length
+            ? ` · сбои: ${errors.slice(0, 2).join("; ")}${errors.length > 2 ? "…" : ""}`
+            : "")
+      );
+    } finally {
+      setBpBusy(false);
+      setBusy(false);
+    }
+  };
+
+  const handleBulkChecks = async () => {
+    if (!canBulkRunChecks || checkedRows.length === 0) return;
+    setBusy(true);
+    setPackageChecksBusy(true);
+    setStatus("");
+    let passedSum = 0;
+    let failedSum = 0;
+    let okCount = 0;
+    const errors: string[] = [];
+    try {
+      for (const r of checkedRows) {
+        try {
+          const res = await runPackageChecks({
+            zid: r.zid,
+            eid: r.eid,
+            packageKind: r.packageKind,
+          });
+          passedSum += res.passed;
+          failedSum += res.failed;
+          okCount += 1;
+        } catch (e) {
+          errors.push(
+            `${r.organizationName}: ${e instanceof Error ? e.message : "ошибка"}`
+          );
+        }
+      }
+      setStatus(
+        `Проверки: комплектов ${okCount}/${checkedRows.length}` +
+          ` · ок ${passedSum} · ошибок ${failedSum}` +
+          (errors.length
+            ? ` · сбои: ${errors.slice(0, 2).join("; ")}${errors.length > 2 ? "…" : ""}`
+            : "")
+      );
+      if (
+        typeof zid === "number" &&
+        typeof eid === "number" &&
+        checkedRows.some((r) => r.zid === zid && r.eid === eid)
+      ) {
+        await loadDetail(zid, eid, selectedRow?.packageKind);
+      }
+    } finally {
+      setPackageChecksBusy(false);
+      setBusy(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || checkedDeletableRows.length === 0) {
+      if (checkedRows.length > 0) {
+        setStatus(
+          "Нет комплектов, доступных для удаления (закрытые периоды пропускаются)"
+        );
+      }
+      return;
+    }
+    const toDelete = checkedDeletableRows;
     const filledSum = toDelete.reduce((s, r) => s + r.filled, 0);
     if (
       !confirm(
@@ -672,7 +802,16 @@ export function PackagePage() {
         eid,
         packageKind: selectedRow?.packageKind === "BALANCE" ? "BALANCE" : "OKO",
       });
-      setStatus(`Проверки: успешно ${result.passed}, с ошибками ${result.failed}`);
+      const failSamples = result.results
+        .filter((r) => !r.passed)
+        .slice(0, 3)
+        .map((r) => r.message)
+        .join("; ");
+      setStatus(
+        `Проверки: успешно ${result.passed}, с ошибками ${result.failed}` +
+          (result.failed > 0 && failSamples ? ` · ${failSamples}` : "") +
+          (result.results.length === 0 ? " · нет правил" : "")
+      );
       if (bp) {
         try {
           const blockers = await getBpApprovalBlockers(bp.id);
@@ -725,7 +864,17 @@ export function PackagePage() {
       <div className="package-workspace-layout">
         <aside className="tools-section package-workspace-list">
           <h2>Список</h2>
-          <div className="package-workspace-filters">
+          <CollapsibleFilters
+            activeCount={countActiveFilters(
+              listSearch.trim().length > 0,
+              filterBp !== "",
+              filterKind !== "",
+              filterPeriod !== "",
+              filterIncomplete,
+              filterBlockers
+            )}
+            bodyClassName="package-workspace-filters"
+          >
             <input
               type="search"
               className="search-input"
@@ -783,30 +932,82 @@ export function PackagePage() {
                 Есть блокеры
               </label>
             </div>
+          </CollapsibleFilters>
+          <div className="package-workspace-filters-meta">
             <p className="package-workspace-list-totals table-sub">
               В списке: {listTotals.packages} · заведено {listTotals.filled} · сдано{" "}
               {listTotals.submitted}
             </p>
-            {canBulkDelete && (
+            {canBulkSelect && (
               <div className="package-workspace-bulk-bar">
                 <label className="package-workspace-bulk-select-all">
                   <input
                     type="checkbox"
-                    checked={allDeletableChecked}
-                    disabled={busy || deletableFilteredRows.length === 0}
-                    onChange={toggleSelectAllDeletable}
+                    checked={allSelectableChecked}
+                    disabled={busy || selectableFilteredRows.length === 0}
+                    onChange={toggleSelectAllSelectable}
                   />{" "}
-                  Выбрать все ({deletableFilteredRows.length})
+                  Выбрать все ({selectableFilteredRows.length})
                 </label>
-                <button
-                  type="button"
-                  className="btn btn-danger-outline btn-sm"
-                  disabled={busy || checkedRows.length === 0}
-                  onClick={() => void handleBulkDelete()}
-                >
-                  Удалить выбранные
-                  {checkedRows.length > 0 ? ` (${checkedRows.length})` : ""}
-                </button>
+                {checkedRows.length > 0 ? (
+                  <div className="package-workspace-bulk-actions">
+                    {canBulkStartCollection && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={
+                          busy ||
+                          bpBusy ||
+                          !checkedRows.some(
+                            (r) =>
+                              r.periodStatus !== "closed" &&
+                              (r.bpStatus ?? "not_started") === "not_started"
+                          )
+                        }
+                        onClick={() => void handleBulkStartCollection()}
+                      >
+                        {bpBusy ? "Запуск…" : "Запустить сбор"}
+                      </button>
+                    )}
+                    {canBulkRunChecks && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={busy || packageChecksBusy}
+                        onClick={() => void handleBulkChecks()}
+                      >
+                        {packageChecksBusy
+                          ? "Проверки…"
+                          : "Запустить проверки"}
+                      </button>
+                    )}
+                    {canBulkDelete && (
+                      <button
+                        type="button"
+                        className="btn btn-danger-outline btn-sm"
+                        disabled={busy || checkedDeletableRows.length === 0}
+                        onClick={() => void handleBulkDelete()}
+                      >
+                        Удалить
+                        {checkedDeletableRows.length > 0
+                          ? ` (${checkedDeletableRows.length})`
+                          : ""}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={busy}
+                      onClick={clearSelection}
+                    >
+                      Снять выбор
+                    </button>
+                  </div>
+                ) : (
+                  <span className="table-sub package-workspace-bulk-hint">
+                    Отметьте комплекты для действий
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -816,9 +1017,7 @@ export function PackagePage() {
               const key = rowKey(r);
               const selected = selectedRow && key === rowKey(selectedRow);
               const canCheck =
-                canBulkDelete &&
-                r.periodStatus !== "closed" &&
-                (admin || (orgZid != null && r.zid === orgZid));
+                canBulkSelect && (orgZid == null || r.zid === orgZid);
               const checked = checkedKeys.has(key);
               return (
                 <div
@@ -827,13 +1026,11 @@ export function PackagePage() {
                     checked ? " is-checked" : ""
                   }`}
                 >
-                  {canBulkDelete && (
+                  {canBulkSelect && (
                     <label
                       className="package-workspace-item-check"
                       title={
-                        r.periodStatus === "closed"
-                          ? "Закрытый период: сначала переоткройте"
-                          : undefined
+                        !canCheck ? "Нет доступа к этому комплекту" : undefined
                       }
                     >
                       <input
@@ -1134,7 +1331,13 @@ export function PackagePage() {
                       {completeness ? `${completeness.filled}/${completeness.total}` : "—"}
                     </span>
                   </h2>
-                  <div className="tools-grid" style={{ marginBottom: 12 }}>
+                  <CollapsibleFilters
+                    activeCount={countActiveFilters(
+                      formSearch.trim().length > 0,
+                      formFilter !== "all"
+                    )}
+                    bodyClassName="tools-grid"
+                  >
                     <label>
                       Поиск
                       <input
@@ -1157,18 +1360,19 @@ export function PackagePage() {
                         <option value="missing">Не заведено</option>
                       </select>
                     </label>
-                    {canMutate && !periodClosed && (
+                  </CollapsibleFilters>
+                  {canMutate && !periodClosed && (
+                    <div className="toolbar-actions" style={{ marginBottom: 12 }}>
                       <button
                         type="button"
                         className="btn btn-secondary"
-                        style={{ alignSelf: "end" }}
                         disabled={busy}
                         onClick={() => void handleCreatePackage()}
                       >
                         Завести / дозавести
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div className="table-wrap">
                     <table className="data-table">
                       <thead>

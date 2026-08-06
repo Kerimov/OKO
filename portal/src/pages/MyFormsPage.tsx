@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   formsListTitle,
@@ -17,161 +17,159 @@ import {
 import { useAuth } from "../useAuth";
 import { formatPeriod, formStatusLabel } from "../utils";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
-type PackageGroup = {
+type FormsGroup = {
   key: string;
-  zid: number | null;
-  eid: number | null;
-  orgName: string;
-  periodName: string;
-  periodStart: string;
-  periodEnd: string;
+  title: string;
+  meta: string;
   items: InstanceSummary[];
+  draft: number;
+  submitted: number;
+  periodCount: number;
+  packageLink: { zid: number; eid: number } | null;
 };
 
-type OrgGroup = {
-  key: string;
-  zid: number | null;
-  orgName: string;
-  periods: PackageGroup[];
-  totalForms: number;
-};
-
-function buildOrgGroups(packageGroups: PackageGroup[]): OrgGroup[] {
-  const map = new Map<string, OrgGroup>();
-  for (const group of packageGroups) {
-    const key = String(group.zid ?? "x");
-    let org = map.get(key);
-    if (!org) {
-      org = {
-        key,
-        zid: group.zid,
-        orgName: group.orgName,
-        periods: [],
-        totalForms: 0,
-      };
-      map.set(key, org);
-    }
-    org.periods.push(group);
-    org.totalForms += group.items.length;
+function resolveOrgName(inst: InstanceSummary, orgs: Organization[]): string {
+  if (inst.zid != null) {
+    const org = orgs.find((o) => o.zid === inst.zid);
+    if (org?.name) return org.name;
   }
-  return Array.from(map.values()).sort((a, b) => (a.zid ?? 0) - (b.zid ?? 0));
+  return inst.organization || "—";
 }
 
-function buildPackageGroups(
-  items: InstanceSummary[],
-  orgs: Organization[],
-  periodsByZid: Map<number, ReportingPeriod[]>
-): PackageGroup[] {
-  const map = new Map<string, PackageGroup>();
-  for (const inst of items) {
-    const zid = inst.zid ?? null;
-    const eid = inst.eid ?? null;
-    const key = `${zid ?? "x"}:${eid ?? "x"}`;
-    let group = map.get(key);
-    if (!group) {
-      const org = zid != null ? orgs.find((o) => o.zid === zid) : undefined;
-      const periods = zid != null ? periodsByZid.get(zid) ?? [] : [];
-      const period = eid != null ? periods.find((p) => p.eid === eid) : undefined;
-      group = {
-        key,
-        zid,
-        eid,
-        orgName: org?.name ?? (inst.organization || "Без организации"),
-        periodName: period?.name ?? (formatPeriod(inst.periodStart, inst.periodEnd) || "Без периода"),
-        periodStart: period?.periodStart ?? inst.periodStart,
-        periodEnd: period?.periodEnd ?? inst.periodEnd,
-        items: [],
-      };
-      map.set(key, group);
-    }
-    group.items.push(inst);
-  }
-  return Array.from(map.values()).sort((a, b) => {
-    const az = a.zid ?? 0;
-    const bz = b.zid ?? 0;
-    if (az !== bz) return az - bz;
-    return (a.eid ?? 0) - (b.eid ?? 0);
-  });
-}
-
-function InstanceCard({
-  inst,
-  checked,
-  deleting,
-  showPackageIds,
-  hideOrgLine,
-  compact,
-  onToggle,
-  onDelete,
-}: {
-  inst: InstanceSummary;
-  checked: boolean;
-  deleting: boolean;
-  showPackageIds: boolean;
-  hideOrgLine?: boolean;
-  compact?: boolean;
-  onToggle: (id: string, checked: boolean) => void;
-  onDelete: (inst: InstanceSummary) => void;
-}) {
-  return (
-    <article
-      className={`instance-card${checked ? " instance-card-selected" : ""}`}
-    >
-      <label className="instance-card-check">
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={deleting}
-          onChange={(e) => onToggle(inst.instanceId, e.target.checked)}
-          aria-label={`Выбрать «${inst.displayName}»`}
-        />
-      </label>
-      <div className="instance-card-body">
-        <Link to={`/my/${inst.instanceId}`} className="instance-card-title">
-          {inst.displayName}
-        </Link>
-        <div className="instance-card-meta">
-          <span className="form-card-id">{inst.templateId}</span>
-          <span className={`status-badge ${inst.status ?? "draft"}`}>
-            {formStatusLabel(inst.status)}
-          </span>
-          {showPackageIds && (inst.zid != null || inst.eid != null) && (
-            <span className="package-id-badge">
-              организация {inst.zid ?? "—"}, период {inst.eid ?? "—"}
-            </span>
-          )}
-        </div>
-        <p className="instance-card-template-title">{inst.templateTitle}</p>
-        {inst.organization && !hideOrgLine && !compact && (
-          <p className="instance-org">{inst.organization}</p>
-        )}
-        {!compact && (
-          <p className="instance-period">
-            {formatPeriod(inst.periodStart, inst.periodEnd)}
-          </p>
-        )}
-        <p className="instance-dates">
-          Создано: {new Date(inst.createdAt).toLocaleString("ru-RU")}
-          {" · "}
-          Изменено: {new Date(inst.updatedAt).toLocaleString("ru-RU")}
-        </p>
-      </div>
-      <div className="instance-card-actions">
-        <Link to={`/my/${inst.instanceId}`} className="btn btn-primary btn-sm">
-          Открыть
-        </Link>
-        <button
-          type="button"
-          className="btn btn-danger-outline btn-sm"
-          disabled={deleting}
-          onClick={() => onDelete(inst)}
-        >
-          Удалить
-        </button>
-      </div>
-    </article>
+function resolvePeriodName(
+  inst: InstanceSummary,
+  periods: ReportingPeriod[]
+): { name: string; range: string } {
+  const period =
+    inst.eid != null ? periods.find((p) => p.eid === inst.eid && p.zid === inst.zid) : undefined;
+  const range = formatPeriod(
+    period?.periodStart ?? inst.periodStart,
+    period?.periodEnd ?? inst.periodEnd
   );
+  return {
+    name: period?.name || range || "—",
+    range: range && period?.name && period.name !== range ? range : "",
+  };
+}
+
+function formatDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ru-RU");
+  } catch {
+    return iso;
+  }
+}
+
+function countStatuses(items: InstanceSummary[]): { draft: number; submitted: number } {
+  let draft = 0;
+  let submitted = 0;
+  for (const i of items) {
+    if ((i.status ?? "draft") === "submitted") submitted += 1;
+    else draft += 1;
+  }
+  return { draft, submitted };
+}
+
+function buildOrgGroups(
+  items: InstanceSummary[],
+  orgs: Organization[]
+): FormsGroup[] {
+  const map = new Map<string, InstanceSummary[]>();
+  for (const inst of items) {
+    const key = String(inst.zid ?? "x");
+    const list = map.get(key) ?? [];
+    list.push(inst);
+    map.set(key, list);
+  }
+  return [...map.entries()]
+    .map(([key, groupItems]) => {
+      const sample = groupItems[0]!;
+      const zid = sample.zid ?? null;
+      const orgName = resolveOrgName(sample, orgs);
+      const eids = new Set(groupItems.map((i) => i.eid).filter((e): e is number => e != null));
+      const { draft, submitted } = countStatuses(groupItems);
+      const soleEid = eids.size === 1 ? [...eids][0]! : null;
+      return {
+        key: `org:${key}`,
+        title: orgName,
+        meta:
+          [
+            zid != null ? `ZID ${zid}` : null,
+            `${eids.size || 1} ${eids.size === 1 ? "период" : eids.size > 1 && eids.size < 5 ? "периода" : "периодов"}`,
+            `${groupItems.length} форм`,
+            `черновик ${draft}`,
+            `сдано ${submitted}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        items: groupItems,
+        draft,
+        submitted,
+        periodCount: eids.size || 1,
+        packageLink:
+          zid != null && soleEid != null
+            ? { zid, eid: soleEid }
+            : zid != null && eids.size > 0
+              ? { zid, eid: [...eids][0]! }
+              : null,
+      };
+    })
+    .sort((a, b) => {
+      const az = a.items[0]?.zid ?? 0;
+      const bz = b.items[0]?.zid ?? 0;
+      return az - bz;
+    });
+}
+
+function buildPeriodGroups(
+  items: InstanceSummary[],
+  periods: ReportingPeriod[]
+): FormsGroup[] {
+  const map = new Map<string, InstanceSummary[]>();
+  for (const inst of items) {
+    const key = `${inst.zid ?? "x"}:${inst.eid ?? "x"}`;
+    const list = map.get(key) ?? [];
+    list.push(inst);
+    map.set(key, list);
+  }
+  return [...map.entries()]
+    .map(([key, groupItems]) => {
+      const sample = groupItems[0]!;
+      const period = resolvePeriodName(sample, periods);
+      const { draft, submitted } = countStatuses(groupItems);
+      const title =
+        period.range && period.name !== period.range
+          ? `${period.name} (${period.range})`
+          : period.name;
+      return {
+        key: `period:${key}`,
+        title,
+        meta: [
+          sample.eid != null ? `EID ${sample.eid}` : null,
+          `${groupItems.length} форм`,
+          `черновик ${draft}`,
+          `сдано ${submitted}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        items: groupItems,
+        draft,
+        submitted,
+        periodCount: 1,
+        packageLink:
+          sample.zid != null && sample.eid != null
+            ? { zid: sample.zid, eid: sample.eid }
+            : null,
+      };
+    })
+    .sort((a, b) => {
+      const az = a.items[0]?.zid ?? 0;
+      const bz = b.items[0]?.zid ?? 0;
+      if (az !== bz) return az - bz;
+      return (a.items[0]?.eid ?? 0) - (b.items[0]?.eid ?? 0);
+    });
 }
 
 export function MyFormsPage() {
@@ -181,7 +179,6 @@ export function MyFormsPage() {
   const orgUser = isOrgFormsUser(auth);
   const orgZid = orgUser ? auth.user?.zid ?? null : null;
   const pageTitle = formsListTitle(auth);
-  const hideOrgOnCards = orgUser;
 
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -191,9 +188,8 @@ export function MyFormsPage() {
   const [search, setSearch] = useState("");
   const [filterTemplate, setFilterTemplate] = useState("all");
   const [filterStatus, setFilterStatus] = useState<"all" | FormInstanceStatus>("all");
-  const [groupByPackage, setGroupByPackage] = useState(true);
-  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(() => new Set());
-  const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(() => new Set());
+  const [groupRows, setGroupRows] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -264,11 +260,12 @@ export function MyFormsPage() {
 
   useEffect(() => {
     void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterZid, filterEid, adminView, orgZid]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return instances.filter((inst) => {
+    const list = instances.filter((inst) => {
       if (!instanceMatchesPackage(inst, filterZid, filterEid)) return false;
       if (filterTemplate !== "all" && inst.templateId !== filterTemplate) return false;
       if (filterStatus !== "all" && (inst.status ?? "draft") !== filterStatus) return false;
@@ -280,29 +277,48 @@ export function MyFormsPage() {
         inst.organization.toLowerCase().includes(q)
       );
     });
+    return [...list].sort((a, b) => {
+      const az = a.zid ?? 0;
+      const bz = b.zid ?? 0;
+      if (az !== bz) return az - bz;
+      const ae = a.eid ?? 0;
+      const be = b.eid ?? 0;
+      if (ae !== be) return ae - be;
+      return (a.templateId || "").localeCompare(b.templateId || "", "ru");
+    });
   }, [instances, search, filterTemplate, filterStatus, filterZid, filterEid]);
 
-  const periodsByZid = useMemo(() => {
-    const map = new Map<number, ReportingPeriod[]>();
-    if (filterZid !== "") {
-      map.set(filterZid, periods);
-    }
-    const zids = new Set(filtered.map((i) => i.zid).filter((z): z is number => z != null));
-    for (const zid of zids) {
-      if (!map.has(zid)) map.set(zid, periods.filter((p) => p.zid === zid));
-    }
-    return map;
-  }, [filtered, filterZid, periods]);
+  // Load periods for all orgs present in the list (admin all-orgs view)
+  useEffect(() => {
+    if (!adminView || filterZid !== "") return;
+    const zids = [...new Set(instances.map((i) => i.zid).filter((z): z is number => z != null))];
+    if (!zids.length) return;
+    let cancelled = false;
+    void (async () => {
+      const all: ReportingPeriod[] = [];
+      for (const zid of zids) {
+        try {
+          all.push(...(await listPeriods(zid)));
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!cancelled) setPeriods(all);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [adminView, filterZid, instances]);
 
-  const packageGroups = useMemo(() => {
-    if (!groupByPackage) return null;
-    return buildPackageGroups(filtered, orgs, periodsByZid);
-  }, [groupByPackage, filtered, orgs, periodsByZid]);
+  const groups = useMemo(() => {
+    if (!groupRows) return null;
+    // Admin (and multi-org) → by organization; single-org user → by period
+    if (adminView) return buildOrgGroups(filtered, orgs);
+    return buildPeriodGroups(filtered, periods);
+  }, [groupRows, adminView, filtered, orgs, periods]);
 
-  const orgGroups = useMemo(() => {
-    if (!packageGroups) return null;
-    return adminView ? buildOrgGroups(packageGroups) : null;
-  }, [packageGroups, adminView]);
+  const showOrgColumn = !orgUser && !groupRows;
+  const colCount = (showOrgColumn ? 1 : 0) + 7;
 
   const filteredIds = useMemo(
     () => filtered.map((inst) => inst.instanceId),
@@ -317,28 +333,21 @@ export function MyFormsPage() {
 
   const templateOptions = useMemo(() => {
     const ids = new Set(instances.map((i) => i.templateId));
-    return Array.from(ids).sort();
+    return [...ids].sort((a, b) => a.localeCompare(b, "ru"));
   }, [instances]);
 
-  const selectedOrg = useMemo(() => {
-    if (orgUser && auth.user?.organizationName) {
-      return orgs.find((o) => o.zid === orgZid) ?? {
-        zid: orgZid ?? 0,
-        name: auth.user.organizationName,
-        code: null,
-        parentZid: null,
-      };
-    }
-    return filterZid !== "" ? orgs.find((o) => o.zid === filterZid) : null;
-  }, [orgUser, orgZid, orgs, filterZid, auth.user?.organizationName]);
+  const selectedOrg =
+    filterZid !== "" ? orgs.find((o) => o.zid === filterZid) : undefined;
+  const selectedPeriod =
+    filterEid !== "" ? periods.find((p) => p.eid === filterEid) : undefined;
 
-  const selectedPeriod = filterEid !== "" ? periods.find((p) => p.eid === filterEid) : null;
+  const clearSelection = () => setSelectedIds(new Set());
 
-  const toggleOne = (instanceId: string, checked: boolean) => {
+  const toggleOne = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(instanceId);
-      else next.delete(instanceId);
+      if (checked) next.add(id);
+      else next.delete(id);
       return next;
     });
   };
@@ -354,52 +363,67 @@ export function MyFormsPage() {
     });
   };
 
-  const clearSelection = () => setSelectedIds(new Set());
+  const toggleGroupSelection = (items: InstanceSummary[], checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const i of items) {
+        if (checked) next.add(i.instanceId);
+        else next.delete(i.instanceId);
+      }
+      return next;
+    });
+  };
 
-  const deleteInstances = async (ids: string[], label: string) => {
-    if (ids.length === 0) return;
-    if (
-      !confirm(
-        ids.length === 1
-          ? `Удалить форму «${label}»?\nДанные будут удалены безвозвратно.`
-          : `Удалить ${ids.length} форм?\nДанные будут удалены безвозвратно.`
-      )
-    ) {
-      return;
-    }
+  const toggleGroupExpanded = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleDelete = async (inst: InstanceSummary) => {
+    if (!confirm(`Удалить форму «${inst.displayName}»?`)) return;
     setDeleting(true);
     try {
-      await Promise.all(ids.map((id) => deleteInstance(id)));
+      await deleteInstance(inst.instanceId);
       await refresh();
-    } catch {
-      alert("Не удалось удалить одну или несколько форм");
-      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось удалить");
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleDelete = (inst: InstanceSummary) => {
-    deleteInstances([inst.instanceId], inst.displayName);
-  };
-
-  const handleDeleteSelected = () => {
-    deleteInstances(Array.from(selectedIds), "");
+  const handleDeleteSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!confirm(`Удалить выбранные формы (${ids.length})?`)) return;
+    setDeleting(true);
+    try {
+      for (const id of ids) await deleteInstance(id);
+      clearSelection();
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось удалить");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleSubmitSelected = async () => {
-    const drafts = instances.filter(
-      (i) =>
-        selectedIds.has(i.instanceId) && (i.status ?? "draft") !== "submitted"
+    const drafts = filtered.filter(
+      (i) => selectedIds.has(i.instanceId) && (i.status ?? "draft") === "draft"
     );
-    if (drafts.length === 0) {
-      alert("Среди выбранных нет черновиков для сдачи.");
+    if (!drafts.length) {
+      alert("Среди выбранных нет черновиков для сдачи");
       return;
     }
     if (
       !confirm(
         drafts.length === 1
-          ? `Сдать форму «${drafts[0].displayName}»?\nПосле сдачи редактирование будет недоступно.`
+          ? `Сдать форму «${drafts[0]!.displayName}»?\nПосле сдачи редактирование будет недоступно.`
           : `Сдать ${drafts.length} форм?\nПосле сдачи редактирование будет недоступно.`
       )
     ) {
@@ -460,150 +484,142 @@ export function MyFormsPage() {
     setFilterEid("");
   };
 
-  const toggleOrg = (key: string) => {
-    setExpandedOrgs((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const togglePeriod = (key: string) => {
-    setExpandedPeriods((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const renderPeriodGroup = (group: PackageGroup, nested = false) => {
-    const expanded = expandedPeriods.has(group.key);
-    const periodLabel = formatPeriod(group.periodStart, group.periodEnd);
-    const periodTitle =
-      !periodLabel || group.periodName === periodLabel || group.periodName === "Без периода"
-        ? group.periodName || periodLabel
-        : `${group.periodName} (${periodLabel})`;
-
+  const renderFormRow = (inst: InstanceSummary): ReactNode => {
+    const orgName = resolveOrgName(inst, orgs);
+    const period = resolvePeriodName(inst, periods);
+    const status = inst.status ?? "draft";
     return (
-      <section
-        key={group.key}
-        className={`forms-package-group${nested ? " forms-package-group-nested" : ""}`}
+      <tr
+        key={inst.instanceId}
+        className={selectedIds.has(inst.instanceId) ? "my-forms-row-selected" : undefined}
       >
-        <header className="forms-package-group-header forms-tree-header">
-          <button
-            type="button"
-            className="forms-tree-toggle"
-            onClick={() => togglePeriod(group.key)}
-            aria-expanded={expanded}
-          >
-            <span className="forms-tree-chevron" aria-hidden>
-              {expanded ? "▾" : "▸"}
-            </span>
-            <span className="forms-package-group-title">{periodTitle}</span>
-            <span className="forms-package-group-meta">
-              {nested && group.eid != null ? (
-                <>период {group.eid} · </>
-              ) : (
-                group.zid != null && (
-                  <>
-                    организация {group.zid}
-                    {group.eid != null ? `, период ${group.eid}` : ""}
-                    {" · "}
-                  </>
-                )
-              )}
-              {group.items.length} форм
-            </span>
-          </button>
-          {group.zid != null && group.eid != null && (
-            <Link
-              to={`/package?zid=${group.zid}&eid=${group.eid}`}
-              className="forms-package-group-link"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Открыть комплект
-            </Link>
-          )}
-        </header>
-        {expanded && (
-          <div className="instance-list">
-            {group.items.map((inst) => (
-              <InstanceCard
-                key={inst.instanceId}
-                inst={inst}
-                checked={selectedIds.has(inst.instanceId)}
-                deleting={selectionBusy}
-                showPackageIds={adminView}
-                hideOrgLine={hideOrgOnCards}
-                compact={nested || groupByPackage}
-                onToggle={toggleOne}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    );
-  };
-
-  const renderList = () => {
-    if (orgGroups && orgGroups.length > 0) {
-      return orgGroups.map((org) => {
-        const orgExpanded = expandedOrgs.has(org.key);
-        return (
-          <section key={org.key} className="forms-org-group">
-            <header className="forms-org-group-header forms-tree-header">
-              <button
-                type="button"
-                className="forms-tree-toggle"
-                onClick={() => toggleOrg(org.key)}
-                aria-expanded={orgExpanded}
-              >
-                <span className="forms-tree-chevron" aria-hidden>
-                  {orgExpanded ? "▾" : "▸"}
-                </span>
-                <span className="forms-org-group-title">{org.orgName}</span>
-                <span className="forms-org-group-meta">
-                  {org.zid != null && <>организация {org.zid} · </>}
-                  {org.periods.length}{" "}
-                  {org.periods.length === 1 ? "период" : org.periods.length < 5 ? "периода" : "периодов"}
-                  {" · "}
-                  {org.totalForms} форм
-                </span>
-              </button>
-            </header>
-            {orgExpanded && (
-              <div className="forms-org-periods">
-                {org.periods.map((group) => renderPeriodGroup(group, true))}
+        <td>
+          <input
+            type="checkbox"
+            checked={selectedIds.has(inst.instanceId)}
+            disabled={selectionBusy}
+            onChange={(e) => toggleOne(inst.instanceId, e.target.checked)}
+            aria-label={`Выбрать «${inst.displayName}»`}
+          />
+        </td>
+        <td>
+          <Link to={`/my/${inst.instanceId}`} className="my-forms-name-link">
+            {inst.displayName}
+          </Link>
+          {inst.templateTitle &&
+            inst.templateTitle !== inst.displayName &&
+            inst.templateTitle !== inst.templateId && (
+              <div className="table-sub">{inst.templateTitle}</div>
+            )}
+        </td>
+        <td>
+          <code className="form-card-id">{inst.templateId}</code>
+        </td>
+        {showOrgColumn && (
+          <td>
+            <div>{orgName}</div>
+            {adminView && (inst.zid != null || inst.eid != null) && (
+              <div className="table-sub">
+                ZID {inst.zid ?? "—"}
+                {inst.eid != null ? ` · EID ${inst.eid}` : ""}
               </div>
             )}
-          </section>
-        );
-      });
-    }
-
-    if (packageGroups && packageGroups.length > 0) {
-      return packageGroups.map((group) => renderPeriodGroup(group));
-    }
-
-    return (
-      <div className="instance-list">
-        {filtered.map((inst) => (
-          <InstanceCard
-            key={inst.instanceId}
-            inst={inst}
-            checked={selectedIds.has(inst.instanceId)}
-            deleting={selectionBusy}
-            showPackageIds={adminView}
-            hideOrgLine={hideOrgOnCards}
-            onToggle={toggleOne}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
+          </td>
+        )}
+        <td>
+          <div>{period.name}</div>
+          {period.range ? <div className="table-sub">{period.range}</div> : null}
+        </td>
+        <td>
+          <span className={`status-badge ${status}`}>{formStatusLabel(status)}</span>
+        </td>
+        <td>
+          <div>{formatDateTime(inst.updatedAt)}</div>
+          <div className="table-sub">создано {formatDateTime(inst.createdAt)}</div>
+        </td>
+        <td>
+          <div className="my-forms-row-actions">
+            <Link to={`/my/${inst.instanceId}`} className="btn btn-primary btn-sm">
+              Открыть
+            </Link>
+            <button
+              type="button"
+              className="btn btn-danger-outline btn-sm"
+              disabled={selectionBusy}
+              onClick={() => void handleDelete(inst)}
+            >
+              Удалить
+            </button>
+          </div>
+        </td>
+      </tr>
     );
+  };
+
+  const renderGroupedBody = (): ReactNode => {
+    if (!groups?.length) return null;
+    const rows: ReactNode[] = [];
+    for (const group of groups) {
+      const expanded = expandedGroups.has(group.key);
+      const ids = group.items.map((i) => i.instanceId);
+      const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+      const someSelected = ids.some((id) => selectedIds.has(id)) && !allSelected;
+      const zid = group.items[0]?.zid;
+      rows.push(
+        <tr key={group.key} className="my-forms-group-row">
+          <td colSpan={colCount}>
+            <div className="my-forms-group-inner">
+              <label className="my-forms-group-check">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  disabled={selectionBusy || !group.items.length}
+                  onChange={(e) => toggleGroupSelection(group.items, e.target.checked)}
+                  aria-label={`Выбрать группу «${group.title}»`}
+                />
+              </label>
+              <button
+                type="button"
+                className="my-forms-group-toggle"
+                onClick={() => toggleGroupExpanded(group.key)}
+                aria-expanded={expanded}
+              >
+                <span className="my-forms-group-chevron" aria-hidden>
+                  {expanded ? "▾" : "▸"}
+                </span>
+                <span className="my-forms-group-title">
+                  {group.title}
+                  {zid != null ? <span className="my-forms-group-zid">ZID {zid}</span> : null}
+                </span>
+                <span className="my-forms-group-stats">
+                  <span>{group.periodCount} {group.periodCount === 1 ? "период" : "периодов"}</span>
+                  <span>{group.items.length} форм</span>
+                  <span>{group.draft} черновик</span>
+                  <span>{group.submitted} сдано</span>
+                </span>
+              </button>
+              {group.packageLink && (
+                <Link
+                  to={`/package?zid=${group.packageLink.zid}&eid=${group.packageLink.eid}`}
+                  className="my-forms-group-link"
+                >
+                  Комплект
+                </Link>
+              )}
+            </div>
+          </td>
+        </tr>
+      );
+      if (expanded) {
+        for (const inst of group.items) {
+          rows.push(renderFormRow(inst));
+        }
+      }
+    }
+    return rows;
   };
 
   return (
@@ -615,7 +631,7 @@ export function MyFormsPage() {
             <p>
               Все экземпляры по организациям и периодам. Контекст — в{" "}
               <Link to="/package">Комплект</Link>, проверки — в{" "}
-              <Link to="/tools">Сводка и импорт</Link>.
+              <Link to="/tools">Обмен и операции</Link>.
             </p>
           ) : orgUser ? (
             <p>
@@ -650,126 +666,138 @@ export function MyFormsPage() {
         </div>
       </section>
 
-      <div className="filters my-forms-filters">
-        {adminView && (
-          <select
-            value={filterZid === "" ? "" : String(filterZid)}
-            onChange={(e) => handleZidChange(e.target.value)}
-            className="category-select"
-            aria-label="Организация"
-          >
-            <option value="">Все организации</option>
-            {orgs.map((o) => (
-              <option key={o.zid} value={o.zid}>
-                {o.name}
-                {o.code ? ` (${o.code})` : ""}
-              </option>
-            ))}
-          </select>
-        )}
-        {periods.length > 0 && (
-          <select
-            value={filterEid === "" ? "" : String(filterEid)}
-            onChange={(e) =>
-              setFilterEid(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            className="category-select"
-            aria-label="Отчётный период"
-          >
-            <option value="">Все периоды</option>
-            {periods.map((p) => (
-              <option key={p.eid} value={p.eid}>
-                {p.name}
-                {p.periodStart || p.periodEnd
-                  ? ` (${formatPeriod(p.periodStart ?? "", p.periodEnd ?? "")})`
-                  : ""}
-              </option>
-            ))}
-          </select>
-        )}
-        <label className="checkbox-inline my-forms-group-toggle">
+      <div className="my-forms-toolbar">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(
+            adminView && filterZid !== "",
+            filterEid !== "",
+            search.trim().length > 0,
+            filterTemplate !== "all",
+            filterStatus !== "all",
+            !groupRows
+          )}
+          bodyClassName="filters my-forms-filters"
+        >
+          {adminView && (
+            <select
+              value={filterZid === "" ? "" : String(filterZid)}
+              onChange={(e) => handleZidChange(e.target.value)}
+              className="category-select"
+              aria-label="Организация"
+            >
+              <option value="">Все организации</option>
+              {orgs.map((o) => (
+                <option key={o.zid} value={o.zid}>
+                  {o.name}
+                  {o.code ? ` (${o.code})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+          {periods.length > 0 && (
+            <select
+              value={filterEid === "" ? "" : String(filterEid)}
+              onChange={(e) =>
+                setFilterEid(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              className="category-select"
+              aria-label="Отчётный период"
+            >
+              <option value="">Все периоды</option>
+              {periods.map((p) => (
+                <option key={`${p.zid}-${p.eid}`} value={p.eid}>
+                  {p.name}
+                  {p.periodStart || p.periodEnd
+                    ? ` (${formatPeriod(p.periodStart ?? "", p.periodEnd ?? "")})`
+                    : ""}
+                </option>
+              ))}
+            </select>
+          )}
           <input
-            type="checkbox"
-            checked={groupByPackage}
-            onChange={(e) => setGroupByPackage(e.target.checked)}
+            type="search"
+            placeholder="Поиск по названию, коду, организации…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="search-input"
           />
-          {adminView ? "Группировать по организации" : "Группировать по периоду"}
-        </label>
-        <input
-          type="search"
-          placeholder="Поиск по названию, коду, организации…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="search-input"
-        />
-        <select
-          value={filterTemplate}
-          onChange={(e) => setFilterTemplate(e.target.value)}
-          className="category-select"
-        >
-          <option value="all">Все типы форм</option>
-          {templateOptions.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as "all" | FormInstanceStatus)}
-          className="category-select"
-        >
-          <option value="all">Все статусы</option>
-          <option value="draft">Черновики</option>
-          <option value="submitted">Сдано</option>
-        </select>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => {
-            const input = document.getElementById("import-instance") as HTMLInputElement;
-            input?.click();
-          }}
-        >
-          Импорт комплекта
-        </button>
-        <input
-          id="import-instance"
-          type="file"
-          accept=".json"
-          hidden
-          onChange={handleImport}
-        />
-        {selectedCount > 0 && (
-          <>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={selectionBusy}
-              onClick={handleSubmitSelected}
-            >
-              {submitting
-                ? "Сдача…"
-                : `Сдать выбранные (${selectedCount})`}
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger-outline"
-              disabled={selectionBusy}
-              onClick={handleDeleteSelected}
-            >
-              {deleting ? "Удаление…" : `Удалить выбранные (${selectedCount})`}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={selectionBusy}
-              onClick={clearSelection}
-            >
-              Снять выбор
-            </button>
-          </>
-        )}
+          <select
+            value={filterTemplate}
+            onChange={(e) => setFilterTemplate(e.target.value)}
+            className="category-select"
+          >
+            <option value="all">Все типы форм</option>
+            {templateOptions.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as "all" | FormInstanceStatus)}
+            className="category-select"
+          >
+            <option value="all">Все статусы</option>
+            <option value="draft">Черновики</option>
+            <option value="submitted">Сдано</option>
+          </select>
+          <label className="checkbox-inline my-forms-group-toggle">
+            <input
+              type="checkbox"
+              checked={groupRows}
+              onChange={(e) => setGroupRows(e.target.checked)}
+            />
+            {adminView ? "Группировать по организации" : "Группировать по периоду"}
+          </label>
+        </CollapsibleFilters>
+        <div className="checks-filters-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              const input = document.getElementById("import-instance") as HTMLInputElement;
+              input?.click();
+            }}
+          >
+            Импорт комплекта
+          </button>
+          <input
+            id="import-instance"
+            type="file"
+            accept=".json"
+            hidden
+            onChange={handleImport}
+          />
+          {selectedCount > 0 && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={selectionBusy}
+                onClick={handleSubmitSelected}
+              >
+                {submitting ? "Сдача…" : `Сдать выбранные (${selectedCount})`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger-outline"
+                disabled={selectionBusy}
+                onClick={handleDeleteSelected}
+              >
+                {deleting ? "Удаление…" : `Удалить выбранные (${selectedCount})`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={selectionBusy}
+                onClick={clearSelection}
+              >
+                Снять выбор
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -783,10 +811,7 @@ export function MyFormsPage() {
                   ? "В системе пока нет сохранённых форм."
                   : "У вас пока нет сохранённых форм."}
               </p>
-              <Link
-                to={adminView || orgUser ? "/package" : "/package"}
-                className="btn btn-primary"
-              >
+              <Link to="/package" className="btn btn-primary">
                 Завести комплект
               </Link>
             </>
@@ -814,12 +839,52 @@ export function MyFormsPage() {
               </span>
             </label>
             {selectedCount > 0 && (
+              <span className="instance-selection-count">Выбрано: {selectedCount}</span>
+            )}
+            {groupRows && groups && (
               <span className="instance-selection-count">
-                Выбрано: {selectedCount}
+                Групп: {groups.length}
               </span>
             )}
+            {groupRows && groups && groups.length > 0 && (
+              <div className="my-forms-expand-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setExpandedGroups(new Set(groups.map((g) => g.key)))}
+                >
+                  Развернуть все
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setExpandedGroups(new Set())}
+                >
+                  Свернуть все
+                </button>
+              </div>
+            )}
           </div>
-          {renderList()}
+
+          <div className="table-wrap my-forms-table-wrap">
+            <table className="form-table my-forms-table" style={{ minWidth: "56rem" }}>
+              <thead>
+                <tr>
+                  <th style={{ width: "2.5rem" }} />
+                  <th>Форма</th>
+                  <th>Шаблон</th>
+                  {showOrgColumn && <th>Организация</th>}
+                  <th>Период</th>
+                  <th>Статус</th>
+                  <th>Изменено</th>
+                  <th style={{ width: "11rem" }} />
+                </tr>
+              </thead>
+              <tbody>
+                {groupRows ? renderGroupedBody() : filtered.map((inst) => renderFormRow(inst))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

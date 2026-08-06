@@ -10,16 +10,18 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { getDb } from "../../../server/src/db.js";
 import {
   createReportPackage,
   constructPackages,
   deleteReportPackage,
   deleteReportPackagesBulk,
+  exportReportPackagesBulk,
   getPackageCompleteness,
   getPackagesDashboard,
   getPackageWorkspace,
@@ -35,6 +37,7 @@ import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
   PackageBulkDeleteDto,
+  PackageBulkExportDto,
   PackageConstructDto,
   PackageImportDto,
   PackageZidEidDto,
@@ -214,6 +217,36 @@ export class PackagesController {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "bulk delete failed");
+    }
+  }
+
+  @Post("export/bulk")
+  @ApiOperation({ summary: "Массовая выгрузка комплектов одним ZIP (manifest.json + JSON по org)" })
+  async exportBulk(
+    @Req() req: Request,
+    @Body() body: PackageBulkExportDto,
+    @Res() res: Response
+  ) {
+    const items = body.items ?? [];
+    if (!items.length) {
+      throw new BadRequestException({ error: "items required" });
+    }
+    try {
+      for (const item of items) {
+        assertOrgZidParam(req, Number(item.zid));
+      }
+      const result = await exportReportPackagesBulk(await getDb(), items);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${result.filename}"`
+      );
+      res.setHeader("X-Packages-Exported", String(result.exported));
+      res.setHeader("X-Packages-Failed", String(result.failed));
+      res.send(Buffer.from(result.zip));
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "bulk export failed");
     }
   }
 

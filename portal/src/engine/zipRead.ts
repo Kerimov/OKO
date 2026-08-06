@@ -21,8 +21,9 @@ async function inflate(raw: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(buf);
 }
 
-/** Extract text of the first .json entry in a ZIP (store or deflate). */
-export async function unzipFirstJson(buf: ArrayBuffer): Promise<string> {
+async function* iterateZipJsonEntries(
+  buf: ArrayBuffer
+): AsyncGenerator<{ name: string; text: string }> {
   const bytes = new Uint8Array(buf);
   const view = new DataView(buf);
   let offset = 0;
@@ -44,7 +45,33 @@ export async function unzipFirstJson(buf: ArrayBuffer): Promise<string> {
     else if (method !== 0) {
       throw new Error(`Неподдерживаемый метод сжатия ZIP: ${method}`);
     }
-    return new TextDecoder().decode(payload);
+    yield { name, text: new TextDecoder().decode(payload) };
   }
+}
+
+/** Extract text of the first package .json entry in a ZIP (skip manifest). */
+export async function unzipFirstJson(buf: ArrayBuffer): Promise<string> {
+  let firstAny: string | null = null;
+  for await (const entry of iterateZipJsonEntries(buf)) {
+    const base = entry.name.split("/").pop()?.toLowerCase() ?? entry.name.toLowerCase();
+    if (!firstAny) firstAny = entry.text;
+    if (base === "manifest.json") continue;
+    return entry.text;
+  }
+  if (firstAny) return firstAny;
   throw new Error("В ZIP нет JSON-комплекта");
+}
+
+/** All .json entries except manifest.json (bulk package archive). */
+export async function unzipAllPackageJson(
+  buf: ArrayBuffer
+): Promise<Array<{ name: string; text: string }>> {
+  const out: Array<{ name: string; text: string }> = [];
+  for await (const entry of iterateZipJsonEntries(buf)) {
+    const base = entry.name.split("/").pop()?.toLowerCase() ?? entry.name.toLowerCase();
+    if (base === "manifest.json") continue;
+    out.push(entry);
+  }
+  if (!out.length) throw new Error("В ZIP нет JSON-комплектов");
+  return out;
 }

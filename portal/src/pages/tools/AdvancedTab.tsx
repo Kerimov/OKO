@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
-import type { ToolsTabId } from "./tabs";
+import type { ExchangeMode, ToolsTabId } from "./tabs";
 
 export interface AdvancedTabProps {
-  onNavigateTab: (tab: ToolsTabId) => void;
+  onNavigateTab: (tab: ToolsTabId, opts?: { exchangeMode?: ExchangeMode }) => void;
 }
 
 /**
@@ -13,7 +13,7 @@ export interface AdvancedTabProps {
 export function AdvancedTab({ onNavigateTab }: AdvancedTabProps) {
   return (
     <section className="tools-section">
-      <h2>Расширенные операции</h2>
+      <h2>Служебные заметки</h2>
       <p className="tools-hint">
         Ручное сложение нескольких экземпляров одной формы в одном комплекте
         отключено: в БД действует уникальность{" "}
@@ -23,8 +23,8 @@ export function AdvancedTab({ onNavigateTab }: AdvancedTabProps) {
       <p className="tools-hint">
         Для промышленного свода используйте вкладку «Свод» (участники из{" "}
         <Link to="/admin/aggregation">конфигурации агрегации</Link>
-        ). Чтобы собрать данные нескольких заполнителей одной организации —
-        принимайте частичные комплекты на вкладке «Обмен».
+        ). Выгрузка и приём комплектов — вкладка «Обмен» (внутри: Выгрузить /
+        Загрузить).
       </p>
       <div className="toolbar-actions" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
         <button
@@ -32,14 +32,21 @@ export function AdvancedTab({ onNavigateTab }: AdvancedTabProps) {
           className="btn btn-primary"
           onClick={() => onNavigateTab("aggregation")}
         >
-          К своду комплекта
+          К своду
         </button>
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => onNavigateTab("exchange")}
+          onClick={() => onNavigateTab("exchange", { exchangeMode: "export" })}
         >
-          К обмену
+          К выгрузке
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => onNavigateTab("exchange", { exchangeMode: "upload" })}
+        >
+          К загрузке
         </button>
       </div>
     </section>

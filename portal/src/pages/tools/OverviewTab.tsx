@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CompletenessItem } from "../../engine/completeness";
-import type { ToolsTabId } from "./tabs";
+import type { ExchangeMode, ToolsTabId } from "./tabs";
 
 export interface OverviewTabProps {
   work: {
@@ -14,8 +14,54 @@ export interface OverviewTabProps {
     items: CompletenessItem[];
   } | null;
   missingForms: CompletenessItem[];
-  onNavigateTab: (tab: ToolsTabId) => void;
+  onNavigateTab: (tab: ToolsTabId, opts?: { exchangeMode?: ExchangeMode }) => void;
 }
+
+const SCENARIOS: Array<{
+  title: string;
+  description: string;
+  tab: ToolsTabId;
+  exchangeMode?: ExchangeMode;
+  action: string;
+}> = [
+  {
+    title: "Отправить дочкам",
+    description:
+      "Отметьте комплекты в списке и скачайте ZIP — один файл или архив с несколькими пакетами.",
+    tab: "exchange",
+    exchangeMode: "export",
+    action: "К выгрузке",
+  },
+  {
+    title: "Принять от дочек",
+    description:
+      "В «Обмен → Загрузить» перетащите JSON/ZIP — система разберёт файлы и примет комплекты по zid/eid.",
+    tab: "exchange",
+    exchangeMode: "upload",
+    action: "К загрузке",
+  },
+  {
+    title: "Проверить комплект",
+    description:
+      "Пересчёт формул и увязки по формам текущего комплекта (организация и период сверху).",
+    tab: "quality",
+    action: "К контролю",
+  },
+  {
+    title: "Собрать свод",
+    description:
+      "Суммировать формы участников в сводную организацию за период (нужна конфигурация агрегации).",
+    tab: "aggregation",
+    action: "К своду",
+  },
+  {
+    title: "Сальдо",
+    description:
+      "Перенести остатки между формами одного шаблона (прошлый период → текущий).",
+    tab: "saldo",
+    action: "К сальдо",
+  },
+];
 
 export function OverviewTab({
   work,
@@ -26,64 +72,60 @@ export function OverviewTab({
   return (
     <>
       <section className="tools-section">
-        <h2>Рабочий комплект</h2>
+        <h2>Что делать в этом разделе</h2>
         <p>
-          Все операции обмена, контроля и сальдо используют формы организации и периода
-          из раздела <Link to="/package">Комплект</Link>. Если форм нет — сначала
-          заведите пустой комплект.
+          Здесь операции над комплектами: обмен файлами с дочками, контроль, сальдо и
+          свод. Создание и настройка комплектов — в{" "}
+          <Link to="/package">Комплектах</Link>.
         </p>
         {work.zid == null || work.eid == null ? (
           <p className="warn-bar">
-            Организация или период не заданы. Выберите их в{" "}
-            <Link to="/package">Комплекте</Link>.
+            Для контроля и сальдо выберите организацию и период в{" "}
+            <Link to="/package">Комплектах</Link>. Обмен файлами — вкладка «Обмен», без
+            привязки к рабочему контексту.
           </p>
         ) : work.formCount === 0 ? (
           <p className="warn-bar">
-            Формы для организации {work.zid}, периода {work.eid} не найдены. Заведите
-            пустые формы в <Link to="/package">Комплекте</Link>.
+            В рабочем комплекте (орг. {work.zid}, период {work.eid}) нет форм. Заведите
+            их в <Link to="/package">Комплектах</Link> или примите файл в «Обмен →
+            Загрузить».
           </p>
         ) : (
           <p className="hint-text">
-            Готово к работе: {work.formCount} форм. Дальше — вкладка «Обмен»
-            (принять/выгрузить) или «Контроль» (пересчёт и увязки).
+            Рабочий комплект: {work.formCount} форм
+            {completeness
+              ? ` · полнота ${completeness.filled}/${completeness.total}`
+              : ""}
+            .
           </p>
         )}
-        <div className="toolbar-actions" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => onNavigateTab("exchange")}
-          >
-            К обмену комплектами
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => onNavigateTab("quality")}
-          >
-            К контролю качества
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => onNavigateTab("aggregation")}
-          >
-            К своду
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => onNavigateTab("saldo")}
-          >
-            К сальдо
-          </button>
+
+        <div className="tools-scenario-grid">
+          {SCENARIOS.map((s) => (
+            <div key={s.title} className="tools-scenario-card">
+              <h3>{s.title}</h3>
+              <p>{s.description}</p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  onNavigateTab(
+                    s.tab,
+                    s.exchangeMode ? { exchangeMode: s.exchangeMode } : undefined
+                  )
+                }
+              >
+                {s.action}
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
       {completeness && (
         <section className="tools-section">
           <h2>
-            Полнота комплекта{" "}
+            Полнота текущего комплекта{" "}
             <span className="cat-count">
               {completeness.filled}/{completeness.total}
             </span>

@@ -23,6 +23,7 @@ import {
   type RashRule,
 } from "../api";
 import { clearRowRashIndexCache } from "../engine/rowRashIndex";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import { clearRashCache } from "../engine/rashEngine";
 import { formIdFromRefRow, parseTotalColumn } from "../engine/rashEngine";
 import type {
@@ -823,29 +824,39 @@ export function RashEditorPage() {
         </section>
       )}
 
-      <div className="checks-toolbar">
-        <input
-          placeholder="Код или название…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <select
-          value={formFilter}
-          title="Включая правила с привязками к форме"
-          onChange={(e) => {
-            setFormFilter(e.target.value);
-            setOffset(0);
-          }}
+      <div className="editor-list-toolbar">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(
+            searchInput.trim().length > 0,
+            formFilter !== ""
+          )}
+          bodyClassName="checks-filters"
         >
-          <option value="">Все формы</option>
-          {formIds.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
+          <input
+            placeholder="Код или название…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="search-input"
+          />
+          <select
+            value={formFilter}
+            title="Включая правила с привязками к форме"
+            onChange={(e) => {
+              setFormFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="category-select"
+          >
+            <option value="">Все формы</option>
+            {formIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+        </CollapsibleFilters>
         {backend && adminOk && (
-          <>
+          <div className="checks-filters-actions">
             <button type="button" className="btn btn-secondary" onClick={() => void handleImportPreview("rules")}>
               Импорт правил…
             </button>
@@ -859,7 +870,7 @@ export function RashEditorPage() {
             <button type="button" className="btn btn-primary" onClick={() => void handleNew()}>
               Новое правило
             </button>
-          </>
+          </div>
         )}
       </div>
 

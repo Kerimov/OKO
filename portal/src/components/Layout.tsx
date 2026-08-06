@@ -185,7 +185,7 @@ export function Layout() {
         id: "ops",
         title: "Операции",
         items: [
-          { to: "/tools", label: "Сводка и импорт", isActive: (p) => p === "/tools" },
+          { to: "/tools", label: "Обмен и операции", isActive: (p) => p === "/tools" },
         ],
       });
     }
