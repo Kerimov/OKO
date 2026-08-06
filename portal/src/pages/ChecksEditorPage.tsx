@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   createCheckRule,
@@ -13,6 +13,7 @@ import type { CheckRule } from "../engine/checkEngine";
 import {
   combineCheckExpression,
   evaluateCheckExpression,
+  extractCellRefs,
   CheckParseError,
 } from "../engine/cellExpression";
 import {
@@ -23,6 +24,10 @@ import {
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import {
+  CellPicker,
+  type CellPickTarget,
+} from "./checksEditor/CellPicker";
 
 const EMPTY_RULE: CheckRule = {
   number: 0,
@@ -56,7 +61,30 @@ export function ChecksEditorPage() {
   const [error, setError] = useState("");
   const [testResult, setTestResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [pickTarget, setPickTarget] = useState<CellPickTarget>("expression");
   const limit = 40;
+
+  const expressionPreview = useMemo(() => {
+    const combined = combineCheckExpression(draft.expression, draft.expressionAlt);
+    const refs = extractCellRefs(combined);
+    return { combined, refs };
+  }, [draft.expression, draft.expressionAlt]);
+
+  const insertIntoExpression = useCallback(
+    (text: string) => {
+      setDraft((prev) => {
+        if (pickTarget === "expressionAlt") {
+          const cur = prev.expressionAlt ?? "";
+          const next = cur.trim() ? `${cur}${text}` : text;
+          return { ...prev, expressionAlt: next };
+        }
+        const cur = prev.expression;
+        const next = cur.trim() ? `${cur}${text}` : text;
+        return { ...prev, expression: next };
+      });
+    },
+    [pickTarget]
+  );
 
   const loadPage = useCallback(async () => {
     if (!backend) return;
@@ -347,6 +375,30 @@ export function ChecksEditorPage() {
                 onChange={(e) => setDraft({ ...draft, number: Number(e.target.value) })}
               />
             </label>
+            <CellPicker
+              target={pickTarget}
+              onTargetChange={setPickTarget}
+              onInsert={insertIntoExpression}
+            />
+
+            <div className="checks-expression-preview">
+              <div className="checks-expression-preview-label">Предпросмотр</div>
+              <code className="checks-expression-preview-expr">
+                {expressionPreview.combined.trim() || "— выражение пока пустое —"}
+              </code>
+              {expressionPreview.refs.length > 0 ? (
+                <ul className="checks-expression-preview-refs">
+                  {expressionPreview.refs.map((ref, i) => (
+                    <li key={`${ref.form}-${ref.column}-${ref.row}-${i}`}>
+                      {ref.form} · {ref.column} · {ref.row}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="tools-hint">Ссылки Cell(...) появятся после вставки из таблицы.</p>
+              )}
+            </div>
+
             <label className="full-width">
               Основное выражение
               <textarea
