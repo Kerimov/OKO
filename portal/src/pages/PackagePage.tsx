@@ -9,7 +9,7 @@ import {
 import {
   createOrganization,
   createPeriod,
-  createReportPackage,
+  createReportPackageAsync,
   closePeriod,
   reopenPeriod,
   distributePackagesToChildren,
@@ -18,8 +18,12 @@ import {
   fetchPackageWorkspace,
   fetchPackageWorkspaceDetail,
   listOrganizations,
+  peekCreatePackageJobId,
+  getBackgroundJob,
   saveWorkContext,
+  type BackgroundJobStatusDto,
 } from "../packagesApi";
+import type { CreatePackageResult } from "../types";
 import {
   ensureBusinessProcess,
   getBpApprovalBlockers,
@@ -315,6 +319,65 @@ export function PackagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Resume in-flight create job after reload (same tab session).
+  useEffect(() => {
+    if (!backend || typeof zid !== "number" || typeof eid !== "number") return;
+    const jobId = peekCreatePackageJobId(zid, eid);
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      try {
+        for (;;) {
+          if (cancelled) return;
+          const job = await getBackgroundJob(jobId);
+          setStatus(
+            job.status === "queued" || job.status === "running"
+              ? `Создание комплекта… ${job.progress}% — ${job.message || job.status}`
+              : job.message || job.status
+          );
+          if (job.status === "succeeded") {
+            const result = job.result as CreatePackageResult | null;
+            try {
+              sessionStorage.removeItem(`oko.createPackageJob.${zid}.${eid}`);
+            } catch {
+              /* ignore */
+            }
+            if (result && typeof result.created === "number") {
+              setStatus(
+                `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total})`
+              );
+              applyCreateResultLocally(result);
+              void refreshAll().catch(() => undefined);
+            }
+            return;
+          }
+          if (job.status === "failed") {
+            try {
+              sessionStorage.removeItem(`oko.createPackageJob.${zid}.${eid}`);
+            } catch {
+              /* ignore */
+            }
+            setStatus(job.errorMessage || job.message || "Ошибка создания комплекта");
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setStatus(e instanceof Error ? e.message : "Ошибка опроса задачи");
+        }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // intentionally only when package selection settles after first load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backend, zid, eid]);
+
   const filteredRows = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
     return rows.filter((r) => {
@@ -558,17 +621,56 @@ export function PackagePage() {
     }
   };
 
+  const applyCreateResultLocally = (result: CreatePackageResult) => {
+    if (typeof zid !== "number" || typeof eid !== "number") return;
+    const patchRow = (r: PackageWorkspaceRow): PackageWorkspaceRow => {
+      if (r.zid !== zid || r.eid !== eid) return r;
+      const total = result.total || r.total;
+      const filled = Math.min(total, (r.filled || 0) + result.created);
+      const draft = (r.draft || 0) + result.created;
+      const percent = total > 0 ? Math.round((filled / total) * 100) : 0;
+      return { ...r, filled, total, draft, percent };
+    };
+    setRows((prev) => prev.map(patchRow));
+    setDetail((prev) => {
+      if (!prev || prev.row.zid !== zid || prev.row.eid !== eid) return prev;
+      const total = result.total || prev.completeness.total;
+      const filled = Math.min(total, (prev.completeness.filled || 0) + result.created);
+      const draft = (prev.completeness.draft || 0) + result.created;
+      return {
+        ...prev,
+        row: patchRow(prev.row),
+        completeness: { ...prev.completeness, filled, total, draft },
+      };
+    });
+    setTab("forms");
+  };
+
   const handleCreatePackage = async () => {
     if (typeof zid !== "number" || typeof eid !== "number") return;
     setBusy(true);
     setStatus("");
     try {
-      const result = await createReportPackage(zid, eid);
+      const result = await createReportPackageAsync(zid, eid, {
+        onProgress: (job: BackgroundJobStatusDto) => {
+          const msg = job.message || job.status;
+          setStatus(
+            job.status === "queued" || job.status === "running"
+              ? `Создание комплекта… ${job.progress}% — ${msg}`
+              : msg
+          );
+        },
+      });
       setStatus(
         `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total})`
       );
-      await refreshAll();
-      setTab("forms");
+      applyCreateResultLocally(result);
+      void refreshAll().catch((e) => {
+        const err = e instanceof Error ? e.message : "ошибка";
+        setStatus(
+          `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total}). Обновление списка: ${err}`
+        );
+      });
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания комплекта");
     } finally {

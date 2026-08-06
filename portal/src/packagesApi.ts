@@ -489,6 +489,89 @@ export async function createReportPackage(
   return { created, skipped, total: catalog.forms.length, instanceIds };
 }
 
+export interface BackgroundJobStatusDto {
+  id: string;
+  type: string;
+  status: "queued" | "running" | "succeeded" | "failed" | string;
+  progress: number;
+  message: string | null;
+  payload: Record<string, unknown>;
+  result: unknown | null;
+  errorMessage: string | null;
+  errorStack: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/** Enqueue create + poll until done (backend). Falls back to sync create offline. */
+export async function createReportPackageAsync(
+  zid: number,
+  eid: number,
+  opts?: {
+    onProgress?: (job: BackgroundJobStatusDto) => void;
+    pollMs?: number;
+  }
+): Promise<CreatePackageResult> {
+  if (!isBackendMode()) {
+    return createReportPackage(zid, eid);
+  }
+
+  const started = await apiFetch<{ jobId: string; status: string }>(
+    "/api/packages/create-async",
+    {
+      method: "POST",
+      body: JSON.stringify({ zid, eid }),
+    }
+  );
+  const pollMs = opts?.pollMs ?? 500;
+  const jobKey = `oko.createPackageJob.${zid}.${eid}`;
+  try {
+    sessionStorage.setItem(jobKey, started.jobId);
+  } catch {
+    /* ignore */
+  }
+
+  for (;;) {
+    const job = await getBackgroundJob(started.jobId);
+    opts?.onProgress?.(job);
+    if (job.status === "succeeded") {
+      try {
+        sessionStorage.removeItem(jobKey);
+      } catch {
+        /* ignore */
+      }
+      const result = job.result as CreatePackageResult | null;
+      if (!result || typeof result.created !== "number") {
+        throw new Error("Job finished without result");
+      }
+      return result;
+    }
+    if (job.status === "failed") {
+      try {
+        sessionStorage.removeItem(jobKey);
+      } catch {
+        /* ignore */
+      }
+      throw new Error(job.errorMessage || job.message || "Ошибка создания комплекта");
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
+export async function getBackgroundJob(jobId: string): Promise<BackgroundJobStatusDto> {
+  return apiFetch<BackgroundJobStatusDto>(`/api/packages/jobs/${encodeURIComponent(jobId)}`);
+}
+
+/** Resume polling a previously started create job (same browser tab session). */
+export function peekCreatePackageJobId(zid: number, eid: number): string | null {
+  try {
+    return sessionStorage.getItem(`oko.createPackageJob.${zid}.${eid}`);
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteReportPackage(
   zid: number,
   eid: number

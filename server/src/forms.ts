@@ -87,6 +87,28 @@ const DEFAULT_CATEGORIES: Record<string, string> = {
   ND: "Дополнительные формы",
 };
 
+export function buildInitialRowsFromSchema(
+  schema: FormSchemaDto
+): Record<string, string | number>[] {
+  if (schema.rows.length > 0) {
+    return schema.rows.map((t) => {
+      const row: Record<string, string | number> = {};
+      for (const col of schema.columns) row[col.key] = "";
+      if (t.num) row.num = t.num;
+      if (t.code) row.code = t.code;
+      if (t.name) row.name = t.name;
+      const accountCode = t.code ?? t.num;
+      if (schema.columns.some((c) => c.key === "account") && accountCode) {
+        row.account = `${accountCode} ${t.name ?? ""}`.trim();
+      }
+      return row;
+    });
+  }
+  const row: Record<string, string | number> = {};
+  for (const col of schema.columns) row[col.key] = "";
+  return [row];
+}
+
 export async function migrateFormTables(db: OkoDb): Promise<void> {
   if (!(await db.columnExists("form_templates", "pdf_file"))) {
     await db.exec("ALTER TABLE form_templates ADD COLUMN pdf_file TEXT");
@@ -235,6 +257,7 @@ async function upsertFormFromSchema(
       r.formula ?? null
     );
   }
+  clearFormSchemaCache(schema.id);
 }
 
 export async function seedFormsFromJson(db: OkoDb): Promise<number> {
@@ -260,6 +283,7 @@ export async function seedFormsFromJson(db: OkoDb): Promise<number> {
 export async function reimportFormsFromJson(db: OkoDb): Promise<number> {
   if (!fs.existsSync(CATALOG_JSON)) throw new Error("catalog.json not found");
   const catalog = JSON.parse(fs.readFileSync(CATALOG_JSON, "utf-8")) as FormCatalogDto;
+  clearFormSchemaCache();
   await db.exec("DELETE FROM form_template_rows");
   await db.exec("DELETE FROM form_template_columns");
   await db.exec("DELETE FROM form_templates");
@@ -386,7 +410,41 @@ function assembleFormSchema(
 }
 
 /** Batch-load form schemas (3 SQL queries total instead of 3×N). */
+const SCHEMA_CACHE_TTL_MS = 60_000;
+const schemaCache = new Map<string, { schema: FormSchemaDto; expiresAt: number }>();
+
+export function clearFormSchemaCache(formId?: string): void {
+  if (formId) schemaCache.delete(formId);
+  else schemaCache.clear();
+}
+
 export async function loadFormSchemas(
+  db: OkoDb,
+  formIds: string[]
+): Promise<Map<string, FormSchemaDto>> {
+  const out = new Map<string, FormSchemaDto>();
+  const unique = [...new Set(formIds.filter(Boolean))];
+  if (unique.length === 0) return out;
+
+  const now = Date.now();
+  const missing: string[] = [];
+  for (const id of unique) {
+    const hit = schemaCache.get(id);
+    if (hit && hit.expiresAt > now) out.set(id, hit.schema);
+    else missing.push(id);
+  }
+  if (missing.length === 0) return out;
+
+  const loaded = await loadFormSchemasFromDb(db, missing);
+  const expiresAt = now + SCHEMA_CACHE_TTL_MS;
+  for (const [id, schema] of loaded) {
+    schemaCache.set(id, { schema, expiresAt });
+    out.set(id, schema);
+  }
+  return out;
+}
+
+async function loadFormSchemasFromDb(
   db: OkoDb,
   formIds: string[]
 ): Promise<Map<string, FormSchemaDto>> {
@@ -563,6 +621,7 @@ export async function updateFormMeta(
   if (!fields.length) return;
   values.push(formId);
   await db.prepare(`UPDATE form_templates SET ${fields.join(", ")} WHERE form_id = ?`).run(...values);
+  clearFormSchemaCache(formId);
 }
 
 export async function bumpFormSchemaVersion(
@@ -578,6 +637,7 @@ export async function bumpFormSchemaVersion(
   await db
     .prepare(`UPDATE form_templates SET schema_version = ? WHERE form_id = ?`)
     .run(next, formId);
+  clearFormSchemaCache(formId);
   const schema = await loadFormSchema(db, formId);
   if (schema) {
     const { saveTemplateRevision } = await import("./spreadsheet.js");
@@ -623,6 +683,8 @@ export async function replaceFormColumns(
   }
   if (opts?.bumpVersion !== false) {
     await bumpFormSchemaVersion(db, formId, opts?.actor);
+  } else {
+    clearFormSchemaCache(formId);
   }
 }
 
@@ -654,6 +716,8 @@ export async function replaceFormRows(
   }
   if (opts?.bumpVersion !== false) {
     await bumpFormSchemaVersion(db, formId, opts?.actor);
+  } else {
+    clearFormSchemaCache(formId);
   }
 }
 

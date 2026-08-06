@@ -144,39 +144,48 @@ export async function saveRashEntries(
   formId: string,
   entries: RashEntryDto[]
 ): Promise<RashEntryDto[]> {
+  const RASH_INSERT_CHUNK = 200;
   await db.transaction(async (tx) => {
     await tx
       .prepare("DELETE FROM form_rash_entries WHERE instance_id = ? AND form_id = ?")
       .run(instanceId, formId);
 
-    const insert = tx.prepare(
-      `INSERT INTO form_rash_entries (
-        instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
-        kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4,
-        template_row_key, values_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
-      const valuesJson = JSON.stringify(e.values ?? {});
-      await insert.run(
-        instanceId,
-        formId,
-        e.parentRowNo,
-        e.columnKey ?? null,
-        e.rashKod,
-        e.lineNo ?? i,
-        e.kontrId ?? null,
-        e.kontrName ?? null,
-        e.inn ?? null,
-        e.kpp ?? null,
-        e.attrA2 ?? null,
-        e.attrA3 ?? null,
-        e.attrA4 ?? null,
-        e.templateRowKey ?? null,
-        valuesJson
-      );
+    if (entries.length > 0) {
+      for (let offset = 0; offset < entries.length; offset += RASH_INSERT_CHUNK) {
+        const chunk = entries.slice(offset, offset + RASH_INSERT_CHUNK);
+        const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+        const params: unknown[] = [];
+        for (let i = 0; i < chunk.length; i++) {
+          const e = chunk[i];
+          const valuesJson = JSON.stringify(e.values ?? {});
+          params.push(
+            instanceId,
+            formId,
+            e.parentRowNo,
+            e.columnKey ?? null,
+            e.rashKod,
+            e.lineNo ?? offset + i,
+            e.kontrId ?? null,
+            e.kontrName ?? null,
+            e.inn ?? null,
+            e.kpp ?? null,
+            e.attrA2 ?? null,
+            e.attrA3 ?? null,
+            e.attrA4 ?? null,
+            e.templateRowKey ?? null,
+            valuesJson
+          );
+        }
+        await tx
+          .prepare(
+            `INSERT INTO form_rash_entries (
+              instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
+              kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4,
+              template_row_key, values_json
+            ) VALUES ${placeholders}`
+          )
+          .run(...params);
+      }
     }
 
     const now = new Date().toISOString();

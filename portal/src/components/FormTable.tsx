@@ -18,6 +18,10 @@ import {
 } from "./SpreadsheetFormTable";
 import { isUniverBackendEnabled } from "./spreadsheetFlags";
 import { TableDensityToggle, useTableDensity } from "./TableDensityToggle";
+import {
+  buildFrozenStickyMap,
+  frozenStickyCss,
+} from "./formTableSticky";
 
 const UniverFormHost = lazy(() =>
   import("./UniverFormHost").then((m) => ({ default: m.UniverFormHost }))
@@ -139,6 +143,7 @@ function LegacyFormTable({
 }: Props) {
   const [kontrShowFilter, setKontrShowFilter] = useState("1,2");
   const [density, setDensity] = useTableDensity();
+  const frozenSticky = useMemo(() => buildFrozenStickyMap(columns), [columns]);
 
   const kontrShowOptions = useMemo(
     () => kontrShowOptionsForRule(kontrRefA1Name),
@@ -330,17 +335,26 @@ function LegacyFormTable({
         <thead>
           <tr>
             <th className="row-num">#</th>
-            {columns.map((col) => (
+            {columns.map((col) => {
+              const sticky = frozenSticky.get(col.key);
+              return (
               <th
                 key={col.key}
-                style={{ minWidth: col.width ?? 100 }}
-                className={col.frozen ? "frozen" : ""}
+                style={{
+                  ...(col.frozen
+                    ? frozenStickyCss(sticky)
+                    : { minWidth: col.width ?? 100 }),
+                }}
+                className={`${col.frozen ? "frozen" : ""}${
+                  sticky?.isLast ? " frozen-edge" : ""
+                }`}
                 title={col.label}
               >
                 <span className="col-letter">{col.key}</span>
                 <span className="col-label">{col.label}</span>
               </th>
-            ))}
+              );
+            })}
             {(allowAddRows || kontrMode) && <th className="actions-col" />}
           </tr>
         </thead>
@@ -349,6 +363,7 @@ function LegacyFormTable({
             <tr key={rowIdx}>
               <td className="row-num">{rowIdx + 1}</td>
               {columns.map((col) => {
+                const sticky = frozenSticky.get(col.key);
                 const errKey = cellErrorKey(row, rowIdx, col.key);
                 const errMsg = cellErrors?.get(errKey);
                 const syncKey = cellPresenceKey(row, rowIdx, col.key);
@@ -400,13 +415,20 @@ function LegacyFormTable({
                   </button>
                 ) : null;
 
+                const cellStyle: CSSProperties | undefined = {
+                  ...(occupiedBy ? userPresenceStyle(occupiedBy) : undefined),
+                  ...(col.frozen ? frozenStickyCss(sticky) : undefined),
+                };
+
                 return (
                   <td
                     key={col.key}
-                    className={`${col.frozen ? "frozen" : ""}${errMsg ? " cell-error" : ""}${occupied ? " cell-occupied" : ""}${flash ? " cell-remote-flash" : ""}`}
+                    className={`${col.frozen ? "frozen" : ""}${
+                      sticky?.isLast ? " frozen-edge" : ""
+                    }${errMsg ? " cell-error" : ""}${occupied ? " cell-occupied" : ""}${flash ? " cell-remote-flash" : ""}`}
                     title={occupiedBy ? `Занято: ${occupiedBy}` : errMsg}
                     data-error={errMsg || undefined}
-                    style={occupiedBy ? userPresenceStyle(occupiedBy) : undefined}
+                    style={cellStyle}
                   >
                     {rashLocked && rashSlot ? (
                       <div className="cell-with-rash">

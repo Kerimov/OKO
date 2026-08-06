@@ -9,6 +9,7 @@ import {
   loadCatalog,
   reimportChecksFromJson,
   saveCheckRule,
+  testCheckExpressionApi,
 } from "../api";
 import type { CheckRule } from "../engine/checkEngine";
 import {
@@ -421,6 +422,14 @@ export function ChecksEditorPage() {
     setTestResult("");
     const expr = combineCheckExpression(draft.expression, draft.expressionAlt);
     try {
+      if (isBackendMode()) {
+        const result = await testCheckExpressionApi({
+          expression: draft.expression,
+          expressionAlt: draft.expressionAlt,
+        });
+        setTestResult(result.message);
+        return;
+      }
       const instances = await loadInstancesForCheck();
       const latest = latestInstancePerTemplate(instances);
       const ctx = evalContextFromInstances(latest);

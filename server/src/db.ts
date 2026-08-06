@@ -45,6 +45,7 @@ import { migratePackageExchange } from "./packageExchange.js";
 import { migrateMethodologyHistory } from "./methodology.js";
 import { migrateSpreadsheetTables, seedRecalcRulesFromJson } from "./spreadsheet.js";
 import { runNumberedMigrations } from "./migrations/runner.js";
+import { startBackgroundJobWorker } from "./jobs.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
 import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
 import { refreshUserAccountsCache } from "./auth.js";
@@ -140,6 +141,7 @@ async function initSchema(database: OkoDb): Promise<void> {
 export async function bootstrapDatabase(): Promise<OkoDb> {
   const database = await initDatabase();
   await initSchema(database);
+  startBackgroundJobWorker(() => getDb());
   return database;
 }
 

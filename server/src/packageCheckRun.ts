@@ -16,6 +16,7 @@ import { listActivePackageRules } from "./checkRulesRegistry.js";
 import { appendCheckRunJournal } from "./checkJournal.js";
 import { findInstanceIdByPackageTemplate, loadInstance, loadInstancesForPackage } from "./instances.js";
 import { exportChecksPayload } from "./checks.js";
+import { withTiming } from "./perf.js";
 import { ROOT } from "./paths.js";
 import type { OkoFormInstance } from "./types.js";
 
@@ -108,6 +109,39 @@ export async function runPackageChecks(
     packageKind?: PackageKind;
     actor?: string | null;
     /** Access Cell() mode: period (default) | active | all period+active */
+    accessMode?: "period" | "active" | "all";
+  }
+): Promise<PackageCheckRunResult> {
+  let passed = 0;
+  let failed = 0;
+  let rules = 0;
+  return withTiming(
+    "packages.checks.run",
+    async () => {
+      const result = await runPackageChecksImpl(db, input);
+      passed = result.passed;
+      failed = result.failed;
+      rules = result.results.length;
+      return result;
+    },
+    () => ({
+      zid: input.zid,
+      eid: input.eid,
+      packageKind: input.packageKind ?? "OKO",
+      passed,
+      failed,
+      rules,
+    })
+  );
+}
+
+async function runPackageChecksImpl(
+  db: OkoDb,
+  input: {
+    zid: number;
+    eid: number;
+    packageKind?: PackageKind;
+    actor?: string | null;
     accessMode?: "period" | "active" | "all";
   }
 ): Promise<PackageCheckRunResult> {

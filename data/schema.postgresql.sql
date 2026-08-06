@@ -192,6 +192,15 @@ CREATE TABLE IF NOT EXISTS check_rules (
     period          TEXT,
     info            TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_check_rules_active_period
+    ON check_rules(active, period_active, number);
+
+CREATE TABLE IF NOT EXISTS check_rule_forms (
+    rule_number INTEGER NOT NULL REFERENCES check_rules(number) ON DELETE CASCADE,
+    form_id TEXT NOT NULL,
+    PRIMARY KEY (rule_number, form_id)
+);
+CREATE INDEX IF NOT EXISTS idx_check_rule_forms_form ON check_rule_forms(form_id);
 
 CREATE TABLE IF NOT EXISTS check_results (
     id          SERIAL PRIMARY KEY,
@@ -565,6 +574,24 @@ CREATE TABLE IF NOT EXISTS support_report_presets (
     active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS background_jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    progress INTEGER NOT NULL DEFAULT 0,
+    message TEXT,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT,
+    error_message TEXT,
+    error_stack TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_type ON background_jobs(type, created_at DESC);
+
 -- Remaining PSD tables (transfers, svods, import batches, appendix-12 rules, etc.)
--- are created by migrations 005–010. Do not restore production from this file alone
+-- are created by migrations 005–011. Do not restore production from this file alone
 -- without running the migration runner.

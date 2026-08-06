@@ -352,6 +352,37 @@ export async function reimportChecksFromJson() {
   return res.json() as Promise<{ reimported: number }>;
 }
 
+export async function testCheckExpressionApi(input: {
+  expression: string;
+  expressionAlt?: string | null;
+  zid?: number;
+  eid?: number;
+}): Promise<{
+  ok: boolean;
+  left: number | null;
+  right: number | null;
+  failedClause?: string | null;
+  message: string;
+  instancesUsed: number;
+}> {
+  const res = await apiFetchRaw("/api/checks/test-expression", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const j = JSON.parse(text) as { error?: string; message?: string };
+      throw new Error(j.error || j.message || text);
+    } catch (e) {
+      if (e instanceof SyntaxError) throw new Error(text || "test-expression failed");
+      throw e;
+    }
+  }
+  return res.json();
+}
+
 export async function fetchChecksStats() {
   const res = await apiFetchRaw("/api/checks/stats");
   if (!res.ok) throw new Error("API unavailable");

@@ -7,6 +7,8 @@ import {
   Get,
   HttpCode,
   HttpException,
+  NotFoundException,
+  Param,
   Post,
   Query,
   Req,
@@ -29,6 +31,10 @@ import {
   importReportPackage,
   previewPackageConstruction,
 } from "../../../server/src/packages.js";
+import {
+  enqueueBackgroundJob,
+  getBackgroundJob,
+} from "../../../server/src/jobs.js";
 import {
   assertOrgZidParam,
   userZid,
@@ -178,6 +184,44 @@ export class PackagesController {
         error: e instanceof Error ? e.message : "create failed",
       });
     }
+  }
+
+  @Post("create-async")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Поставить создание комплекта в очередь (job)" })
+  async createAsync(@Req() req: Request, @Body() body: PackageZidEidDto) {
+    if (!body.zid || !body.eid) {
+      throw new BadRequestException({ error: "zid and eid required" });
+    }
+    try {
+      assertOrgZidParam(req, body.zid);
+      const job = await enqueueBackgroundJob(await getDb(), {
+        type: "create_report_package",
+        payload: { zid: body.zid, eid: body.eid },
+        createdBy: req.apiUser?.username ?? req.apiRole ?? null,
+        message: "Создание комплекта в очереди",
+      });
+      return { jobId: job.id, status: job.status };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "enqueue failed",
+      });
+    }
+  }
+
+  @Get("jobs/:id")
+  @ApiOperation({ summary: "Статус фоновой задачи (создание комплекта и др.)" })
+  async jobStatus(@Req() req: Request, @Param("id") id: string) {
+    const job = await getBackgroundJob(await getDb(), id);
+    if (!job) {
+      throw new NotFoundException({ error: "job not found" });
+    }
+    const zid = Number(job.payload.zid);
+    if (Number.isFinite(zid)) {
+      assertOrgZidParam(req, zid);
+    }
+    return job;
   }
 
   @Delete()

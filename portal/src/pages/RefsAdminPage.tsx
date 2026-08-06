@@ -21,7 +21,6 @@ import {
   validateClassifierItems,
   validateKontrDraftRow,
 } from "../engine/refsValidation";
-import { writeJsonSheetWorkbook, triggerBrowserDownload } from "../engine/excelWorkbook";
 import {
   archiveKontrVersion,
   createKontrVersion,
@@ -478,6 +477,9 @@ export function RefsAdminPage() {
         orgType: a.orgType,
         idOBDNSI: a.idObdnsi,
       }));
+    const { writeJsonSheetWorkbook, triggerBrowserDownload } = await import(
+      "../engine/excelWorkbook"
+    );
     const bytes = await writeJsonSheetWorkbook(rows, "kontr");
     triggerBrowserDownload(`oko-kontr-${new Date().toISOString().slice(0, 10)}.xlsx`, bytes);
     setStatus(`Excel (${scope}): ${rows.length} строк`);

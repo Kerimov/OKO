@@ -1332,11 +1332,6 @@ a.btn:hover {
   box-shadow: 0 2px 6px rgba(26, 35, 50, 0.06);
 }
 
-.form-table td.frozen,
-.form-table th.frozen {
-  box-shadow: 2px 0 6px rgba(26, 35, 50, 0.06);
-}
-
 .form-table td.cell-error {
   position: relative;
   background: #fdecea;
@@ -1520,16 +1515,22 @@ a.btn:hover {
 .form-table th.frozen {
   background: #f7f9fc;
   position: sticky;
-  left: 44px;
   z-index: 1;
-  box-shadow: 1px 0 0 var(--border);
+  box-shadow: none;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .form-table th.frozen {
   background: #f7f9fc;
   color: var(--muted);
   z-index: 3;
-  left: 44px;
+  vertical-align: bottom;
+}
+
+.form-table td.frozen.frozen-edge,
+.form-table th.frozen.frozen-edge {
+  box-shadow: 3px 0 6px rgba(26, 35, 50, 0.08);
 }
 
 .form-table .row-num,
@@ -1537,11 +1538,37 @@ a.btn:hover {
 .form-table td.row-num {
   position: sticky;
   left: 0;
-  z-index: 2;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  z-index: 5;
+  box-sizing: border-box;
 }
 
 .form-table th.row-num {
-  z-index: 4;
+  z-index: 8;
+  background: #f7f9fc;
+}
+
+.form-table th.frozen .col-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.form-table td.frozen .readonly-cell,
+.form-table td.frozen input,
+.form-table td.frozen .ss-cell-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-table tbody tr:hover td.frozen,
+.form-table tbody tr:hover td.row-num,
+.form-table tbody tr:nth-child(even) td.frozen,
+.form-table tbody tr:nth-child(even) td.row-num,
+.form-table tbody tr:nth-child(even):hover td.frozen,
+.form-table tbody tr:nth-child(even):hover td.row-num {
   background: #f7f9fc;
 }
 
@@ -3144,6 +3171,52 @@ a.btn:hover {
 .checks-ref-act.is-del {
   color: var(--danger, #b42318);
   font-weight: 700;
+}
+
+.saldo-pick-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.saldo-pick-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.saldo-pick-slot:hover {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+
+.saldo-pick-slot.is-active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: #eef5fc;
+}
+
+.saldo-pick-slot-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.saldo-pick-slot-value {
+  font-size: 0.82rem;
+  word-break: break-word;
 }
 
 .checks-expression-preview {

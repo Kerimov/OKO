@@ -24,6 +24,7 @@ import {
 } from "../engine/rashEngine";
 import { cellErrorKey } from "../engine/cellErrors";
 import { useVirtualRows } from "../hooks/useVirtualRows";
+import { useVirtualColumns } from "../hooks/useVirtualColumns";
 import { KontrInput } from "./KontrInput";
 import type {
   CellBlurInfo,
@@ -31,6 +32,10 @@ import type {
   CellFocusInfo,
 } from "./FormTable";
 import { TableDensityToggle, useTableDensity } from "./TableDensityToggle";
+import {
+  buildFrozenStickyMap,
+  frozenStickyCss,
+} from "./formTableSticky";
 
 export interface SpreadsheetFormTableProps {
   columns: FormColumn[];
@@ -122,6 +127,18 @@ export function SpreadsheetFormTable({
     () => columns.filter((c) => !c.hidden),
     [columns]
   );
+  const frozenCount = useMemo(() => {
+    let n = 0;
+    for (const c of visibleCols) {
+      if (!c.frozen) break;
+      n++;
+    }
+    return n;
+  }, [visibleCols]);
+  const frozenSticky = useMemo(
+    () => buildFrozenStickyMap(visibleCols),
+    [visibleCols]
+  );
   const [active, setActive] = useState<{ r: number; c: number } | null>(null);
   const [anchor, setAnchor] = useState<{ r: number; c: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -137,6 +154,22 @@ export function SpreadsheetFormTable({
   const [density, setDensity] = useTableDensity();
   const rowHeight = density === "compact" ? 28 : 40;
   const virtual = useVirtualRows(scrollRef, rows.length, rowHeight);
+  const colVirtual = useVirtualColumns(scrollRef, visibleCols.length, {
+    frozenCount,
+    columnWidth: (i) => visibleCols[i]?.width ?? 100,
+  });
+  const renderedColIndexes = useMemo(() => {
+    if (!colVirtual.enabled) {
+      return visibleCols.map((_, i) => i);
+    }
+    const idxs: number[] = [];
+    for (let i = 0; i < colVirtual.frozenCount; i++) idxs.push(i);
+    for (let i = colVirtual.startIndex; i < colVirtual.endIndex; i++) {
+      if (i < colVirtual.frozenCount) continue;
+      idxs.push(i);
+    }
+    return idxs;
+  }, [colVirtual, visibleCols]);
   const kontrShowOptions = useMemo(
     () => kontrShowOptionsForRule(kontrRefA1Name),
     [kontrRefA1Name]
@@ -232,8 +265,11 @@ export function SpreadsheetFormTable({
   };
 
   useEffect(() => {
-    if (active) virtual.scrollRowIntoView(active.r);
-  }, [active?.r]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (active) {
+      virtual.scrollRowIntoView(active.r);
+      colVirtual.scrollColumnIntoView(active.c);
+    }
+  }, [active?.r, active?.c]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing) inputRef.current?.focus({ preventScroll: true });
@@ -584,17 +620,41 @@ export function SpreadsheetFormTable({
           <thead>
             <tr>
               <th className="row-num">#</th>
-              {visibleCols.map((col) => (
+              {colVirtual.enabled && colVirtual.offsetLeft > 0 ? (
+                <th
+                  aria-hidden
+                  className="virtual-col-spacer"
+                  style={{ width: colVirtual.offsetLeft, minWidth: colVirtual.offsetLeft, padding: 0, border: "none" }}
+                />
+              ) : null}
+              {renderedColIndexes.map((colIdx) => {
+                const col = visibleCols[colIdx];
+                const sticky = frozenSticky.get(col.key);
+                return (
                 <th
                   key={col.key}
-                  style={{ minWidth: col.width ?? 100 }}
-                  className={col.frozen ? "frozen" : ""}
+                  style={{
+                    ...(col.frozen
+                      ? frozenStickyCss(sticky)
+                      : { minWidth: col.width ?? 100 }),
+                  }}
+                  className={`${col.frozen ? "frozen" : ""}${
+                    sticky?.isLast ? " frozen-edge" : ""
+                  }`}
                   title={col.helpText ?? col.label}
                 >
                   <span className="col-letter">{col.key}</span>
                   <span className="col-label">{col.label}</span>
                 </th>
-              ))}
+                );
+              })}
+              {colVirtual.enabled && colVirtual.offsetRight > 0 ? (
+                <th
+                  aria-hidden
+                  className="virtual-col-spacer"
+                  style={{ width: colVirtual.offsetRight, minWidth: colVirtual.offsetRight, padding: 0, border: "none" }}
+                />
+              ) : null}
               {(allowAddRows || kontrMode) && <th className="actions-col" />}
             </tr>
           </thead>
@@ -632,7 +692,16 @@ export function SpreadsheetFormTable({
                 style={virtual.enabled ? { height: rowHeight } : undefined}
               >
                 <td className="row-num">{rowIdx + 1}</td>
-                {visibleCols.map((col, colIdx) => {
+                {colVirtual.enabled && colVirtual.offsetLeft > 0 ? (
+                  <td
+                    aria-hidden
+                    className="virtual-col-spacer"
+                    style={{ width: colVirtual.offsetLeft, minWidth: colVirtual.offsetLeft, padding: 0, border: "none" }}
+                  />
+                ) : null}
+                {renderedColIndexes.map((colIdx) => {
+                  const col = visibleCols[colIdx];
+                  const sticky = frozenSticky.get(col.key);
                   const errKey = cellErrorKey(row, rowIdx, col.key);
                   const errMsg = cellErrors?.get(errKey);
                   const occupiedBy = occupancyUser(row, rowIdx, col.key);
@@ -680,6 +749,10 @@ export function SpreadsheetFormTable({
                       : col.type === "number"
                         ? { textAlign: "right" }
                         : undefined;
+                  const cellStyle: CSSProperties | undefined = {
+                    ...alignStyle,
+                    ...(col.frozen ? frozenStickyCss(sticky) : undefined),
+                  };
 
                   const showRash =
                     !!rashSlot &&
@@ -697,13 +770,15 @@ export function SpreadsheetFormTable({
                     <td
                       key={col.key}
                       className={`${col.frozen ? "frozen" : ""}${
+                        sticky?.isLast ? " frozen-edge" : ""
+                      }${
                         errMsg ? " cell-error" : ""
                       }${occupiedBy ? " cell-occupied" : ""}${
                         flash ? " cell-remote-flash" : ""
                       }${selected ? " cell-selected" : ""}${
                         isActive ? " cell-active" : ""
                       }`}
-                      style={alignStyle}
+                      style={cellStyle}
                       title={occupiedBy ? `Занято: ${occupiedBy}` : errMsg}
                       data-error={errMsg || undefined}
                       onMouseDown={(e) => onCellMouseDown(rowIdx, colIdx, e)}
@@ -798,6 +873,13 @@ export function SpreadsheetFormTable({
                     </td>
                   );
                 })}
+                {colVirtual.enabled && colVirtual.offsetRight > 0 ? (
+                  <td
+                    aria-hidden
+                    className="virtual-col-spacer"
+                    style={{ width: colVirtual.offsetRight, minWidth: colVirtual.offsetRight, padding: 0, border: "none" }}
+                  />
+                ) : null}
                 {(allowAddRows || kontrMode) && !readOnly && (
                   <td className="actions-col">
                     {allowAddRows || isKontrEditableRow(row) ? (

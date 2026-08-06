@@ -1,6 +1,7 @@
 import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
 import { loadRashEntries, loadRashEntriesByInstanceIds, saveRashEntries } from "./rash-data.js";
+import { withTiming } from "./perf.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -89,11 +90,20 @@ async function insertCellValuesBulk(db: OkoDb, cells: CellInsertRow[]): Promise<
   }
 }
 
-export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promise<void> {
+export function isLazyCellsEnabled(): boolean {
+  return process.env.OKO_LAZY_CELLS === "1" || process.env.OKO_LAZY_CELLS === "true";
+}
+
+export async function saveInstanceCells(
+  db: OkoDb,
+  inst: OkoFormInstance,
+  opts?: { materializeCells?: boolean }
+): Promise<void> {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
   const rows = Array.isArray(inst.rows) ? inst.rows : [];
   const schemaVersion = Number(inst.templateSchemaVersion ?? 1);
+  const materialize = opts?.materializeCells !== false;
 
   await db
     .prepare(
@@ -136,6 +146,10 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
       inst.createdAt,
       inst.updatedAt
     );
+
+  if (!materialize) {
+    return;
+  }
 
   await db.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(inst.instanceId);
 
@@ -300,6 +314,28 @@ export async function loadInstancesBulk(
   db: OkoDb,
   filter?: { zid?: number; zids?: number[]; eid?: number; instanceIds?: string[] }
 ): Promise<Map<string, OkoFormInstance>> {
+  let instances = 0;
+  return withTiming(
+    "instances.bulk",
+    async () => {
+      const out = await loadInstancesBulkImpl(db, filter);
+      instances = out.size;
+      return out;
+    },
+    () => ({
+      zid: filter?.zid ?? null,
+      eid: filter?.eid ?? null,
+      zids: filter?.zids?.length ?? null,
+      idFilter: filter?.instanceIds?.length ?? null,
+      instances,
+    })
+  );
+}
+
+async function loadInstancesBulkImpl(
+  db: OkoDb,
+  filter?: { zid?: number; zids?: number[]; eid?: number; instanceIds?: string[] }
+): Promise<Map<string, OkoFormInstance>> {
   const out = new Map<string, OkoFormInstance>();
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -377,6 +413,30 @@ export async function loadInstancesBulk(
       )
     );
   }
+
+  // Lazy cells: headers without form_cell_values get template rows on read.
+  const needsHydrate: string[] = [];
+  for (const id of ids) {
+    if (!(cellsByInstance.get(id)?.length)) needsHydrate.push(id);
+  }
+  if (needsHydrate.length > 0) {
+    const { loadFormSchemas, buildInitialRowsFromSchema } = await import("./forms.js");
+    const formIds = [
+      ...new Set(
+        needsHydrate
+          .map((id) => out.get(id)?.templateId)
+          .filter((x): x is string => Boolean(x))
+      ),
+    ];
+    const schemas = await loadFormSchemas(db, formIds);
+    for (const id of needsHydrate) {
+      const inst = out.get(id);
+      if (!inst) continue;
+      const schema = schemas.get(inst.templateId);
+      if (schema) inst.rows = buildInitialRowsFromSchema(schema);
+    }
+  }
+
   return out;
 }
 
@@ -740,16 +800,100 @@ export async function upsertInstancesBatch(
   isAdmin: boolean
 ): Promise<{ saved: number }> {
   if (!instances.length) return { saved: 0 };
+
+  const ids = [...new Set(instances.map((i) => i.instanceId).filter(Boolean))];
+  const headers = await loadInstanceHeadersByIds(db, ids);
+
   await db.transaction(async (tx) => {
+    const packageChecked = new Set<string>();
     for (const inst of instances) {
-      const existing = await loadInstance(tx, inst.instanceId);
+      const existing = headers.get(inst.instanceId);
       if (existing) {
-        await assertInstanceWritable(tx, existing, isAdmin);
+        assertInstanceEditable(
+          {
+            ...inst,
+            status: existing.status,
+            zid: existing.zid,
+            eid: existing.eid,
+          },
+          isAdmin
+        );
+        const zid = existing.zid ?? inst.zid ?? null;
+        const eid = existing.eid ?? inst.eid ?? null;
+        const pkgKey = zid != null && eid != null ? `${zid}:${eid}` : null;
+        if (pkgKey && !packageChecked.has(pkgKey)) {
+          await assertInstanceWritable(
+            tx,
+            { ...inst, status: existing.status, zid, eid },
+            isAdmin
+          );
+          packageChecked.add(pkgKey);
+        } else if (!pkgKey) {
+          await assertInstanceWritable(
+            tx,
+            { ...inst, status: existing.status, zid, eid },
+            isAdmin
+          );
+        }
       }
       await upsertInstance(tx, inst);
     }
   });
   return { saved: instances.length };
+}
+
+/** Lightweight headers for batch writable checks (no cells). */
+export async function loadInstanceHeadersByIds(
+  db: OkoDb,
+  instanceIds: string[]
+): Promise<
+  Map<
+    string,
+    {
+      instanceId: string;
+      status: "draft" | "submitted";
+      zid: number | null;
+      eid: number | null;
+    }
+  >
+> {
+  const out = new Map<
+    string,
+    {
+      instanceId: string;
+      status: "draft" | "submitted";
+      zid: number | null;
+      eid: number | null;
+    }
+  >();
+  const ids = [...new Set(instanceIds.filter(Boolean))];
+  if (!ids.length) return out;
+  const CHUNK = 500;
+  for (let offset = 0; offset < ids.length; offset += CHUNK) {
+    const chunk = ids.slice(offset, offset + CHUNK);
+    const placeholders = chunk.map(() => "?").join(",");
+    const rows = (await db
+      .prepare(
+        `SELECT instance_id, status, zid, eid
+         FROM form_instances
+         WHERE instance_id IN (${placeholders})`
+      )
+      .all(...chunk)) as Array<{
+      instance_id: string;
+      status: string | null;
+      zid: number | null;
+      eid: number | null;
+    }>;
+    for (const r of rows) {
+      out.set(r.instance_id, {
+        instanceId: r.instance_id,
+        status: normalizeInstanceStatus(r.status),
+        zid: intOrNull(r.zid),
+        eid: intOrNull(r.eid),
+      });
+    }
+  }
+  return out;
 }
 
 export async function loadInstance(
@@ -852,18 +996,30 @@ export async function buildCellIndexForLatestInstances(db: OkoDb) {
   return index;
 }
 
-export async function buildEvalSnapshotFromDb(db: OkoDb, zid?: number) {
-  const latest =
-    zid != null
-      ? ((await db
-          .prepare(
-            `SELECT instance_id, template_id FROM form_instances
-           WHERE zid = ? ORDER BY updated_at DESC`
-          )
-          .all(zid)) as Array<{ instance_id: string; template_id: string }>)
-      : ((await db
-          .prepare(`SELECT instance_id, template_id FROM form_instances ORDER BY updated_at DESC`)
-          .all()) as Array<{ instance_id: string; template_id: string }>);
+export async function buildEvalSnapshotFromDb(
+  db: OkoDb,
+  zidOrOpts?: number | { zid?: number; eid?: number }
+) {
+  const opts =
+    typeof zidOrOpts === "number" || zidOrOpts == null
+      ? { zid: zidOrOpts ?? undefined }
+      : zidOrOpts;
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  if (opts.zid != null) {
+    conditions.push("zid = ?");
+    params.push(opts.zid);
+  }
+  if (opts.eid != null) {
+    conditions.push("eid = ?");
+    params.push(opts.eid);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const latest = (await db
+    .prepare(
+      `SELECT instance_id, template_id FROM form_instances ${where} ORDER BY updated_at DESC`
+    )
+    .all(...params)) as Array<{ instance_id: string; template_id: string }>;
 
   const picked = new Map<string, string>();
   for (const r of latest) {
@@ -873,19 +1029,45 @@ export async function buildEvalSnapshotFromDb(db: OkoDb, zid?: number) {
   const rowsByForm: Record<string, Record<string, string | number>[]> = {};
   const cellIndex: Record<string, Record<string, Record<string, number>>> = {};
 
-  const cellStmt = db.prepare(
-    `SELECT row_no, row_name, column_key, value_num, value_text
-     FROM form_cell_values WHERE instance_id = ?`
-  );
-
-  for (const [templateId, instanceId] of picked) {
-    const cells = (await cellStmt.all(instanceId)) as Array<{
+  const instanceIds = [...picked.values()];
+  const cellsByInstance = new Map<
+    string,
+    Array<{
+      row_no: number;
+      row_name: string | null;
+      column_key: string;
+      value_num: number | null;
+      value_text: string | null;
+    }>
+  >();
+  const ID_CHUNK = 500;
+  for (let offset = 0; offset < instanceIds.length; offset += ID_CHUNK) {
+    const chunk = instanceIds.slice(offset, offset + ID_CHUNK);
+    if (chunk.length === 0) continue;
+    const cells = (await db
+      .prepare(
+        `SELECT instance_id, row_no, row_name, column_key, value_num, value_text
+         FROM form_cell_values
+         WHERE instance_id IN (${chunk.map(() => "?").join(",")})
+         ORDER BY instance_id, row_no, column_key`
+      )
+      .all(...chunk)) as Array<{
+      instance_id: string;
       row_no: number;
       row_name: string | null;
       column_key: string;
       value_num: number | null;
       value_text: string | null;
     }>;
+    for (const c of cells) {
+      const list = cellsByInstance.get(c.instance_id) ?? [];
+      list.push(c);
+      cellsByInstance.set(c.instance_id, list);
+    }
+  }
+
+  for (const [templateId, instanceId] of picked) {
+    const cells = cellsByInstance.get(instanceId) ?? [];
     rowsByForm[templateId] = rowsFromCells(cells);
 
     const template: Record<string, Record<string, number>> = {};

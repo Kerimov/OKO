@@ -10,12 +10,7 @@ import { RashEditorModal } from "../components/RashEditorModal";
 import { hasRashRules, isKontrForm } from "../constants";
 import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
 import { failedCellsForForm } from "../engine/cellErrors";
-import { exportFormToExcel } from "../engine/exportExcel";
-import {
-  listXlsxSheetNames,
-  previewXlsxFormImport,
-  type XlsxImportPreview,
-} from "../engine/importExcel";
+import type { XlsxImportPreview } from "../engine/importExcel";
 import {
   buildRashCellSlots,
   countRashRulesForForm,
@@ -790,6 +785,7 @@ export function FormPage() {
     setExportingExcel(true);
     try {
       await persist();
+      const { exportFormToExcel } = await import("../engine/exportExcel");
       await exportFormToExcel({
         schema,
         displayName,
@@ -900,6 +896,7 @@ export function FormPage() {
     setError("");
     try {
       const buf = await file.arrayBuffer();
+      const { listXlsxSheetNames, previewXlsxFormImport } = await import("../engine/importExcel");
       const names = await listXlsxSheetNames(buf);
       setXlsxBuffer(buf);
       setXlsxSheetNames(names);
@@ -926,6 +923,7 @@ export function FormPage() {
     setXlsxSheet(sheetName);
     setImportingXlsx(true);
     try {
+      const { previewXlsxFormImport } = await import("../engine/importExcel");
       const preview = await previewXlsxFormImport({
         buffer: xlsxBuffer,
         schema,

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
-import { exportCatalog, loadFormSchemas, type FormSchemaDto } from "./forms.js";
-import { deleteInstanceFromDb, saveInstanceCells } from "./instances.js";
+import { buildInitialRowsFromSchema, exportCatalog, loadFormSchemas, type FormSchemaDto } from "./forms.js";
+import { deleteInstanceFromDb, isLazyCellsEnabled, saveInstanceCells } from "./instances.js";
 import {
   assertPeriodWritable,
   ensurePeriodFormSet,
@@ -15,6 +15,7 @@ import {
   type PeriodLifecycleStatus,
 } from "./periodLifecycle.js";
 import { saveRashEntries } from "./rash-data.js";
+import { withTiming } from "./perf.js";
 import type { OkoFormInstance } from "./types.js";
 
 export interface OrganizationDto {
@@ -832,23 +833,7 @@ export async function setWorkContext(
 }
 
 function buildInitialRows(schema: FormSchemaDto): Record<string, string | number>[] {
-  if (schema.rows.length > 0) {
-    return schema.rows.map((t) => {
-      const row: Record<string, string | number> = {};
-      for (const col of schema.columns) row[col.key] = "";
-      if (t.num) row.num = t.num;
-      if (t.code) row.code = t.code;
-      if (t.name) row.name = t.name;
-      const accountCode = t.code ?? t.num;
-      if (schema.columns.some((c) => c.key === "account") && accountCode) {
-        row.account = `${accountCode} ${t.name ?? ""}`.trim();
-      }
-      return row;
-    });
-  }
-  const row: Record<string, string | number> = {};
-  for (const col of schema.columns) row[col.key] = "";
-  return [row];
+  return buildInitialRowsFromSchema(schema);
 }
 
 function defaultDisplayName(
@@ -1752,91 +1737,118 @@ export async function exportReportPackagesBulk(
 export async function createReportPackage(
   db: OkoDb,
   zid: number,
-  eid: number
+  eid: number,
+  opts?: {
+    onProgress?: (progress: number, message?: string) => void | Promise<void>;
+  }
 ): Promise<CreatePackageResult> {
-  await assertPeriodWritable(db, eid, zid);
-
-  const org = (await db
-    .prepare("SELECT name FROM organizations WHERE zid = ?")
-    .get(zid)) as { name: string } | undefined;
-  if (!org) throw new Error("Organization not found");
-
-  const period = (await db
-    .prepare("SELECT name, period_start, period_end FROM periods WHERE eid = ? AND zid = ?")
-    .get(eid, zid)) as
-    | { name: string; period_start: string | null; period_end: string | null }
-    | undefined;
-  if (!period) throw new Error("Period not found");
-
-  const formSet = await ensurePeriodFormSet(db, eid);
-  const existing = await existingTemplatesForPackage(db, zid, eid);
-  const now = new Date().toISOString();
-  const instanceIds: string[] = [];
   let created = 0;
   let skipped = 0;
+  let total = 0;
+  let instances = 0;
 
-  const enterpriseCode = await (async () => {
-    const row = (await db
-      .prepare("SELECT value FROM app_settings WHERE key = 'globalMeta'")
-      .get()) as { value: string } | undefined;
-    if (!row) return "1@1";
-    try {
-      const meta = JSON.parse(row.value) as { enterpriseCode?: string };
-      return meta.enterpriseCode ?? "1@1";
-    } catch {
-      return "1@1";
-    }
-  })();
+  return withTiming(
+    "packages.create",
+    async () => {
+      await assertPeriodWritable(db, eid, zid);
+      await opts?.onProgress?.(5, "Проверка периода");
 
-  const toCreate = formSet.filter((entry) => !existing.has(entry.formId));
-  skipped += formSet.length - toCreate.length;
+      const org = (await db
+        .prepare("SELECT name FROM organizations WHERE zid = ?")
+        .get(zid)) as { name: string } | undefined;
+      if (!org) throw new Error("Organization not found");
 
-  const schemas = await loadFormSchemas(
-    db,
-    toCreate.map((e) => e.formId)
+      const period = (await db
+        .prepare("SELECT name, period_start, period_end FROM periods WHERE eid = ? AND zid = ?")
+        .get(eid, zid)) as
+        | { name: string; period_start: string | null; period_end: string | null }
+        | undefined;
+      if (!period) throw new Error("Period not found");
+
+      const formSet = await ensurePeriodFormSet(db, eid);
+      const existing = await existingTemplatesForPackage(db, zid, eid);
+      const now = new Date().toISOString();
+      const instanceIds: string[] = [];
+      created = 0;
+      skipped = 0;
+      total = formSet.length;
+
+      const enterpriseCode = await (async () => {
+        const row = (await db
+          .prepare("SELECT value FROM app_settings WHERE key = 'globalMeta'")
+          .get()) as { value: string } | undefined;
+        if (!row) return "1@1";
+        try {
+          const meta = JSON.parse(row.value) as { enterpriseCode?: string };
+          return meta.enterpriseCode ?? "1@1";
+        } catch {
+          return "1@1";
+        }
+      })();
+
+      const toCreate = formSet.filter((entry) => !existing.has(entry.formId));
+      skipped += formSet.length - toCreate.length;
+
+      await opts?.onProgress?.(15, `Загрузка схем (${toCreate.length})`);
+      const schemas = await loadFormSchemas(
+        db,
+        toCreate.map((e) => e.formId)
+      );
+
+      await db.transaction(async (tx) => {
+        let i = 0;
+        for (const entry of toCreate) {
+          const schema = schemas.get(entry.formId);
+          if (!schema) {
+            skipped++;
+            continue;
+          }
+
+          const signatures: Record<string, string> = {};
+          for (const name of schema.signatures) signatures[name] = "";
+
+          const schemaVersion = entry.schemaVersion || schema.schemaVersion || 1;
+          const inst: OkoFormInstance = {
+            instanceId: randomUUID(),
+            templateId: schema.id,
+            templateTitle: schema.title,
+            displayName: defaultDisplayName(schema.id, schema.title, org.name),
+            zid,
+            eid,
+            templateSchemaVersion: schemaVersion,
+            meta: {
+              organization: org.name,
+              enterpriseCode,
+              periodStart: dateToString(period.period_start),
+              periodEnd: dateToString(period.period_end),
+              unit: schema.meta.unit || "тыс.руб.",
+            },
+            rows: isLazyCellsEnabled() ? [] : buildInitialRows(schema),
+            signatures,
+            status: "draft",
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          await saveInstanceCells(tx, inst, {
+            materializeCells: !isLazyCellsEnabled(),
+          });
+          instanceIds.push(inst.instanceId);
+          created++;
+          i++;
+          if (toCreate.length > 0 && (i === 1 || i === toCreate.length || i % 5 === 0)) {
+            const pct = 15 + Math.round((i / toCreate.length) * 80);
+            await opts?.onProgress?.(pct, `Формы: ${i}/${toCreate.length}`);
+          }
+        }
+      });
+
+      instances = instanceIds.length;
+      await opts?.onProgress?.(100, "Готово");
+      return { created, skipped, total, instanceIds };
+    },
+    () => ({ zid, eid, created, skipped, total, instances })
   );
-
-  await db.transaction(async (tx) => {
-    for (const entry of toCreate) {
-      const schema = schemas.get(entry.formId);
-      if (!schema) {
-        skipped++;
-        continue;
-      }
-
-      const signatures: Record<string, string> = {};
-      for (const name of schema.signatures) signatures[name] = "";
-
-      const schemaVersion = entry.schemaVersion || schema.schemaVersion || 1;
-      const inst: OkoFormInstance = {
-        instanceId: randomUUID(),
-        templateId: schema.id,
-        templateTitle: schema.title,
-        displayName: defaultDisplayName(schema.id, schema.title, org.name),
-        zid,
-        eid,
-        templateSchemaVersion: schemaVersion,
-        meta: {
-          organization: org.name,
-          enterpriseCode,
-          periodStart: dateToString(period.period_start),
-          periodEnd: dateToString(period.period_end),
-          unit: schema.meta.unit || "тыс.руб.",
-        },
-        rows: buildInitialRows(schema),
-        signatures,
-        status: "draft",
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await saveInstanceCells(tx, inst);
-      instanceIds.push(inst.instanceId);
-      created++;
-    }
-  });
-
-  return { created, skipped, total: formSet.length, instanceIds };
 }
 
 export async function distributePackagesToChildren(

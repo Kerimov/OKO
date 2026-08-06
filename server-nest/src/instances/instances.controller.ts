@@ -78,9 +78,26 @@ export class InstancesController {
 
   @Get("eval-snapshot")
   @ApiOperation({ summary: "Снимок данных для движка проверок" })
-  async evalSnapshot(@Req() req: Request) {
-    const zid = userZid(req);
-    return buildEvalSnapshotFromDb(await getDb(), zid ?? undefined);
+  @ApiQuery({ name: "zid", required: false })
+  @ApiQuery({ name: "eid", required: false })
+  async evalSnapshot(
+    @Req() req: Request,
+    @Query("zid") zidRaw?: string,
+    @Query("eid") eidRaw?: string
+  ) {
+    const scoped = userZid(req);
+    const zid =
+      scoped != null
+        ? scoped
+        : zidRaw != null && zidRaw !== ""
+          ? Number(zidRaw)
+          : undefined;
+    const eid =
+      eidRaw != null && eidRaw !== "" ? Number(eidRaw) : undefined;
+    return buildEvalSnapshotFromDb(await getDb(), {
+      zid: zid != null && Number.isFinite(zid) ? zid : undefined,
+      eid: eid != null && Number.isFinite(eid) ? eid : undefined,
+    });
   }
 
   @Post("normalize")

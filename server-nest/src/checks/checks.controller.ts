@@ -23,9 +23,29 @@ import {
   getChecksStats,
   listCheckRules,
   reimportCheckRulesFromJson,
+  syncCheckRuleForms,
 } from "../../../server/src/checks.js";
+import { testCheckExpression } from "../../../server/src/checkTest.js";
 import { getDb } from "../../../server/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { IsNumber, IsOptional, IsString } from "class-validator";
+
+class TestCheckExpressionDto {
+  @IsString()
+  expression!: string;
+
+  @IsOptional()
+  @IsString()
+  expressionAlt?: string;
+
+  @IsOptional()
+  @IsNumber()
+  zid?: number;
+
+  @IsOptional()
+  @IsNumber()
+  eid?: number;
+}
 
 @ApiTags("checks")
 @ApiBearerAuth()
@@ -83,6 +103,27 @@ export class ChecksController {
     }
   }
 
+  @Post("test-expression")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Протестировать выражение увязки на данных сервера" })
+  async testExpression(@Body() body: TestCheckExpressionDto) {
+    if (!body?.expression?.trim() && !body?.expressionAlt?.trim()) {
+      throw new BadRequestException({ error: "expression required" });
+    }
+    try {
+      return await testCheckExpression(await getDb(), {
+        expression: body.expression ?? "",
+        expressionAlt: body.expressionAlt,
+        zid: body.zid,
+        eid: body.eid,
+      });
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "test failed",
+      });
+    }
+  }
+
   @Get(":number")
   @ApiOperation({ summary: "Увязка по номеру" })
   async getOne(@Param("number") numberRaw: string) {
@@ -121,6 +162,7 @@ export class ChecksController {
         r.period,
         r.info
       );
+      await syncCheckRuleForms(db, r.number, r.expression, r.expression_alt);
       return dto;
     } catch {
       throw new ConflictException({ error: "Rule number already exists" });
@@ -158,6 +200,7 @@ export class ChecksController {
     if (result.changes === 0) {
       throw new NotFoundException({ error: "Not found" });
     }
+    await syncCheckRuleForms(db, num, r.expression, r.expression_alt);
     return dto;
   }
 

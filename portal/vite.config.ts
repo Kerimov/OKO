@@ -10,4 +10,21 @@ export default defineConfig({
       "/api": { target: "http://localhost:3001", changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/exceljs") || id.includes("node_modules/exceljs/")) {
+            return "exceljs";
+          }
+          if (id.includes("node_modules/pdfmake")) {
+            return "pdfmake";
+          }
+          if (id.includes("node_modules/@univerjs") || id.includes("node_modules/@univer")) {
+            return "univer";
+          }
+        },
+      },
+    },
+  },
 });

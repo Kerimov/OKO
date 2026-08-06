@@ -23,7 +23,6 @@ import {
 import { listInstances, loadInstance } from "../../storage";
 import type { OkoFormInstance, PackageWorkspaceRow } from "../../types";
 import { bpStatusLabel, packageKindLabel } from "../../uiLabels";
-import { exportPackageToExcel } from "../../engine/exportExcel";
 import { loadSchema } from "../../api";
 import type { ExchangeMode } from "./tabs";
 import { Button, StatusBadge } from "../../components/ui";
@@ -502,6 +501,7 @@ export function PackageExportTab({ onStatus }: PackageExportTabProps) {
           )
         )
       );
+      const { exportPackageToExcel } = await import("../../engine/exportExcel");
       await exportPackageToExcel(instances, schemas);
       onStatus?.(
         `Excel: ${singleSelected.organizationName} · ${instances.length} форм`

@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import {
+  extractCellKRefs,
+  extractCellRefs,
+  extractCellSvRefs,
+} from "@oko/engine";
 import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
@@ -31,6 +36,53 @@ export interface CheckRuleDto {
 
 const CHECKS_JSON = path.join(ROOT, "portal", "public", "data", "checks.json");
 
+export function referencedFormsFromExpression(
+  expression: string,
+  expressionAlt?: string | null
+): string[] {
+  const full = `${expression ?? ""}\n${expressionAlt ?? ""}`;
+  const forms = new Set<string>();
+  for (const r of extractCellRefs(full)) {
+    if (r.form) forms.add(r.form);
+  }
+  for (const r of extractCellSvRefs(full)) {
+    if (r.form) forms.add(r.form);
+  }
+  for (const r of extractCellKRefs(full)) {
+    if (r.form) forms.add(r.form);
+  }
+  return [...forms].sort();
+}
+
+export async function syncCheckRuleForms(
+  db: OkoDb,
+  ruleNumber: number,
+  expression: string,
+  expressionAlt?: string | null
+): Promise<void> {
+  await db.prepare(`DELETE FROM check_rule_forms WHERE rule_number = ?`).run(ruleNumber);
+  const forms = referencedFormsFromExpression(expression, expressionAlt);
+  if (forms.length === 0) return;
+  const ins = db.prepare(
+    `INSERT INTO check_rule_forms (rule_number, form_id) VALUES (?, ?) ON CONFLICT DO NOTHING`
+  );
+  for (const formId of forms) {
+    await ins.run(ruleNumber, formId);
+  }
+}
+
+export async function backfillCheckRuleForms(db: OkoDb): Promise<number> {
+  const rows = (await db
+    .prepare(`SELECT number, expression, expression_alt FROM check_rules`)
+    .all()) as Array<{ number: number; expression: string; expression_alt: string | null }>;
+  let n = 0;
+  for (const r of rows) {
+    await syncCheckRuleForms(db, r.number, r.expression, r.expression_alt);
+    n++;
+  }
+  return n;
+}
+
 export async function migrateCheckRulesTable(db: OkoDb): Promise<void> {
   if (!(await db.columnExists("check_rules", "first_level"))) {
     await db.exec("ALTER TABLE check_rules ADD COLUMN first_level INTEGER DEFAULT 0");
@@ -41,6 +93,16 @@ export async function migrateCheckRulesTable(db: OkoDb): Promise<void> {
   if (!(await db.columnExists("check_rules", "info"))) {
     await db.exec("ALTER TABLE check_rules ADD COLUMN info TEXT");
   }
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS check_rule_forms (
+      rule_number INTEGER NOT NULL REFERENCES check_rules(number) ON DELETE CASCADE,
+      form_id TEXT NOT NULL,
+      PRIMARY KEY (rule_number, form_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_check_rule_forms_form ON check_rule_forms(form_id);
+    CREATE INDEX IF NOT EXISTS idx_check_rules_active_period
+      ON check_rules(active, period_active, number);
+  `);
 }
 
 export function rowToDto(row: CheckRuleRow): CheckRuleDto {
@@ -104,6 +166,7 @@ export async function seedCheckRulesFromJson(db: OkoDb): Promise<number> {
         r.period,
         r.info
       );
+      await syncCheckRuleForms(tx, r.number, r.expression, r.expression_alt);
     }
     return data.checks.length;
   });
@@ -116,6 +179,7 @@ export async function reimportCheckRulesFromJson(db: OkoDb): Promise<number> {
   const data = JSON.parse(fs.readFileSync(CHECKS_JSON, "utf-8")) as {
     checks: CheckRuleDto[];
   };
+  await db.exec("DELETE FROM check_rule_forms");
   await db.exec("DELETE FROM check_rules");
   return db.transaction(async (tx) => {
     const insert = tx.prepare(
@@ -138,6 +202,7 @@ export async function reimportCheckRulesFromJson(db: OkoDb): Promise<number> {
         r.period,
         r.info
       );
+      await syncCheckRuleForms(tx, r.number, r.expression, r.expression_alt);
     }
     return data.checks.length;
   });
@@ -190,8 +255,10 @@ export async function listCheckRules(db: OkoDb, options: ListCheckRulesOptions =
     params.push(like, like, like, like);
   }
   if (formId) {
-    conditions.push("(expression LIKE ? OR expression_alt LIKE ?)");
-    params.push(`%${formId}%`, `%${formId}%`);
+    conditions.push(
+      `number IN (SELECT rule_number FROM check_rule_forms WHERE form_id = ?)`
+    );
+    params.push(formId);
   }
   if (options.active === "1" || options.active === "true") {
     conditions.push("active = 1");

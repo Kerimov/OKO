@@ -39,6 +39,7 @@ import {
 } from "./instances.js";
 import { getFormCorrespondence, type FormCorrespondenceDto } from "./saldo.js";
 import type { OkoFormInstance } from "./types.js";
+import { withTiming } from "./perf.js";
 import { ROOT } from "./paths.js";
 import { loadEffectiveRashRefsByName } from "./rashRefs.js";
 
@@ -762,6 +763,36 @@ export async function previewPackageAggregation(
   db: OkoDb,
   options: RunAggregationOptions
 ): Promise<AggregationPreview> {
+  let childrenCount = 0;
+  let formsCount = 0;
+  let willAgg = 0;
+  let willSkip = 0;
+  return withTiming(
+    "aggregation.preview",
+    async () => {
+      const result = await previewPackageAggregationImpl(db, options);
+      childrenCount = result.children.length;
+      formsCount = result.forms.length;
+      willAgg = result.willAggregate;
+      willSkip = result.willSkip;
+      return result;
+    },
+    () => ({
+      parentZid: options.parentZid,
+      eid: options.eid,
+      targetZid: options.targetZid ?? options.parentZid,
+      children: childrenCount,
+      forms: formsCount,
+      willAggregate: willAgg,
+      willSkip,
+    })
+  );
+}
+
+async function previewPackageAggregationImpl(
+  db: OkoDb,
+  options: RunAggregationOptions
+): Promise<AggregationPreview> {
   const {
     parentZid,
     eid,
@@ -881,6 +912,33 @@ export async function runPackageAggregation(
       ? { parentZid: parentZidOrOpts, eid: eidMaybe! }
       : parentZidOrOpts;
 
+  let aggregated = 0;
+  let skipped = 0;
+  let childrenCount = 0;
+  return withTiming(
+    "aggregation.run",
+    async () => {
+      const result = await runPackageAggregationImpl(db, options);
+      aggregated = result.aggregated;
+      skipped = result.skipped;
+      childrenCount = result.children.length;
+      return result;
+    },
+    () => ({
+      parentZid: options.parentZid,
+      eid: options.eid,
+      targetZid: options.targetZid ?? options.parentZid,
+      children: childrenCount,
+      aggregated,
+      skipped,
+    })
+  );
+}
+
+async function runPackageAggregationImpl(
+  db: OkoDb,
+  options: RunAggregationOptions
+): Promise<RunAggregationResult> {
   const {
     parentZid,
     eid,
@@ -906,6 +964,10 @@ export async function runPackageAggregation(
   const catalog = await exportCatalog(db);
   const formFilter =
     options.formIds && options.formIds.length > 0 ? new Set(options.formIds) : null;
+  const candidateFormIds = catalog.forms
+    .filter((f) => !formFilter || formFilter.has(f.id))
+    .map((f) => f.id);
+  const recalcCtx = recalc ? await buildAggregationRecalcContext(db, candidateFormIds) : null;
 
   await acquireAggregationLock(db, parentZid, eid, lockedBy);
   try {
@@ -1002,8 +1064,8 @@ export async function runPackageAggregation(
         const now = new Date().toISOString();
 
         let rows = summed.rows;
-        if (recalc) {
-          rows = await recalcAggregatedRows(tx, form.id, rows);
+        if (recalcCtx) {
+          rows = recalcAggregatedRowsWithContext(form.id, rows, recalcCtx);
         }
 
         const modeLabel =
@@ -1062,38 +1124,64 @@ export async function runPackageAggregation(
   }
 }
 
+type AggregationRecalcContext = {
+  schemas: Map<string, import("./forms.js").FormSchemaDto>;
+  rulesByForm: Map<string, RecalcRule[]>;
+};
+
+async function buildAggregationRecalcContext(
+  db: OkoDb,
+  formIds: string[]
+): Promise<AggregationRecalcContext> {
+  const { loadFormSchemas } = await import("./forms.js");
+  const schemas = await loadFormSchemas(db, formIds);
+  const modernPath = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
+  const legacyPath = path.join(ROOT, "portal", "public", "data", "row-formulas.json");
+  let modernByForm: Record<string, RecalcRule[]> | undefined;
+  let legacyByForm: Record<string, RowFormula[]> | undefined;
+  if (fs.existsSync(modernPath)) {
+    const data = JSON.parse(fs.readFileSync(modernPath, "utf-8")) as {
+      byForm?: Record<string, RecalcRule[]>;
+    };
+    modernByForm = data.byForm;
+  }
+  if (fs.existsSync(legacyPath)) {
+    const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8")) as {
+      byForm?: Record<string, RowFormula[]>;
+    };
+    legacyByForm = data.byForm;
+  }
+  const rulesByForm = new Map<string, RecalcRule[]>();
+  for (const formId of formIds) {
+    const rules = mergeRules(modernByForm?.[formId], legacyByForm?.[formId]);
+    if (rules.length > 0) rulesByForm.set(formId, rules);
+  }
+  return { schemas, rulesByForm };
+}
+
+function recalcAggregatedRowsWithContext(
+  formId: string,
+  rows: OkoFormInstance["rows"],
+  ctx: AggregationRecalcContext
+): OkoFormInstance["rows"] {
+  try {
+    const schema = ctx.schemas.get(formId);
+    const rules = ctx.rulesByForm.get(formId);
+    if (!schema || !rules || rules.length === 0) return rows;
+    return recalcRowsFull(schema as never, rows, rules);
+  } catch {
+    return rows;
+  }
+}
+
+/** @deprecated Prefer buildAggregationRecalcContext + recalcAggregatedRowsWithContext */
 async function recalcAggregatedRows(
   db: OkoDb,
   formId: string,
   rows: OkoFormInstance["rows"]
 ): Promise<OkoFormInstance["rows"]> {
-  try {
-    const { loadFormSchema } = await import("./forms.js");
-    const schema = await loadFormSchema(db, formId);
-    if (!schema) return rows;
-
-    const modernPath = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
-    const legacyPath = path.join(ROOT, "portal", "public", "data", "row-formulas.json");
-    let modern: RecalcRule[] | undefined;
-    let legacy: RowFormula[] | undefined;
-    if (fs.existsSync(modernPath)) {
-      const data = JSON.parse(fs.readFileSync(modernPath, "utf-8")) as {
-        byForm?: Record<string, RecalcRule[]>;
-      };
-      modern = data.byForm?.[formId];
-    }
-    if (fs.existsSync(legacyPath)) {
-      const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8")) as {
-        byForm?: Record<string, RowFormula[]>;
-      };
-      legacy = data.byForm?.[formId];
-    }
-    const rules = mergeRules(modern, legacy);
-    if (rules.length === 0) return rows;
-    return recalcRowsFull(schema as never, rows, rules);
-  } catch {
-    return rows;
-  }
+  const ctx = await buildAggregationRecalcContext(db, [formId]);
+  return recalcAggregatedRowsWithContext(formId, rows, ctx);
 }
 
 export type CorrSetKind = "correct" | "mirror";
