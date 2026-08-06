@@ -152,8 +152,13 @@
   padding-right: 0.25rem;
 }
 
+.package-workspace-list-scroll > * {
+  flex-shrink: 0;
+}
+
 .package-workspace-item {
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
   border-color: #d8e5f0;
   border-radius: 18px;
   background: #ffffff;
@@ -182,6 +187,9 @@
 
 .package-workspace-item-body {
   padding: 0.75rem 0.8rem;
+  white-space: normal;
+  overflow: visible;
+  height: auto;
 }
 
 .package-workspace-item-title {

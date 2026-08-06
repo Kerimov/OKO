@@ -3305,9 +3305,14 @@ a.btn:hover {
   gap: 0.4rem;
 }
 
+.package-workspace-list-scroll > * {
+  flex-shrink: 0;
+}
+
 .package-workspace-item {
   display: flex;
   align-items: flex-start;
+  flex-shrink: 0;
   gap: 0.35rem;
   text-align: left;
   border: 1px solid var(--border);
@@ -3316,6 +3321,7 @@ a.btn:hover {
   padding: 0.45rem 0.5rem 0.45rem 0.4rem;
   color: inherit;
   font: inherit;
+  overflow: visible;
 }
 
 .package-workspace-item-check {
@@ -3335,6 +3341,9 @@ a.btn:hover {
   cursor: pointer;
   color: inherit;
   font: inherit;
+  white-space: normal;
+  overflow: visible;
+  height: auto;
 }
 
 .package-workspace-item:hover {
