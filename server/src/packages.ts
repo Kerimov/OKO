@@ -637,6 +637,56 @@ export async function createOrganization(
   };
 }
 
+export async function updateOrganization(
+  db: OkoDb,
+  zid: number,
+  input: { name: string; code?: string | null; parentZid?: number | null }
+): Promise<OrganizationDto> {
+  const existing = await db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(zid);
+  if (!existing) throw new Error(`Организация ZID=${zid} не найдена`);
+  const name = input.name.trim();
+  if (!name) throw new Error("Укажите наименование");
+  const code =
+    input.code === undefined
+      ? (
+          (await db
+            .prepare("SELECT code FROM organizations WHERE zid = ?")
+            .get(zid)) as { code: string | null }
+        ).code
+      : input.code?.trim() || null;
+  const parentZid =
+    input.parentZid === undefined
+      ? (
+          (await db
+            .prepare("SELECT parent_zid FROM organizations WHERE zid = ?")
+            .get(zid)) as { parent_zid: number | null }
+        ).parent_zid
+      : input.parentZid;
+  if (parentZid != null && parentZid === zid) {
+    throw new Error("Организация не может быть головной для самой себя");
+  }
+  if (parentZid != null) {
+    const parent = await db
+      .prepare("SELECT 1 FROM organizations WHERE zid = ?")
+      .get(parentZid);
+    if (!parent) throw new Error(`Головная организация ZID=${parentZid} не найдена`);
+  }
+  const composite = `${zid}@${code || zid}`;
+  await db
+    .prepare(
+      `UPDATE organizations
+       SET name = ?, code = ?, parent_zid = ?, composite_code = ?
+       WHERE zid = ?`
+    )
+    .run(name, code, parentZid, composite, zid);
+  return {
+    zid,
+    name,
+    code,
+    parentZid: parentZid ?? null,
+  };
+}
+
 export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]> {
   const select = `SELECT p.eid, p.zid, p.package_id, p.name, p.period_start, p.period_end, p.quarter, p.year,
               p.package_status, p.package_comment,

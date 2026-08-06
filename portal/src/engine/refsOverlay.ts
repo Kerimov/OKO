@@ -108,11 +108,15 @@ export interface UsedRefDirectory {
   itemCount: number;
   /** True when kind is Контрагент (edited in /admin/refs as a table). */
   isKontr: boolean;
+  /** True when kind is Организации (portal orgs / ZID). */
+  isOrg?: boolean;
   /** True when overlay replaces bundled content. */
   overridden: boolean;
   /** Hide Access-internal helpers by default. */
   technical: boolean;
 }
+
+export const ORG_REF_KIND = "Организации";
 
 function isTechnicalGroup(name: string): boolean {
   const n = name.trim();
@@ -145,6 +149,8 @@ export function listRefDirectories(
 
   // Always surface Контрагент — primary A1 directory.
   if (!usage.has("Контрагент")) usage.set("Контрагент", 0);
+  // Portal organizations (ZID) — managed as a directory with cards.
+  if (!usage.has(ORG_REF_KIND)) usage.set(ORG_REF_KIND, 0);
 
   const names = new Set<string>([
     ...Object.keys(refs.byName ?? {}),
@@ -155,18 +161,24 @@ export function listRefDirectories(
   const out: UsedRefDirectory[] = [];
   for (const kind of names) {
     const isKontr = kind.toLowerCase() === "контрагент";
-    const itemCount = isKontr ? 0 : (refs.byName[kind]?.length ?? 0);
+    const isOrg = kind === ORG_REF_KIND;
+    const itemCount = isKontr || isOrg ? 0 : (refs.byName[kind]?.length ?? 0);
     out.push({
       kind,
       ruleCount: usage.get(kind) ?? 0,
       itemCount,
       isKontr,
+      isOrg,
       overridden: Boolean(overlay?.byName && kind in overlay.byName),
       technical: isTechnicalGroup(kind),
     });
   }
 
   return out.sort((a, b) => {
+    const aPin = a.isKontr || a.isOrg;
+    const bPin = b.isKontr || b.isOrg;
+    if (aPin !== bPin) return aPin ? -1 : 1;
+    if (a.isOrg !== b.isOrg) return a.isOrg ? -1 : 1;
     if (a.isKontr !== b.isKontr) return a.isKontr ? -1 : 1;
     if ((a.ruleCount > 0) !== (b.ruleCount > 0)) return a.ruleCount > 0 ? -1 : 1;
     if (a.technical !== b.technical) return a.technical ? 1 : -1;

@@ -28,6 +28,23 @@ export class CreateOrganizationDto {
   parentZid?: number;
 }
 
+export class UpdateOrganizationDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  code?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  parentZid?: number | null;
+}
+
 export class CreatePeriodDto {
   @ApiProperty()
   @IsNumber()

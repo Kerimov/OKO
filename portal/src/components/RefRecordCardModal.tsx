@@ -13,6 +13,16 @@ export type KontrCardDraft = {
   dirty?: boolean;
 };
 
+export type OrgCardDraft = {
+  zid: number | null;
+  name: string;
+  code: string;
+  parentZid: number | "";
+  isNew?: boolean;
+};
+
+export type OrgParentOption = { zid: number; label: string };
+
 function orgTypeLabel(v: string): string {
   if (v === "1") return "1 ВГ";
   if (v === "2") return "2 assoc";
@@ -42,7 +52,17 @@ type KontrProps = {
   onDelete?: () => void | Promise<void>;
 };
 
-type Props = ClassifierProps | KontrProps;
+type OrgProps = {
+  kind: "org";
+  item: OrgCardDraft;
+  parentOptions: OrgParentOption[];
+  canEdit: boolean;
+  busy?: boolean;
+  onSave: (item: OrgCardDraft) => void | Promise<void>;
+  onClose: () => void;
+};
+
+type Props = ClassifierProps | KontrProps | OrgProps;
 
 export function RefRecordCardModal(props: Props) {
   const [draft, setDraft] = useState(props.item);
@@ -58,7 +78,11 @@ export function RefRecordCardModal(props: Props) {
       ? (draft as KontrCardDraft).id != null
         ? `Контрагент #${(draft as KontrCardDraft).id}`
         : "Новый контрагент"
-      : `Запись · ${props.directoryTitle}`;
+      : props.kind === "org"
+        ? (draft as OrgCardDraft).zid != null
+          ? `Организация ZID ${(draft as OrgCardDraft).zid}`
+          : "Новая организация"
+        : `Запись · ${props.directoryTitle}`;
 
   const patchDraft = (patch: Record<string, unknown>) => {
     setDraft((prev) => ({ ...prev, ...patch }) as typeof prev);
@@ -70,6 +94,8 @@ export function RefRecordCardModal(props: Props) {
     try {
       if (props.kind === "kontr") {
         await props.onSave(draft as KontrCardDraft);
+      } else if (props.kind === "org") {
+        await props.onSave(draft as OrgCardDraft);
       } else {
         await props.onSave(draft as RashRefItem);
       }
@@ -79,7 +105,9 @@ export function RefRecordCardModal(props: Props) {
   };
 
   const handleDelete = async () => {
-    if (!props.onDelete || busy) return;
+    if (props.kind === "org" || !("onDelete" in props) || !props.onDelete || busy) {
+      return;
+    }
     setLocalBusy(true);
     try {
       await props.onDelete();
@@ -181,6 +209,87 @@ export function RefRecordCardModal(props: Props) {
                 </label>
               )}
             </>
+          ) : props.kind === "org" ? (
+            <>
+              <label className="refs-entry-field">
+                <span>Наименование</span>
+                {props.canEdit ? (
+                  <input
+                    autoFocus
+                    value={(draft as OrgCardDraft).name}
+                    disabled={busy}
+                    onChange={(e) => patchDraft({ name: e.target.value })}
+                  />
+                ) : (
+                  <strong>{(draft as OrgCardDraft).name || "—"}</strong>
+                )}
+              </label>
+              <div className="refs-entry-card-grid">
+                <label className="refs-entry-field">
+                  <span>Код</span>
+                  {props.canEdit ? (
+                    <input
+                      value={(draft as OrgCardDraft).code}
+                      disabled={busy}
+                      onChange={(e) => patchDraft({ code: e.target.value })}
+                    />
+                  ) : (
+                    <span>{(draft as OrgCardDraft).code || "—"}</span>
+                  )}
+                </label>
+                <label className="refs-entry-field">
+                  <span>ZID</span>
+                  <strong>
+                    {(draft as OrgCardDraft).zid != null
+                      ? (draft as OrgCardDraft).zid
+                      : "назначится при сохранении"}
+                  </strong>
+                </label>
+              </div>
+              <label className="refs-entry-field">
+                <span>Головная организация</span>
+                {props.canEdit ? (
+                  <select
+                    value={
+                      (draft as OrgCardDraft).parentZid === ""
+                        ? ""
+                        : String((draft as OrgCardDraft).parentZid)
+                    }
+                    disabled={busy}
+                    onChange={(e) =>
+                      patchDraft({
+                        parentZid:
+                          e.target.value === "" ? "" : Number(e.target.value),
+                      })
+                    }
+                  >
+                    <option value="">— нет (корневая) —</option>
+                    {props.parentOptions
+                      .filter(
+                        (o) =>
+                          (draft as OrgCardDraft).zid == null ||
+                          o.zid !== (draft as OrgCardDraft).zid
+                      )
+                      .map((o) => (
+                        <option key={o.zid} value={o.zid}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <span>
+                    {(() => {
+                      const pid = (draft as OrgCardDraft).parentZid;
+                      if (pid === "" || pid == null) return "— нет —";
+                      return (
+                        props.parentOptions.find((o) => o.zid === pid)?.label ??
+                        `ZID ${pid}`
+                      );
+                    })()}
+                  </span>
+                )}
+              </label>
+            </>
           ) : (
             <>
               <label className="refs-entry-field">
@@ -273,7 +382,7 @@ export function RefRecordCardModal(props: Props) {
         </div>
 
         <footer className="refs-card-modal-footer">
-          {props.canEdit && props.onDelete && (
+          {props.canEdit && props.kind !== "org" && "onDelete" in props && props.onDelete && (
             <button
               type="button"
               className="btn btn-danger-outline btn-sm"

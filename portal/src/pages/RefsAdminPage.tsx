@@ -12,6 +12,7 @@ import {
   emptyRefsOverlay,
   listRefDirectories,
   loadRefsOverlay,
+  ORG_REF_KIND,
   saveRefsOverlay,
   type RefsOverlayPackage,
   type UsedRefDirectory,
@@ -21,6 +22,11 @@ import {
   validateClassifierItems,
   validateKontrDraftRow,
 } from "../engine/refsValidation";
+import {
+  createOrganization,
+  listOrganizations,
+  updateOrganization,
+} from "../packagesApi";
 import {
   archiveKontrVersion,
   createKontrVersion,
@@ -35,11 +41,14 @@ import {
   loadKontrAgents,
   reimportKontrAgents,
 } from "../storage";
-import type { KontrAgent, RashRule } from "../types";
+import type { KontrAgent, Organization, RashRule } from "../types";
 import { useAuth } from "../useAuth";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
-import { RefRecordCardModal } from "../components/RefRecordCardModal";
+import {
+  RefRecordCardModal,
+  type OrgCardDraft,
+} from "../components/RefRecordCardModal";
 
 type KontrDraft = {
   id: number | null;
@@ -92,6 +101,7 @@ export function RefsAdminPage() {
   const [baseRefs, setBaseRefs] = useState<RashRefsData | null>(null);
   const [overlay, setOverlay] = useState<RefsOverlayPackage>(emptyRefsOverlay());
   const [agents, setAgents] = useState<KontrAgent[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
   const [selectedKind, setSelectedKind] = useState<string | null>(null);
   const [draftItems, setDraftItems] = useState<RashRefItem[]>([]);
   const [kontrDraft, setKontrDraft] = useState<KontrDraft[]>([]);
@@ -113,10 +123,12 @@ export function RefsAdminPage() {
   const [versionsBusy, setVersionsBusy] = useState(false);
 
   const isKontr = selectedKind?.toLowerCase() === "контрагент";
+  const isOrg = selectedKind === ORG_REF_KIND;
   const isLoanGroup = selectedKind ? isLoanNzsGroup(selectedKind) : false;
   const canMutate = canMutateData();
   const canEditKontr = admin && backend && canMutate;
-  const canEditItems = admin && !isKontr && !isLoanGroup && canMutate;
+  const canEditOrgs = admin && canMutate;
+  const canEditItems = admin && !isKontr && !isOrg && !isLoanGroup && canMutate;
 
   const effectiveRefs = useMemo(() => {
     if (!baseRefs) return { version: "0", byName: {} } as RashRefsData;
@@ -125,17 +137,19 @@ export function RefsAdminPage() {
 
   const directories = useMemo(() => {
     const dirs = listRefDirectories(rules, effectiveRefs, overlay);
-    return dirs.map((d) =>
-      d.isKontr ? { ...d, itemCount: agents.length } : d
-    );
-  }, [rules, effectiveRefs, overlay, agents.length]);
+    return dirs.map((d) => {
+      if (d.isKontr) return { ...d, itemCount: agents.length };
+      if (d.isOrg) return { ...d, itemCount: orgs.length };
+      return d;
+    });
+  }, [rules, effectiveRefs, overlay, agents.length, orgs.length]);
 
   const visibleDirs = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return directories.filter((d) => {
       if (dirFilter === "used") {
-        if (d.technical && !d.isKontr) return false;
-        if (d.ruleCount === 0 && !d.isKontr) return false;
+        if (d.technical && !d.isKontr && !d.isOrg) return false;
+        if (d.ruleCount === 0 && !d.isKontr && !d.isOrg) return false;
       } else if (dirFilter === "edited") {
         if (!d.overridden) return false;
       } else if (dirFilter === "technical") {
@@ -153,8 +167,9 @@ export function RefsAdminPage() {
 
   const usedDirs = useMemo(() => {
     return [...directories]
-      .filter((d) => d.ruleCount > 0 || d.isKontr)
+      .filter((d) => d.ruleCount > 0 || d.isKontr || d.isOrg)
       .sort((a, b) => {
+        if (a.isOrg !== b.isOrg) return a.isOrg ? -1 : 1;
         if (a.isKontr !== b.isKontr) return a.isKontr ? -1 : 1;
         return b.ruleCount - a.ruleCount;
       });
@@ -167,13 +182,14 @@ export function RefsAdminPage() {
     setBaseLoadWarning("");
     try {
       clearRashRefsCache();
-      const [ov, rash, rawRes, kontr] = await Promise.all([
+      const [ov, rash, rawRes, kontr, orgList] = await Promise.all([
         loadRefsOverlay(),
         loadRashRules(),
         fetch("/data/rash-refs.json"),
         loadKontrAgents().catch((e) => {
           throw e instanceof Error ? e : new Error("Ошибка загрузки контрагентов");
         }),
+        listOrganizations().catch(() => [] as Organization[]),
       ]);
       let raw: RashRefsData = { version: "0", byName: {} };
       if (!rawRes.ok) {
@@ -196,6 +212,7 @@ export function RefsAdminPage() {
       setOverlay(ov);
       setRules(rash.rules ?? []);
       setAgents(kontr);
+      setOrgs(orgList);
       setDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки справочников");
@@ -220,6 +237,11 @@ export function RefsAdminPage() {
     if (selectedKind.toLowerCase() === "контрагент") {
       setDraftItems([]);
       setKontrDraft(agents.map(agentToDraft));
+      return;
+    }
+    if (selectedKind === ORG_REF_KIND) {
+      setDraftItems([]);
+      setKontrDraft([]);
       return;
     }
     setKontrDraft([]);
@@ -278,6 +300,23 @@ export function RefsAdminPage() {
     return out;
   }, [kontrDraft, itemQ]);
 
+  const filteredOrgIndexes = useMemo(() => {
+    const needle = itemQ.trim().toLowerCase();
+    const out: number[] = [];
+    orgs.forEach((it, idx) => {
+      if (
+        !needle ||
+        String(it.zid).includes(needle) ||
+        it.name.toLowerCase().includes(needle) ||
+        (it.code ?? "").toLowerCase().includes(needle) ||
+        String(it.parentZid ?? "").includes(needle)
+      ) {
+        out.push(idx);
+      }
+    });
+    return out;
+  }, [orgs, itemQ]);
+
   const pagedItemIndexes = useMemo(() => {
     const start = itemPage * PAGE_SIZE;
     return filteredItemIndexes.slice(start, start + PAGE_SIZE);
@@ -288,8 +327,23 @@ export function RefsAdminPage() {
     return filteredKontrIndexes.slice(start, start + PAGE_SIZE);
   }, [filteredKontrIndexes, itemPage]);
 
-  const totalFiltered = isKontr ? filteredKontrIndexes.length : filteredItemIndexes.length;
+  const pagedOrgIndexes = useMemo(() => {
+    const start = itemPage * PAGE_SIZE;
+    return filteredOrgIndexes.slice(start, start + PAGE_SIZE);
+  }, [filteredOrgIndexes, itemPage]);
+
+  const totalFiltered = isOrg
+    ? filteredOrgIndexes.length
+    : isKontr
+      ? filteredKontrIndexes.length
+      : filteredItemIndexes.length;
   const pageCount = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+
+  const orgParentLabel = (zid: number | null | undefined) => {
+    if (zid == null) return "—";
+    const p = orgs.find((o) => o.zid === zid);
+    return p ? `${p.name} (${p.zid})` : `ZID ${zid}`;
+  };
 
   const selectDir = (d: UsedRefDirectory) => {
     if (dirty && !confirm("Есть несохранённые изменения. Продолжить?")) return;
@@ -297,7 +351,7 @@ export function RefsAdminPage() {
     setSelectedKind(d.kind);
     setCardRowIndex(null);
     setCardCreating(false);
-    setSearchParams(d.kind === "Контрагент" ? { kind: "Контрагент" } : { kind: d.kind });
+    setSearchParams({ kind: d.kind });
     setStatus("");
     setError("");
   };
@@ -318,6 +372,20 @@ export function RefsAdminPage() {
     idObdnsi: "",
     isNew: true,
     dirty: true,
+  });
+  const emptyOrg = (): OrgCardDraft => ({
+    zid: null,
+    name: "",
+    code: "",
+    parentZid: "",
+    isNew: true,
+  });
+
+  const orgToCard = (o: Organization): OrgCardDraft => ({
+    zid: o.zid,
+    name: o.name,
+    code: o.code ?? "",
+    parentZid: o.parentZid ?? "",
   });
 
   const persistClassifierGroup = async (items: RashRefItem[]) => {
@@ -401,6 +469,42 @@ export function RefsAdminPage() {
     }
   };
 
+  const saveCardOrg = async (row: OrgCardDraft) => {
+    if (!admin || !canMutate) return;
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      if (!row.name.trim()) throw new Error("Укажите наименование");
+      const parentZid = row.parentZid === "" ? null : Number(row.parentZid);
+      if (row.zid != null && parentZid === row.zid) {
+        throw new Error("Организация не может быть головной для самой себя");
+      }
+      if (cardCreating || row.zid == null || row.isNew) {
+        const created = await createOrganization({
+          name: row.name.trim(),
+          code: row.code.trim() || undefined,
+          parentZid,
+        });
+        setStatus(`Организация «${created.name}» создана (ZID ${created.zid})`);
+      } else {
+        const updated = await updateOrganization(row.zid, {
+          name: row.name.trim(),
+          code: row.code.trim() || null,
+          parentZid,
+        });
+        setStatus(`Организация «${updated.name}» обновлена`);
+      }
+      setOrgs(await listOrganizations());
+      setDirty(false);
+      closeCard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteCardClassifier = async () => {
     if (!admin || !selectedKind || cardCreating || cardRowIndex == null) {
       closeCard();
@@ -426,6 +530,7 @@ export function RefsAdminPage() {
   };
 
   const removeItem = (idx: number) => {
+    if (isOrg) return;
     if (isKontr) {
       const row = kontrDraft[idx];
       if (row?.id != null) {
@@ -452,7 +557,7 @@ export function RefsAdminPage() {
   };
 
   const handleResetGroup = async () => {
-    if (!admin || !selectedKind || isKontr || isLoanGroup) return;
+    if (!admin || !selectedKind || isKontr || isOrg || isLoanGroup) return;
     if (!confirm(`Сбросить «${selectedKind}» к bundled JSON (убрать правки)?`)) return;
     setBusy(true);
     setError("");
@@ -623,8 +728,12 @@ export function RefsAdminPage() {
     }
   };
 
-  const usedCount = directories.filter((d) => d.ruleCount > 0 || d.isKontr).length;
-  const recordCount = isKontr ? kontrDraft.length : draftItems.length;
+  const usedCount = directories.filter((d) => d.ruleCount > 0 || d.isKontr || d.isOrg).length;
+  const recordCount = isOrg
+    ? orgs.length
+    : isKontr
+      ? kontrDraft.length
+      : draftItems.length;
   const selectedMeta = directories.find((d) => d.kind === selectedKind);
   const showNewkodCol = draftItems.some((it) => it.newkod);
 
@@ -722,13 +831,14 @@ export function RefsAdminPage() {
                     <button
                       type="button"
                       className={`refs-dir-item${selectedKind === d.kind ? " active" : ""}${
-                        d.isKontr ? " is-kontr" : ""
+                        d.isKontr || d.isOrg ? " is-kontr" : ""
                       }`}
                       onClick={() => selectDir(d)}
                       title={full}
                     >
                       <span className="refs-dir-name">{title}</span>
                       <span className="refs-dir-badges">
+                        {d.isOrg && <span className="refs-badge refs-badge-kontr">Орг.</span>}
                         {d.isKontr && <span className="refs-badge refs-badge-kontr">Контрагенты</span>}
                         {isLoanNzsGroup(d.kind) && (
                           <span className="refs-badge">KZS/НЗС</span>
@@ -740,7 +850,7 @@ export function RefsAdminPage() {
                           <span className="refs-badge refs-badge-edit">правки</span>
                         )}
                         <span className="refs-badge">{d.itemCount} зап.</span>
-                        {!d.isKontr && (
+                        {!d.isKontr && !d.isOrg && (
                           <span className="refs-badge">{d.ruleCount} прав.</span>
                         )}
                       </span>
@@ -759,8 +869,8 @@ export function RefsAdminPage() {
               <div className="refs-empty-state">
                 <h2>Выберите справочник</h2>
                 <p>
-                  Слева — классификаторы расшифровок и контрагенты. В списке записей
-                  откройте карточку двойным щелчком.
+                  Слева — организации, классификаторы расшифровок и контрагенты. В списке
+                  записей откройте карточку двойным щелчком.
                 </p>
                 <div className="refs-dir-cards">
                   {usedDirs.map((d) => {
@@ -769,13 +879,13 @@ export function RefsAdminPage() {
                       <button
                         key={d.kind}
                         type="button"
-                        className={`refs-dir-card${d.isKontr ? " is-kontr" : ""}`}
+                        className={`refs-dir-card${d.isKontr || d.isOrg ? " is-kontr" : ""}`}
                         title={full}
                         onClick={() => selectDir(d)}
                       >
                         <span className="refs-dir-card-title">{title}</span>
                         <span className="refs-dir-card-meta">
-                          {d.isKontr
+                          {d.isKontr || d.isOrg
                             ? `${d.itemCount} записей`
                             : `${d.ruleCount} правил · ${d.itemCount} записей`}
                         </span>
@@ -802,7 +912,11 @@ export function RefsAdminPage() {
                       {selectedMeta && selectedMeta.ruleCount > 0 && (
                         <span className="refs-badge">{selectedMeta.ruleCount} правил</span>
                       )}
-                      {isKontr ? (
+                      {isOrg ? (
+                        <span className="refs-badge refs-badge-kontr">
+                          {backend ? "API" : "local"}
+                        </span>
+                      ) : isKontr ? (
                         <span className="refs-badge refs-badge-kontr">
                           {backend ? "API" : "kontr.json"}
                         </span>
@@ -860,7 +974,7 @@ export function RefsAdminPage() {
                         )}
                       </>
                     )}
-                    {(canEditKontr || canEditItems) && (
+                    {(canEditKontr || canEditItems || canEditOrgs) && (
                       <>
                         <button
                           type="button"
@@ -901,7 +1015,51 @@ export function RefsAdminPage() {
                 )}
 
                 <div className="table-wrap refs-table-wrap">
-                  {isKontr ? (
+                  {isOrg ? (
+                    <table className="data-table refs-data-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "5rem" }} scope="col">
+                            ZID
+                          </th>
+                          <th scope="col">Наименование</th>
+                          <th style={{ width: "8rem" }} scope="col">
+                            Код
+                          </th>
+                          <th scope="col">Головная</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedOrgIndexes.map((realIdx) => {
+                          const it = orgs[realIdx];
+                          return (
+                            <tr
+                              key={it.zid}
+                              style={{ cursor: "pointer" }}
+                              title="Двойной щелчок — карточка"
+                              onDoubleClick={(e) => {
+                                e.preventDefault();
+                                setCardCreating(false);
+                                setCardRowIndex(realIdx);
+                              }}
+                            >
+                              <td className="muted">{it.zid}</td>
+                              <td>{it.name}</td>
+                              <td>{it.code ?? "—"}</td>
+                              <td>{orgParentLabel(it.parentZid)}</td>
+                            </tr>
+                          );
+                        })}
+                        {filteredOrgIndexes.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="muted">
+                              Нет организаций
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  ) : isKontr ? (
                     <>
                       <table className="data-table refs-data-table">
                         <thead>
@@ -1143,8 +1301,12 @@ export function RefsAdminPage() {
                     </button>
                     <span className="tools-hint">
                       Стр. {itemPage + 1} / {pageCount} · показано{" "}
-                      {isKontr ? pagedKontrIndexes.length : pagedItemIndexes.length} из{" "}
-                      {totalFiltered}
+                      {isOrg
+                        ? pagedOrgIndexes.length
+                        : isKontr
+                          ? pagedKontrIndexes.length
+                          : pagedItemIndexes.length}{" "}
+                      из {totalFiltered}
                     </span>
                     <button
                       type="button"
@@ -1157,6 +1319,24 @@ export function RefsAdminPage() {
                   </div>
                 )}
 
+                {(cardCreating || cardRowIndex != null) && isOrg && (
+                  <RefRecordCardModal
+                    kind="org"
+                    item={
+                      cardCreating
+                        ? emptyOrg()
+                        : orgToCard(orgs[cardRowIndex!])
+                    }
+                    parentOptions={orgs.map((o) => ({
+                      zid: o.zid,
+                      label: `${o.name} (${o.zid})`,
+                    }))}
+                    canEdit={canEditOrgs}
+                    busy={busy}
+                    onSave={(row) => void saveCardOrg(row)}
+                    onClose={closeCard}
+                  />
+                )}
                 {(cardCreating || cardRowIndex != null) && isKontr && (
                   <RefRecordCardModal
                     kind="kontr"
@@ -1183,7 +1363,9 @@ export function RefsAdminPage() {
                     }
                   />
                 )}
-                {(cardCreating || cardRowIndex != null) && !isKontr && (
+                {(cardCreating || cardRowIndex != null) &&
+                  !isKontr &&
+                  !isOrg && (
                   <RefRecordCardModal
                     kind="classifier"
                     directoryTitle={refListTitle(selectedKind).title}

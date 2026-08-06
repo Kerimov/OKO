@@ -17,7 +17,6 @@ import {
 } from "../components/ui";
 import {
   constructPackages,
-  createOrganization,
   createPeriod,
   createPeriodsBulk,
   createReportPackageAsync,
@@ -84,6 +83,7 @@ function ProgressMeter({ percent, label }: { percent: number; label?: string }) 
 
 type WorkspaceTab =
   | "period"
+  | "period-settings"
   | "overview"
   | "forms"
   | "bp"
@@ -104,7 +104,10 @@ type PeriodCampaign = {
   closedCount: number;
   /** closed = all closed; open = none closed; mixed = both */
   status: "open" | "closed" | "mixed";
+  /** Open packages with BP completed — can close without force. */
   closableCount: number;
+  /** Open packages still waiting on BP. */
+  blockedCloseCount: number;
 };
 
 function campaignKeyOf(r: {
@@ -192,8 +195,6 @@ export function PackagePage() {
   const [formSearch, setFormSearch] = useState("");
   const [formFilter, setFormFilter] = useState<FormFilter>("all");
 
-  const [newOrgName, setNewOrgName] = useState("");
-  const [newOrgParentZid, setNewOrgParentZid] = useState<number | "">("");
   const [newPeriodQuarter, setNewPeriodQuarter] = useState(
     () => currentReportingQuarter().quarter
   );
@@ -246,12 +247,15 @@ export function PackagePage() {
       const key = campaignKeyOf(r);
       const prev = map.get(key);
       const closable = r.periodStatus !== "closed" && r.bpStatus === "completed";
+      const blockedClose =
+        r.periodStatus !== "closed" && r.bpStatus !== "completed";
       if (prev) {
         prev.orgCount += 1;
         if (r.filled === 0) prev.withoutForms += 1;
         if (r.periodStatus === "closed") prev.closedCount += 1;
         else prev.openCount += 1;
         if (closable) prev.closableCount += 1;
+        if (blockedClose) prev.blockedCloseCount += 1;
       } else {
         map.set(key, {
           key,
@@ -265,6 +269,7 @@ export function PackagePage() {
           closedCount: r.periodStatus === "closed" ? 1 : 0,
           status: r.periodStatus === "closed" ? "closed" : "open",
           closableCount: closable ? 1 : 0,
+          blockedCloseCount: blockedClose ? 1 : 0,
         });
       }
     }
@@ -426,17 +431,29 @@ export function PackagePage() {
         const list = await loadList();
         const paramZid = Number(searchParams.get("zid"));
         const paramEid = Number(searchParams.get("eid"));
-        let initial: PackageWorkspaceRow | undefined;
-        if (Number.isFinite(paramZid) && paramZid > 0 && Number.isFinite(paramEid) && paramEid > 0) {
-          initial = list.find((r) => r.zid === paramZid && r.eid === paramEid);
-        }
-        if (!initial) initial = list[0];
-        if (initial) {
-          setZid(initial.zid);
-          setEid(initial.eid);
-          syncUrl(initial.zid, initial.eid);
-          await saveWorkContext({ zid: initial.zid, eid: initial.eid });
-          await loadDetail(initial.zid, initial.eid, initial.packageKind);
+        const hasUrlPackage =
+          Number.isFinite(paramZid) &&
+          paramZid > 0 &&
+          Number.isFinite(paramEid) &&
+          paramEid > 0;
+        const fromUrl = hasUrlPackage
+          ? list.find((r) => r.zid === paramZid && r.eid === paramEid)
+          : undefined;
+        if (fromUrl) {
+          setSelectedCampaignKey(campaignKeyOf(fromUrl));
+          setZid(fromUrl.zid);
+          setEid(fromUrl.eid);
+          syncUrl(fromUrl.zid, fromUrl.eid);
+          await saveWorkContext({ zid: fromUrl.zid, eid: fromUrl.eid });
+          await loadDetail(fromUrl.zid, fromUrl.eid, fromUrl.packageKind);
+          setTab("overview");
+        } else if (list[0]) {
+          // Period-first: open campaign list, do not pin a single org package.
+          setSelectedCampaignKey(campaignKeyOf(list[0]));
+          setZid("");
+          setEid("");
+          setDetail(null);
+          setTab("period");
         } else {
           setStatus("Комплектов пока нет — создайте организацию и период");
         }
@@ -594,27 +611,6 @@ export function PackagePage() {
     }
   };
 
-  const handleCreateOrg = async () => {
-    if (!newOrgName.trim()) return;
-    setBusy(true);
-    setStatus("");
-    try {
-      const org = await createOrganization({
-        name: newOrgName.trim(),
-        parentZid: newOrgParentZid === "" ? null : newOrgParentZid,
-      });
-      setNewOrgName("");
-      setNewOrgParentZid("");
-      await loadList();
-      setStatus(`Организация «${org.name}» создана`);
-      setTab("setup");
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка создания организации");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleCreatePeriod = async () => {
     if (!canMutate) return;
     if (
@@ -764,27 +760,27 @@ export function PackagePage() {
     }
   };
 
-  const handleCloseCampaign = async () => {
+  const handleCloseCampaign = async (opts?: { force?: boolean }) => {
     if (!selectedCampaign) return;
-    const targets = rows.filter(
-      (r) =>
-        campaignKeyOf(r) === selectedCampaign.key &&
-        r.periodStatus !== "closed" &&
-        r.bpStatus === "completed"
-    );
+    const force = Boolean(opts?.force);
+    const targets = rows.filter((r) => {
+      if (campaignKeyOf(r) !== selectedCampaign.key) return false;
+      if (r.periodStatus === "closed") return false;
+      if (force) return true;
+      return r.bpStatus === "completed";
+    });
     if (!targets.length) {
       setStatus(
-        "Нет комплектов для закрытия: нужен завершённый бизнес-процесс"
+        force
+          ? "Нет открытых комплектов для закрытия"
+          : "Нет комплектов для закрытия: сначала завершите бизнес-процесс или закройте принудительно в настройках периода"
       );
       return;
     }
-    if (
-      !confirm(
-        `Закрыть период «${selectedCampaign.periodName}» для ${targets.length} организаций? После закрытия формы нельзя будет редактировать.`
-      )
-    ) {
-      return;
-    }
+    const msg = force
+      ? `Принудительно закрыть период «${selectedCampaign.periodName}» для ${targets.length} организаций (БП может быть не завершён)? После закрытия формы нельзя будет редактировать.`
+      : `Закрыть период «${selectedCampaign.periodName}» для ${targets.length} организаций с завершённым БП? После закрытия формы нельзя будет редактировать.`;
+    if (!confirm(msg)) return;
     setBusy(true);
     setStatus("");
     let ok = 0;
@@ -792,7 +788,9 @@ export function PackagePage() {
     try {
       for (const r of targets) {
         try {
-          await closePeriod(r.zid, r.eid);
+          await closePeriod(r.zid, r.eid, {
+            requireAccepted: !force,
+          });
           ok += 1;
         } catch {
           fail += 1;
@@ -1435,45 +1433,80 @@ export function PackagePage() {
               className="package-workspace-create-btn"
               onClick={() => setTab("setup")}
             >
-              Настройка: создать орг.
+              Настройка
             </Button>
           )}
         </aside>
 
         <div className="package-workspace-detail">
-          {(selectedCampaign || selectedRow || canMutate) && (
+          {(selectedCampaign ||
+            (selectedRow &&
+              (tab === "overview" || tab === "forms" || tab === "bp")) ||
+            tab === "open-period" ||
+            tab === "setup" ||
+            tab === "fill-forms" ||
+            tab === "period-settings") && (
             <TabBar
               ariaLabel="Разделы"
               value={
-                tab === "open-period" || tab === "setup" || tab === "fill-forms"
+                tab === "open-period" ||
+                tab === "setup" ||
+                tab === "fill-forms" ||
+                tab === "period-settings"
                   ? tab
-                  : selectedRow && (tab === "overview" || tab === "forms" || tab === "bp")
+                  : tab === "overview" || tab === "forms" || tab === "bp"
                     ? tab
                     : "period"
               }
-              onChange={(id) => setTab(id as WorkspaceTab)}
+              onChange={(id) => {
+                const next = id as WorkspaceTab;
+                if (next === "period" || next === "period-settings") {
+                  setZid("");
+                  setEid("");
+                  setDetail(null);
+                }
+                setTab(next);
+              }}
               items={
                 (
                   [
                     ...(selectedCampaign
-                      ? ([["period", "Комплекты периода"]] as Array<
-                          [WorkspaceTab, string]
-                        >)
+                      ? ([
+                          [
+                            "period",
+                            tab === "overview" ||
+                            tab === "forms" ||
+                            tab === "bp"
+                              ? "← К периоду"
+                              : "Комплекты периода",
+                          ],
+                          ["period-settings", "Настройки периода"],
+                        ] as Array<[WorkspaceTab, string]>)
                       : []),
-                    ...(selectedRow
+                    ...(selectedRow &&
+                    (tab === "overview" || tab === "forms" || tab === "bp")
                       ? ([
                           ["overview", "Обзор"],
                           ["forms", "Формы"],
                           ["bp", "Бизнес-процесс"],
                         ] as Array<[WorkspaceTab, string]>)
                       : []),
-                    ...(canMutate
+                    ...(canMutate &&
+                    tab !== "overview" &&
+                    tab !== "forms" &&
+                    tab !== "bp"
                       ? ([["open-period", "Открыть период"]] as Array<
                           [WorkspaceTab, string]
                         >)
                       : []),
-                    ...(admin && canMutate
-                      ? ([["setup", "Настройка"]] as Array<[WorkspaceTab, string]>)
+                    ...(admin &&
+                    canMutate &&
+                    tab !== "overview" &&
+                    tab !== "forms" &&
+                    tab !== "bp"
+                      ? ([["setup", "Настройка"]] as Array<
+                          [WorkspaceTab, string]
+                        >)
                       : []),
                   ] as Array<[WorkspaceTab, string]>
                 ).map(([id, label]) => ({ id, label }))
@@ -1584,11 +1617,119 @@ export function PackagePage() {
             />
           ) : null}
 
+          {tab === "period-settings" && selectedCampaign && (
+            <section className="tools-section package-workspace-card">
+              <h2>
+                Настройки периода · {selectedCampaign.periodName} ·{" "}
+                {packageKindLabel(selectedCampaign.packageKind)}
+              </h2>
+              <p className="tools-hint">
+                {selectedCampaign.periodStart && selectedCampaign.periodEnd
+                  ? formatPeriod(
+                      selectedCampaign.periodStart,
+                      selectedCampaign.periodEnd
+                    )
+                  : ""}
+                {" · статус "}
+                <strong>
+                  {selectedCampaign.status === "closed"
+                    ? "закрыт"
+                    : selectedCampaign.status === "mixed"
+                      ? "частично закрыт"
+                      : "открыт"}
+                </strong>
+              </p>
+
+              <ul className="package-workspace-overview">
+                <li>
+                  Организаций: <strong>{selectedCampaign.orgCount}</strong>
+                </li>
+                <li>
+                  Открыто: <strong>{selectedCampaign.openCount}</strong>
+                  {" · закрыто: "}
+                  <strong>{selectedCampaign.closedCount}</strong>
+                </li>
+                <li>
+                  Готовы к закрытию (БП завершён):{" "}
+                  <strong>{selectedCampaign.closableCount}</strong>
+                </li>
+                <li>
+                  Ещё нельзя закрыть (БП не завершён):{" "}
+                  <strong>{selectedCampaign.blockedCloseCount}</strong>
+                </li>
+                <li>
+                  Без форм: <strong>{selectedCampaign.withoutForms}</strong>
+                </li>
+              </ul>
+
+              <h3>Закрытие и переоткрытие</h3>
+              <p className="tools-hint">
+                Обычное закрытие доступно для комплектов с завершённым
+                бизнес-процессом. После закрытия формы нельзя редактировать.
+              </p>
+              <div className="toolbar-actions">
+                {canMutate && (
+                  <Button
+                    disabled={busy || selectedCampaign.closableCount === 0}
+                    onClick={() => void handleCloseCampaign()}
+                  >
+                    Закрыть период
+                    {selectedCampaign.closableCount > 0
+                      ? ` (${selectedCampaign.closableCount})`
+                      : ""}
+                  </Button>
+                )}
+                {canMutate && admin && selectedCampaign.openCount > 0 && (
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void handleCloseCampaign({ force: true })}
+                  >
+                    Закрыть принудительно
+                    {selectedCampaign.openCount > 0
+                      ? ` (${selectedCampaign.openCount})`
+                      : ""}
+                  </Button>
+                )}
+                {canMutate && selectedCampaign.closedCount > 0 && (
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void handleReopenCampaign()}
+                  >
+                    Переоткрыть период
+                    {selectedCampaign.closedCount > 0
+                      ? ` (${selectedCampaign.closedCount})`
+                      : ""}
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => setTab("period")}
+                >
+                  К комплектам периода
+                </Button>
+              </div>
+              {canMutate &&
+              selectedCampaign.closableCount === 0 &&
+              selectedCampaign.openCount > 0 ? (
+                <p className="tools-hint" style={{ marginTop: 12 }}>
+                  Сейчас закрыть обычным способом нельзя: ни у одного комплекта
+                  БП не в статусе «Завершён».
+                  {admin
+                    ? " Администратор может закрыть принудительно."
+                    : " Завершите бизнес-процесс по организациям или обратитесь к администратору."}
+                </p>
+              ) : null}
+            </section>
+          )}
+
           {(tab === "period" ||
             (!selectedRow &&
               tab !== "open-period" &&
               tab !== "setup" &&
-              tab !== "fill-forms")) &&
+              tab !== "fill-forms" &&
+              tab !== "period-settings")) &&
           selectedCampaign ? (
             <section className="tools-section package-workspace-card">
               <div className="package-workspace-card-head">
@@ -1620,25 +1761,12 @@ export function PackagePage() {
                   </p>
                 </div>
                 <div className="toolbar-actions">
-                  {canMutate && selectedCampaign.closableCount > 0 && (
+                  {canMutate && (
                     <Button
                       variant="secondary"
-                      disabled={busy}
-                      onClick={() => void handleCloseCampaign()}
+                      onClick={() => setTab("period-settings")}
                     >
-                      Закрыть период
-                      {selectedCampaign.closableCount > 1
-                        ? ` (${selectedCampaign.closableCount})`
-                        : ""}
-                    </Button>
-                  )}
-                  {canMutate && selectedCampaign.closedCount > 0 && (
-                    <Button
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() => void handleReopenCampaign()}
-                    >
-                      Переоткрыть период
+                      Настройки периода
                     </Button>
                   )}
                 </div>
@@ -1913,7 +2041,8 @@ export function PackagePage() {
           !selectedRow &&
           tab !== "open-period" &&
           tab !== "setup" &&
-          tab !== "fill-forms" ? (
+          tab !== "fill-forms" &&
+          tab !== "period-settings" ? (
             <section className="tools-section">
               <h2>Период не выбран</h2>
               <p className="tools-hint">
@@ -1935,7 +2064,8 @@ export function PackagePage() {
           tab !== "open-period" &&
           tab !== "setup" &&
           tab !== "fill-forms" &&
-          tab !== "period" ? (
+          tab !== "period" &&
+          tab !== "period-settings" ? (
             <>
               <section className="tools-section package-workspace-card">
                 <div className="package-workspace-card-head">
@@ -2289,44 +2419,14 @@ export function PackagePage() {
 
                   {canMutate && (
                     <>
-                      <h3>Добавить организацию</h3>
-                      <div className="tools-grid">
-                        <label>
-                          Наименование
-                          <input
-                            value={newOrgName}
-                            onChange={(e) => setNewOrgName(e.target.value)}
-                            placeholder="ПАО «Газпром»"
-                          />
-                        </label>
-                        <label>
-                          Головная организация
-                          <select
-                            value={newOrgParentZid}
-                            onChange={(e) =>
-                              setNewOrgParentZid(
-                                e.target.value === "" ? "" : Number(e.target.value)
-                              )
-                            }
-                          >
-                            <option value="">— нет (корневая) —</option>
-                            {orgs.map((o) => (
-                              <option key={o.zid} value={o.zid}>
-                                {orgOptionLabel(o)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ marginTop: 8, marginBottom: 16 }}
-                        disabled={busy || !newOrgName.trim()}
-                        onClick={() => void handleCreateOrg()}
-                      >
-                        Создать организацию
-                      </button>
+                      <h3>Организации</h3>
+                      <p className="tools-hint">
+                        Создание и карточки организаций — в справочнике{" "}
+                        <Link to="/admin/refs?kind=Организации">
+                          Справочники → Организации
+                        </Link>
+                        .
+                      </p>
                       <p className="tools-hint">
                         Период — в списке слева и «Открыть период». Комплекты
                         создаются внутри выбранного периода. Закрытие — на

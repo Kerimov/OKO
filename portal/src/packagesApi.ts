@@ -153,6 +153,38 @@ export async function createOrganization(input: {
   return org;
 }
 
+export async function updateOrganization(
+  zid: number,
+  input: { name: string; code?: string | null; parentZid?: number | null }
+): Promise<Organization> {
+  if (isBackendMode()) {
+    return apiFetch<Organization>(`/api/organizations/${zid}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+  await ensureLocalDefaults();
+  const orgs = readLocalOrgs();
+  const idx = orgs.findIndex((o) => o.zid === zid);
+  if (idx < 0) throw new Error(`Организация ZID=${zid} не найдена`);
+  if (input.parentZid != null && input.parentZid === zid) {
+    throw new Error("Организация не может быть головной для самой себя");
+  }
+  const next: Organization = {
+    ...orgs[idx],
+    name: input.name.trim(),
+    code:
+      input.code === undefined
+        ? orgs[idx].code
+        : input.code?.trim() || null,
+    parentZid:
+      input.parentZid === undefined ? orgs[idx].parentZid : input.parentZid,
+  };
+  orgs[idx] = next;
+  writeLocalOrgs(orgs);
+  return next;
+}
+
 export async function listPeriods(zid?: number): Promise<ReportingPeriod[]> {
   if (isBackendMode()) {
     const q = zid != null ? `?zid=${zid}` : "";
