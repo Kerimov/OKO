@@ -339,7 +339,6 @@ export function PackagePage() {
   const checkedDeletableRows = useMemo(
     () =>
       checkedRows.filter((r) => {
-        if (r.periodStatus === "closed") return false;
         if (admin) return true;
         return orgZid != null && r.zid === orgZid;
       }),
@@ -511,8 +510,11 @@ export function PackagePage() {
       !confirm(
         `Удалить комплект «${selectedRow.organizationName} — ${selectedRow.periodName}»?\n\n` +
           (filled > 0 ? `Будут удалены все формы (${filled}).\n` : "Форм нет.\n") +
-          "Также будут удалены БП, набор форм периода и связанные данные комплекта.\n" +
-          "Отчётный период будет удалён. Действие необратимо."
+          "Также будут удалены БП, набор форм, проверки, своды, inbox, переносы и прочие связи комплекта.\n" +
+          (periodClosed || selectedRow.bpStatus === "completed"
+            ? "Комплект закрыт/завершён — удаление всё равно выполнится.\n"
+            : "") +
+          "Действие необратимо."
       )
     ) {
       return;
@@ -674,21 +676,25 @@ export function PackagePage() {
   const handleBulkDelete = async () => {
     if (!canBulkDelete || checkedDeletableRows.length === 0) {
       if (checkedRows.length > 0) {
-        setStatus(
-          "Нет комплектов, доступных для удаления (закрытые периоды пропускаются)"
-        );
+        setStatus("Нет комплектов, доступных для удаления (нет прав на выбранные)");
       }
       return;
     }
     const toDelete = checkedDeletableRows;
     const filledSum = toDelete.reduce((s, r) => s + r.filled, 0);
+    const closedOrDone = toDelete.filter(
+      (r) => r.periodStatus === "closed" || r.bpStatus === "completed"
+    ).length;
     if (
       !confirm(
         `Удалить выбранные комплекты: ${toDelete.length}?\n\n` +
           (filledSum > 0
             ? `Будут удалены формы (всего заведено: ${filledSum}).\n`
             : "") +
-          "Также будут удалены БП и связанные данные каждого комплекта.\n" +
+          "Также будут удалены БП и все связанные данные каждого комплекта.\n" +
+          (closedOrDone > 0
+            ? `Среди них закрытых/завершённых: ${closedOrDone} — они тоже будут удалены.\n`
+            : "") +
           "Действие необратимо."
       )
     ) {
@@ -1521,7 +1527,7 @@ export function PackagePage() {
                         Переоткрыть период
                       </button>
                     )}
-                    {canDeletePackage && canMutate && !periodClosed && (
+                    {canDeletePackage && canMutate && (
                       <button
                         type="button"
                         className="btn btn-danger-outline"

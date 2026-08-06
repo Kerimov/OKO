@@ -1299,29 +1299,97 @@ async function listPackageInstanceIds(
   return [...ids];
 }
 
-/** Remove BP, form-set, checks, svod and locks tied to a package (zid × eid). */
+/** Best-effort DELETE: skip if table/columns are missing (older DBs / optional PSD tables). */
+async function tryDelete(
+  db: OkoDb,
+  sql: string,
+  ...params: unknown[]
+): Promise<void> {
+  try {
+    await db.prepare(sql).run(...params);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      /does not exist|no such table|undefined.?column|column .+ does not exist/i.test(
+        msg
+      )
+    ) {
+      return;
+    }
+    throw e;
+  }
+}
+
+/**
+ * Remove all package-scoped relations for zid × eid before deleting the periods row.
+ * Includes BP, form-set, checks, svod, inbox, transfers, aggregation locks/corr sets.
+ */
 async function purgePackageRelations(
   db: OkoDb,
   zid: number,
   eid: number
 ): Promise<void> {
   // Events cascade via business_process_events.bp_id ON DELETE CASCADE.
-  await db
-    .prepare("DELETE FROM business_processes WHERE zid = ? AND eid = ?")
-    .run(zid, eid);
-  await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
-  await db
-    .prepare("DELETE FROM check_explanations WHERE zid = ? AND eid = ?")
-    .run(zid, eid);
-  await db
-    .prepare("DELETE FROM check_run_journal WHERE zid = ? AND eid = ?")
-    .run(zid, eid);
-  await db
-    .prepare("DELETE FROM agg_run_locks WHERE parent_zid = ? AND eid = ?")
-    .run(zid, eid);
-  await db.prepare("DELETE FROM svod_results WHERE eid = ?").run(eid);
+  await tryDelete(
+    db,
+    "DELETE FROM business_processes WHERE zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  await tryDelete(db, "DELETE FROM period_form_set WHERE eid = ?", eid);
+  await tryDelete(
+    db,
+    "DELETE FROM check_explanations WHERE zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  await tryDelete(
+    db,
+    "DELETE FROM check_run_journal WHERE zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  await tryDelete(
+    db,
+    "DELETE FROM agg_run_locks WHERE parent_zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  await tryDelete(
+    db,
+    "DELETE FROM agg_corr_sets WHERE source_eid = ?",
+    eid
+  );
+  await tryDelete(db, "DELETE FROM svod_results WHERE eid = ?", eid);
   // Members cascade via svod_members.svod_id ON DELETE CASCADE.
-  await db.prepare("DELETE FROM svod_definitions WHERE eid = ?").run(eid);
+  await tryDelete(db, "DELETE FROM svod_definitions WHERE eid = ?", eid);
+  await tryDelete(
+    db,
+    `DELETE FROM package_inbox
+     WHERE (pkg_zid = ? AND pkg_eid = ?)
+        OR (target_zid = ? AND target_eid = ?)`,
+    zid,
+    eid,
+    zid,
+    eid
+  );
+  await tryDelete(
+    db,
+    "DELETE FROM do_transport_inbox WHERE zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  // Patches cascade via transfer_batch_patches.batch_id ON DELETE CASCADE.
+  await tryDelete(
+    db,
+    `DELETE FROM transfer_batches
+     WHERE (source_zid = ? AND source_eid = ?)
+        OR (target_zid = ? AND target_eid = ?)`,
+    zid,
+    eid,
+    zid,
+    eid
+  );
 }
 
 export async function deleteReportPackage(
@@ -1329,7 +1397,7 @@ export async function deleteReportPackage(
   zid: number,
   eid: number
 ): Promise<DeletePackageResult> {
-  await assertPeriodWritable(db, eid, zid);
+  // Closed / completed packages are deletable; purge removes all related rows.
   const period = (await db
     .prepare("SELECT 1 FROM periods WHERE eid = ? AND zid = ?")
     .get(eid, zid)) as { 1: number } | undefined;
