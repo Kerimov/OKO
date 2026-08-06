@@ -58,8 +58,12 @@ export function LoginPage() {
   if (ssoBusy) {
     return (
       <div className="login-page">
+        <div className="login-brand-panel">
+          <div className="login-brand-mark">ОКО</div>
+          <p className="login-brand-tagline">Корпоративная отчётность</p>
+        </div>
         <div className="login-card">
-          <h1>ОКО</h1>
+          <h2 className="login-card-heading">Вход</h2>
           <p className="login-desc">Завершение входа через SSO…</p>
         </div>
       </div>
@@ -113,9 +117,17 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-brand-panel">
+        <div className="login-brand-mark">ОКО</div>
+        <p className="login-brand-tagline">Корпоративная отчётность</p>
+        <p className="login-brand-note">
+          Заполнение, проверки и сдача комплектов форм без Microsoft Access.
+        </p>
+      </div>
       <div className="login-card">
         <h1>ОКО</h1>
-        <p className="login-desc">Вход в портал корпоративной отчётности</p>
+        <h2 className="login-card-heading">Вход в портал</h2>
+        <p className="login-desc">Укажите учётные данные организации или ЦО</p>
         {legacyOnly ? (
           <form className="login-form" onSubmit={handleTokenLogin}>
             <label>
@@ -124,7 +136,7 @@ export function LoginPage() {
                 type="password"
                 value={apiToken}
                 onChange={(e) => setApiToken(e.target.value)}
-                placeholder="OKO_ADMIN_TOKEN из .env сервера"
+                placeholder="OKO_ADMIN_TOKEN"
                 autoComplete="off"
                 required
                 autoFocus
@@ -163,12 +175,14 @@ export function LoginPage() {
               {busy ? "Вход…" : "Войти"}
             </button>
             <OidcLoginButton />
-            <p className="login-desc" style={{ marginTop: "1rem", fontSize: "0.9rem" }}>
-              Локальная разработка: логин и пароль из{" "}
-              <code>OKO_BOOTSTRAP_ADMIN_USER</code> / <code>OKO_BOOTSTRAP_ADMIN_PASSWORD</code> в
-              файле <code>.env</code>. Чтобы отключить авторизацию, задайте{" "}
-              <code>OKO_AUTH_DISABLED=1</code> и перезапустите API.
-            </p>
+            <details className="login-dev-hint">
+              <summary>Локальная разработка</summary>
+              <p>
+                Логин и пароль из <code>OKO_BOOTSTRAP_ADMIN_USER</code> /{" "}
+                <code>OKO_BOOTSTRAP_ADMIN_PASSWORD</code> в <code>.env</code>. Чтобы отключить
+                авторизацию: <code>OKO_AUTH_DISABLED=1</code>.
+              </p>
+            </details>
           </form>
         )}
       </div>
@@ -208,7 +222,7 @@ function OidcLoginButton() {
           .catch(() => setStarting(false));
       }}
     >
-      {starting ? "Переход к SSO…" : "Войти через SSO (OIDC)"}
+      {starting ? "Переход к SSO…" : "Войти через SSO"}
     </button>
   );
 }

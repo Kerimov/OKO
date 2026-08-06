@@ -16,6 +16,7 @@ import {
 } from "../storage";
 import { useAuth } from "../useAuth";
 import { formatPeriod, formStatusLabel } from "../utils";
+import { LoadingSkeleton } from "../components/LoadingSkeleton";
 
 type PackageGroup = {
   key: string;
@@ -607,34 +608,32 @@ export function MyFormsPage() {
 
   return (
     <div className="my-forms-page">
-      <section className="hero">
-        <h1>{pageTitle}</h1>
-        {adminView ? (
-          <p>
-            Все экземпляры форм по организациям и отчётным периодам. Рабочий контекст
-            комплекта задаётся в <Link to="/package">Комплект</Link>; здесь можно просмотреть
-            и отфильтровать формы по всей системе. Для проверок и выгрузки —{" "}
-            <Link to="/tools">Сводка и импорт</Link>.
-          </p>
-        ) : orgUser ? (
-          <p>
-            Формы вашей организации по отчётным периодам. Выберите период или просмотрите
-            комплекты сгруппированно. Завести полный набор форм — в разделе{" "}
-            <Link to="/package">Комплект</Link>.
-          </p>
-        ) : (
-          <p>
-            Заполненные формы по отчётным периодам. Выберите период в фильтре или сгруппируйте
-            список по комплектам. Новую форму можно создать в{" "}
-            <Link to="/catalog">каталоге шаблонов</Link>
-            {" "}
-            или завести комплект в <Link to="/package">Комплект</Link>.
-          </p>
-        )}
+      <section className="hero hero-compact">
+        <div className="hero-compact-main">
+          <h1>{pageTitle}</h1>
+          {adminView ? (
+            <p>
+              Все экземпляры по организациям и периодам. Контекст — в{" "}
+              <Link to="/package">Комплект</Link>, проверки — в{" "}
+              <Link to="/tools">Сводка и импорт</Link>.
+            </p>
+          ) : orgUser ? (
+            <p>
+              Формы вашей организации. Полный набор — в{" "}
+              <Link to="/package">Комплект</Link>.
+            </p>
+          ) : (
+            <p>
+              Заполненные формы по периодам. Новую — в{" "}
+              <Link to="/catalog">каталоге</Link> или{" "}
+              <Link to="/package">Комплект</Link>.
+            </p>
+          )}
+        </div>
         <div className="stats">
           <span className="stat">
             {loading
-              ? "Загрузка…"
+              ? "…"
               : filterEid !== "" || adminView
                 ? `${filtered.length} из ${instances.length} форм`
                 : `${instances.length} сохранённых форм`}
@@ -773,7 +772,7 @@ export function MyFormsPage() {
       </div>
 
       {loading ? (
-        <div className="loading">Загрузка списка форм…</div>
+        <LoadingSkeleton variant="rows" count={8} label="Загрузка списка форм…" />
       ) : filtered.length === 0 ? (
         <div className="empty-state">
           {instances.length === 0 ? (

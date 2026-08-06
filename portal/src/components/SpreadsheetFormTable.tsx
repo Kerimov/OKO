@@ -31,6 +31,7 @@ import type {
   CellEditInfo,
   CellFocusInfo,
 } from "./FormTable";
+import { TableDensityToggle, useTableDensity } from "./TableDensityToggle";
 
 export interface SpreadsheetFormTableProps {
   columns: FormColumn[];
@@ -133,6 +134,7 @@ export function SpreadsheetFormTable({
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [kontrShowFilter, setKontrShowFilter] = useState("1,2");
+  const [density, setDensity] = useTableDensity();
   const kontrShowOptions = useMemo(
     () => kontrShowOptionsForRule(kontrRefA1Name),
     [kontrRefA1Name]
@@ -512,7 +514,12 @@ export function SpreadsheetFormTable({
   );
 
   return (
-    <div className="table-wrap spreadsheet-wrap">
+    <div
+      className={`table-wrap spreadsheet-wrap${density === "compact" ? " table-density-compact" : ""}`}
+    >
+      <div className="table-wrap-toolbar">
+        <TableDensityToggle value={density} onChange={setDensity} />
+      </div>
       {presenceUsers.length > 0 && (
         <div className="presence-bar" aria-label="Пользователи на форме">
           <span className="presence-bar-label">В форме:</span>
@@ -697,6 +704,7 @@ export function SpreadsheetFormTable({
                       }`}
                       style={alignStyle}
                       title={occupiedBy ? `Занято: ${occupiedBy}` : errMsg}
+                      data-error={errMsg || undefined}
                       onMouseDown={(e) => onCellMouseDown(rowIdx, colIdx, e)}
                       onDoubleClick={() => beginEdit(rowIdx, colIdx)}
                     >

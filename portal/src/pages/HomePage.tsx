@@ -75,16 +75,18 @@ export function HomePage() {
   return (
     <div className="home">
       <section className="hero">
-        <h1>Каталог шаблонов форм</h1>
+        <h1>Каталог форм</h1>
         <p>
-          Выберите шаблон и нажмите «Создать» — форма сохранится в текущем комплекте.
-          Если она уже есть, откроется существующая (одна форма на шаблон). Раздел{" "}
+          Выберите шаблон — форма сохранится в текущем комплекте. Уже созданные открываются в{" "}
           <Link to="/my">Мои формы ОКО</Link>.
         </p>
         <div className="stats">
           <span className="stat">{catalog.forms.length} шаблонов</span>
           <Link to="/my" className="stat stat-link">
-            {myCount} в «Мои формы ОКО»
+            {myCount} в комплекте
+          </Link>
+          <Link to="/package" className="btn btn-primary btn-sm">
+            Открыть комплект
           </Link>
         </div>
       </section>
@@ -128,7 +130,7 @@ export function HomePage() {
                 <div key={f.id} className="form-card form-card-template">
                   <span className="form-card-id">{f.id}</span>
                   <span className="form-card-title">{f.title}</span>
-                  <span className="form-card-meta">{f.pages} стр. · шаблон</span>
+                  <span className="form-card-meta">{f.pages} стр.</span>
                   <div className="form-card-actions">
                     <button
                       type="button"
@@ -138,16 +140,6 @@ export function HomePage() {
                     >
                       {creating === f.id ? "Создание…" : "Создать"}
                     </button>
-                    {f.pdfFile && (
-                      <a
-                        href={`/pdf/${f.pdfFile}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-outline btn-sm"
-                      >
-                        PDF
-                      </a>
-                    )}
                   </div>
                 </div>
               ))}

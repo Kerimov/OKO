@@ -17,6 +17,7 @@ import {
   SpreadsheetFormTable,
 } from "./SpreadsheetFormTable";
 import { isUniverBackendEnabled } from "./spreadsheetFlags";
+import { TableDensityToggle, useTableDensity } from "./TableDensityToggle";
 
 const UniverFormHost = lazy(() =>
   import("./UniverFormHost").then((m) => ({ default: m.UniverFormHost }))
@@ -137,6 +138,7 @@ function LegacyFormTable({
   rashReadonlyCells,
 }: Props) {
   const [kontrShowFilter, setKontrShowFilter] = useState("1,2");
+  const [density, setDensity] = useTableDensity();
 
   const kontrShowOptions = useMemo(
     () => kontrShowOptionsForRule(kontrRefA1Name),
@@ -282,7 +284,10 @@ function LegacyFormTable({
   };
 
   return (
-    <div className="table-wrap">
+    <div className={`table-wrap${density === "compact" ? " table-density-compact" : ""}`}>
+      <div className="table-wrap-toolbar">
+        <TableDensityToggle value={density} onChange={setDensity} />
+      </div>
       {presenceUsers.length > 0 && (
         <div className="presence-bar" aria-label="Пользователи на форме">
           <span className="presence-bar-label">В форме:</span>
@@ -400,6 +405,7 @@ function LegacyFormTable({
                     key={col.key}
                     className={`${col.frozen ? "frozen" : ""}${errMsg ? " cell-error" : ""}${occupied ? " cell-occupied" : ""}${flash ? " cell-remote-flash" : ""}`}
                     title={occupiedBy ? `Занято: ${occupiedBy}` : errMsg}
+                    data-error={errMsg || undefined}
                     style={occupiedBy ? userPresenceStyle(occupiedBy) : undefined}
                   >
                     {rashLocked && rashSlot ? (

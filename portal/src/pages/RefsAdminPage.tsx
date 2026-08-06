@@ -50,6 +50,21 @@ function agentToDraft(a: KontrAgent): KontrDraft {
   };
 }
 
+type DirFilter = "used" | "all" | "edited" | "technical";
+
+/** Human-friendly title for messy Access keys. */
+function refListTitle(kind: string): { title: string; full: string } {
+  const t = kind.trim();
+  const looksEncoded =
+    t.length > 40 ||
+    (t.includes(";") && (t.includes("'") || t.includes('"'))) ||
+    /^a_/i.test(t);
+  if (looksEncoded && t.length > 36) {
+    return { title: `${t.slice(0, 34)}…`, full: t };
+  }
+  return { title: t, full: t };
+}
+
 export function RefsAdminPage() {
   const backend = isBackendMode();
   const auth = useAuth();
@@ -64,8 +79,7 @@ export function RefsAdminPage() {
   const [draftItems, setDraftItems] = useState<RashRefItem[]>([]);
   const [kontrDraft, setKontrDraft] = useState<KontrDraft[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [showUnused, setShowUnused] = useState(false);
-  const [showTechnical, setShowTechnical] = useState(false);
+  const [dirFilter, setDirFilter] = useState<DirFilter>("used");
   const [q, setQ] = useState("");
   const [itemQ, setItemQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -92,12 +106,34 @@ export function RefsAdminPage() {
   const visibleDirs = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return directories.filter((d) => {
-      if (!showUnused && d.ruleCount === 0 && !d.isKontr) return false;
-      if (!showTechnical && d.technical) return false;
+      if (dirFilter === "used" && d.ruleCount === 0 && !d.isKontr) return false;
+      if (dirFilter === "edited" && !d.overridden && !d.isKontr) return false;
+      if (dirFilter === "technical" && !d.technical) return false;
+      if (dirFilter !== "technical" && dirFilter !== "all" && d.technical && !d.isKontr) {
+        /* keep technical hidden unless explicitly requested or "all" */
+        if (dirFilter === "used" || dirFilter === "edited") return false;
+      }
+      if (dirFilter === "all" && d.technical) return true;
+      if (dirFilter === "used" && d.technical) return false;
       if (!needle) return true;
       return d.kind.toLowerCase().includes(needle);
     });
-  }, [directories, q, showUnused, showTechnical]);
+  }, [directories, q, dirFilter]);
+
+  const editedCount = useMemo(
+    () => directories.filter((d) => d.overridden).length,
+    [directories]
+  );
+
+  const quickPicks = useMemo(() => {
+    return [...directories]
+      .filter((d) => d.ruleCount > 0 || d.isKontr)
+      .sort((a, b) => {
+        if (a.isKontr !== b.isKontr) return a.isKontr ? -1 : 1;
+        return b.ruleCount - a.ruleCount;
+      })
+      .slice(0, 4);
+  }, [directories]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -365,25 +401,37 @@ export function RefsAdminPage() {
 
   const usedCount = directories.filter((d) => d.ruleCount > 0 || d.isKontr).length;
   const recordCount = isKontr ? kontrDraft.length : draftItems.length;
+  const selectedMeta = directories.find((d) => d.kind === selectedKind);
 
   return (
-    <div className="page-block">
-      <div className="page-header">
-        <div>
+    <div className="page-block refs-page">
+      <div className="refs-page-header">
+        <div className="refs-page-heading">
           <h1>Справочники</h1>
-          <p className="tools-hint">
-            Классификаторы расшифровок и контрагенты в одном месте. Классификаторы правятся
-            поверх bundled JSON
-            {backend ? " (настройки API)" : " (localStorage)"}; контрагенты — через API.
+          <p className="refs-page-stats">
+            <span className="stat">{usedCount} в правилах</span>
+            <span className="stat">{directories.length} всего</span>
+            {editedCount > 0 && (
+              <span className="stat">{editedCount} с правками</span>
+            )}
           </p>
+          <details className="refs-how">
+            <summary>Как это работает</summary>
+            <p>
+              Классификаторы расшифровок правятся поверх bundled JSON
+              {backend ? " (настройки API)" : " (localStorage)"}. Контрагенты — через API.
+              Связанный редактор:{" "}
+              <Link to="/admin/rash">Расшифровки</Link>.
+            </p>
+          </details>
         </div>
         <div className="toolbar-actions">
-          <Link to="/admin/rash" className="btn btn-secondary">
+          <Link to="/admin/rash" className="btn btn-secondary btn-sm">
             Расшифровки
           </Link>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             disabled={loading || busy}
             onClick={() => void load()}
           >
@@ -394,89 +442,134 @@ export function RefsAdminPage() {
 
       {error && <div className="error-box">{error}</div>}
       {status && <div className="status-bar">{status}</div>}
-      {loading && <div className="loading">Загрузка справочников…</div>}
+      {loading && (
+        <LoadingSkeleton variant="rows" count={8} label="Загрузка справочников…" />
+      )}
 
       {!loading && (
         <div className="forms-workbench refs-admin">
-          <aside className="forms-workbench-list refs-admin-list">
-            <div className="toolbar-actions" style={{ marginBottom: "0.5rem", flexWrap: "wrap" }}>
-              <input
-                placeholder="Поиск справочника…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                style={{ flex: 1, minWidth: "8rem" }}
-              />
+          <aside className="refs-admin-list">
+            <input
+              className="search-input"
+              placeholder="Поиск справочника…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <div className="refs-filter-chips" role="group" aria-label="Фильтр списка">
+              {(
+                [
+                  ["used", "Используемые"],
+                  ["all", "Все"],
+                  ["edited", "С правками"],
+                  ["technical", "Технические"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`refs-chip${dirFilter === id ? " is-active" : ""}`}
+                  onClick={() => setDirFilter(id)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <label className="rash-check">
-              <input
-                type="checkbox"
-                checked={showUnused}
-                onChange={(e) => setShowUnused(e.target.checked)}
-              />
-              Показать неиспользуемые
-            </label>
-            <label className="rash-check">
-              <input
-                type="checkbox"
-                checked={showTechnical}
-                onChange={(e) => setShowTechnical(e.target.checked)}
-              />
-              Технические (a_*)
-            </label>
-            <p className="tools-hint">
-              Используется в правилах: <strong>{usedCount}</strong> · показано:{" "}
-              <strong>{visibleDirs.length}</strong>
+            <p className="refs-list-count">
+              Показано <strong>{visibleDirs.length}</strong>
             </p>
             <ul className="refs-dir-list">
-              {visibleDirs.map((d) => (
-                <li key={d.kind}>
-                  <button
-                    type="button"
-                    className={`refs-dir-item${selectedKind === d.kind ? " active" : ""}`}
-                    onClick={() => selectDir(d)}
-                  >
-                    <span className="refs-dir-name">{d.kind}</span>
-                    <span className="refs-dir-meta">
-                      {d.itemCount} · правил {d.ruleCount}
-                      {d.overridden ? " · правки" : ""}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {visibleDirs.map((d) => {
+                const { title, full } = refListTitle(d.kind);
+                return (
+                  <li key={d.kind}>
+                    <button
+                      type="button"
+                      className={`refs-dir-item${selectedKind === d.kind ? " active" : ""}${
+                        d.isKontr ? " is-kontr" : ""
+                      }`}
+                      onClick={() => selectDir(d)}
+                      title={full}
+                    >
+                      <span className="refs-dir-name">{title}</span>
+                      <span className="refs-dir-badges">
+                        {d.isKontr && <span className="refs-badge refs-badge-kontr">Контрагенты</span>}
+                        {d.technical && (
+                          <span className="refs-badge refs-badge-tech">техн.</span>
+                        )}
+                        {d.overridden && (
+                          <span className="refs-badge refs-badge-edit">правки</span>
+                        )}
+                        <span className="refs-badge">{d.itemCount} зап.</span>
+                        {!d.isKontr && (
+                          <span className="refs-badge">{d.ruleCount} прав.</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
               {visibleDirs.length === 0 && (
-                <li className="muted">Нет справочников по фильтру</li>
+                <li className="refs-list-empty">Нет справочников по фильтру</li>
               )}
             </ul>
           </aside>
 
-          <div className="forms-workbench-grid refs-admin-detail">
+          <div className="refs-admin-detail">
             {!selectedKind && (
-              <p className="tools-hint">Выберите справочник слева.</p>
+              <div className="refs-empty-state">
+                <h2>Выберите справочник</h2>
+                <p>Слева — классификаторы расшифровок и контрагенты. Начните с часто используемых:</p>
+                <div className="refs-quick-picks">
+                  {quickPicks.map((d) => (
+                    <button
+                      key={d.kind}
+                      type="button"
+                      className="refs-quick-pick"
+                      onClick={() => selectDir(d)}
+                    >
+                      <span className="refs-quick-pick-title">
+                        {refListTitle(d.kind).title}
+                      </span>
+                      <span className="refs-quick-pick-meta">
+                        {d.isKontr
+                          ? `${d.itemCount} записей`
+                          : `${d.ruleCount} правил · ${d.itemCount} записей`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {selectedKind && (
-              <form onSubmit={(e) => void handleSave(e)}>
-                <header className="refs-detail-header">
-                  <div>
-                    <h2>{selectedKind}</h2>
-                    <p className="tools-hint">
-                      Записей: {recordCount}
-                      {isKontr
-                        ? backend
-                          ? " · справочник sp_kontr / API"
-                          : " · локальный kontr.json"
-                        : overlay.byName[selectedKind]
-                          ? " · есть локальные правки"
-                          : " · исходный bundled"}
-                      {directories.find((d) => d.kind === selectedKind)?.ruleCount
-                        ? ` · в правилах: ${
-                            directories.find((d) => d.kind === selectedKind)?.ruleCount
-                          }`
-                        : ""}
-                    </p>
+              <form className="refs-detail-form" onSubmit={(e) => void handleSave(e)}>
+                {dirty && (
+                  <div className="refs-dirty-bar" role="status">
+                    Есть несохранённые изменения
                   </div>
-                  <div className="toolbar-actions">
+                )}
+                <header className="refs-detail-header">
+                  <div className="refs-detail-title">
+                    <h2 title={selectedKind}>{refListTitle(selectedKind).title}</h2>
+                    <div className="refs-dir-badges">
+                      <span className="refs-badge">{recordCount} записей</span>
+                      {selectedMeta && selectedMeta.ruleCount > 0 && (
+                        <span className="refs-badge">{selectedMeta.ruleCount} правил</span>
+                      )}
+                      {isKontr ? (
+                        <span className="refs-badge refs-badge-kontr">
+                          {backend ? "API" : "kontr.json"}
+                        </span>
+                      ) : overlay.byName[selectedKind] ? (
+                        <span className="refs-badge refs-badge-edit">локальные правки</span>
+                      ) : (
+                        <span className="refs-badge">bundled</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="refs-detail-actions">
                     <input
+                      className="search-input"
                       placeholder="Фильтр записей…"
                       value={itemQ}
                       onChange={(e) => setItemQ(e.target.value)}
@@ -485,7 +578,7 @@ export function RefsAdminPage() {
                       <>
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="btn btn-secondary btn-sm"
                           disabled={busy || kontrDraft.length === 0}
                           onClick={() => void handleKontrExcel()}
                         >
@@ -494,11 +587,11 @@ export function RefsAdminPage() {
                         {backend && (
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             disabled={busy || !admin}
                             onClick={() => void handleKontrReimport()}
                           >
-                            Реимпорт JSON
+                            Реимпорт
                           </button>
                         )}
                       </>
@@ -507,7 +600,7 @@ export function RefsAdminPage() {
                       <>
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="btn btn-secondary btn-sm"
                           disabled={busy}
                           onClick={addItem}
                         >
@@ -516,7 +609,7 @@ export function RefsAdminPage() {
                         {canEditItems && overlay.byName[selectedKind] && (
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             disabled={busy}
                             onClick={() => void handleResetGroup()}
                           >
@@ -525,7 +618,7 @@ export function RefsAdminPage() {
                         )}
                         <button
                           type="submit"
-                          className="btn btn-primary"
+                          className="btn btn-primary btn-sm"
                           disabled={!dirty || busy}
                         >
                           {busy ? "Сохранение…" : "Сохранить"}
@@ -540,13 +633,13 @@ export function RefsAdminPage() {
                 )}
                 {isKontr && !backend && (
                   <p className="tools-hint">
-                    Просмотр из <code>kontr.json</code>. Редактирование и сохранение — в режиме API.
+                    Просмотр из <code>kontr.json</code>. Редактирование — в режиме API.
                   </p>
                 )}
 
-                <div className="table-wrap">
+                <div className="table-wrap refs-table-wrap">
                   {isKontr ? (
-                    <table className="form-table">
+                    <table className="data-table refs-data-table">
                       <thead>
                         <tr>
                           <th style={{ width: "5rem" }}>ID</th>
@@ -666,7 +759,7 @@ export function RefsAdminPage() {
                       </tbody>
                     </table>
                   ) : (
-                    <table className="form-table">
+                    <table className="data-table refs-data-table">
                       <thead>
                         <tr>
                           <th style={{ width: "7rem" }}>Код</th>

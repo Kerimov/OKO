@@ -4,6 +4,7 @@ import { ApiError } from "../apiClient";
 import { loadSchema, listFormCellDefinitions } from "../api";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { FormTable } from "../components/FormTable";
+import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { RashEditorModal } from "../components/RashEditorModal";
 import { hasRashRules, isKontrForm } from "../constants";
 import { runFormChecks, type CheckRunResult } from "../engine/checkEngine";
@@ -830,7 +831,7 @@ export function FormPage() {
   }
 
   if (!schema || !instance) {
-    return <div className="loading">Загрузка формы…</div>;
+    return <LoadingSkeleton variant="form" count={10} label="Загрузка формы…" />;
   }
 
   const pdfUrl = schema.pdfFile ? `/pdf/${schema.pdfFile}` : null;
@@ -838,155 +839,188 @@ export function FormPage() {
   return (
     <div className="form-page">
       <div className="form-toolbar">
-        <div className="toolbar-breadcrumb">
-          <Link to="/my" className="back-link">
-            {formsBackLabel}
-          </Link>
-          <Link to="/catalog" className="back-link muted">
-            Каталог
-          </Link>
-        </div>
-        <div className="form-title-block form-title-block-wide">
-          <label className="display-name-label">
-            Название сохранённой формы
-            <input
-              className="display-name-input"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              onBlur={() => void persist({ displayName })}
-            />
-          </label>
-          <div className="form-subtitle">
-            <span className="form-code">{schema.id}</span>
-            <span>{schema.title}</span>
-            <span className={`status-badge ${instanceStatus}`}>
-              {formStatusLabel(instanceStatus)}
-            </span>
+        <div className="form-toolbar-main">
+          <div className="toolbar-breadcrumb">
+            <Link to="/my" className="back-link">
+              {formsBackLabel}
+            </Link>
+            <Link to="/catalog" className="back-link muted">
+              Каталог
+            </Link>
+          </div>
+          <div className="form-title-block form-title-block-wide">
+            <label className="display-name-label">
+              Название сохранённой формы
+              <input
+                className="display-name-input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onBlur={() => void persist({ displayName })}
+              />
+            </label>
+            <div className="form-subtitle">
+              <span className="form-code">{schema.id}</span>
+              <span>{schema.title}</span>
+              <span className={`status-badge ${instanceStatus}`}>
+                {formStatusLabel(instanceStatus)}
+              </span>
+            </div>
+          </div>
+          <div className="toolbar-primary-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void handleReset()}
+            >
+              Сбросить
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger-outline btn-sm"
+              onClick={() => void handleDelete()}
+            >
+              Удалить
+            </button>
+            {instanceStatus === "draft" && !isLocked && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => void handleSubmitForm()}
+              >
+                Сдать форму
+              </button>
+            )}
+            {instanceStatus === "submitted" && admin && !periodClosed && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => void handleReopenForm()}
+              >
+                Вернуть в черновик
+              </button>
+            )}
+            {!isLocked && (
+              <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
+                Сохранить
+              </button>
+            )}
           </div>
         </div>
-        <div className="toolbar-actions">
-          {pdfUrl && (
-            <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn btn-outline">
-              Образец PDF
-            </a>
-          )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => fileRef.current?.click()}
-          >
-            Импорт
-          </button>
-          <input ref={fileRef} type="file" accept=".json" hidden onChange={handleImport} />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={isLocked || importingXlsx}
-            onClick={() => xlsxRef.current?.click()}
-            title="Импорт значений из .xlsx (предпросмотр)"
-          >
-            {importingXlsx ? "Excel…" : "Импорт Excel"}
-          </button>
-          <input
-            ref={xlsxRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            hidden
-            onChange={(e) => void handleXlsxPick(e)}
-          />
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleExportPdf}
-            disabled={exportingPdf}
-          >
-            {exportingPdf ? "PDF…" : "Сохранить PDF"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleRecalc}
-            disabled={recalcing}
-            title={
-              recalcRuleCount != null
-                ? `Правил пересчёта: ${recalcRuleCount}`
-                : undefined
-            }
-          >
-            {recalcing ? "…" : "Пересчёт"}
-          </button>
-          {(recalcRuleCount ?? 0) > 0 && (
-            <label className="auto-recalc-toggle" title="Пересчёт итоговых строк и граф">
+
+        <div className="form-toolbar-tools">
+          <div className="toolbar-group">
+            <span className="toolbar-group-label">Обмен</span>
+            <div className="toolbar-group-actions">
+              {pdfUrl && (
+                <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
+                  Образец PDF
+                </a>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => fileRef.current?.click()}
+              >
+                Импорт
+              </button>
+              <input ref={fileRef} type="file" accept=".json" hidden onChange={handleImport} />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={isLocked || importingXlsx}
+                onClick={() => xlsxRef.current?.click()}
+                title="Импорт значений из .xlsx (предпросмотр)"
+              >
+                {importingXlsx ? "Excel…" : "Импорт Excel"}
+              </button>
               <input
-                type="checkbox"
-                checked={autoRecalc}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setAutoRecalc(on);
-                  localStorage.setItem("oko-auto-recalc", on ? "1" : "0");
-                }}
+                ref={xlsxRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                hidden
+                onChange={(e) => void handleXlsxPick(e)}
               />
-              Автопересчёт
-            </label>
-          )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleExportExcel}
-            disabled={exportingExcel}
-          >
-            {exportingExcel ? "Выгрузка…" : "Выгрузить в Excel"}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleCheck} disabled={checking}>
-            {checking ? "Проверка…" : "Проверить форму"}
-          </button>
-          {rashMode && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void handleCheckRash()}
-              disabled={checkingRash}
-              title={
-                rashRuleCount != null
-                  ? `Правил расшифровки для ${schema.id}: ${rashRuleCount}`
-                  : undefined
-              }
-            >
-              {checkingRash ? "Расшифровка…" : "Проверить расшифровки"}
-            </button>
-          )}
-          <button type="button" className="btn btn-secondary" onClick={handleExport}>
-            Экспорт формы
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => void handleReset()}>
-            Сбросить данные
-          </button>
-          <button type="button" className="btn btn-danger-outline" onClick={() => void handleDelete()}>
-            Удалить
-          </button>
-          {instanceStatus === "draft" && !isLocked && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void handleSubmitForm()}
-            >
-              Сдать форму
-            </button>
-          )}
-          {instanceStatus === "submitted" && admin && !periodClosed && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void handleReopenForm()}
-            >
-              Вернуть в черновик
-            </button>
-          )}
-          {!isLocked && (
-            <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
-              Сохранить
-            </button>
-          )}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleExportExcel}
+                disabled={exportingExcel}
+              >
+                {exportingExcel ? "Выгрузка…" : "В Excel"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+              >
+                {exportingPdf ? "PDF…" : "В PDF"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleExport}
+              >
+                Экспорт JSON
+              </button>
+            </div>
+          </div>
+
+          <div className="toolbar-group">
+            <span className="toolbar-group-label">Расчёт и проверка</span>
+            <div className="toolbar-group-actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleRecalc}
+                disabled={recalcing}
+                title={
+                  recalcRuleCount != null
+                    ? `Правил пересчёта: ${recalcRuleCount}`
+                    : undefined
+                }
+              >
+                {recalcing ? "…" : "Пересчёт"}
+              </button>
+              {(recalcRuleCount ?? 0) > 0 && (
+                <label className="auto-recalc-toggle" title="Пересчёт итоговых строк и граф">
+                  <input
+                    type="checkbox"
+                    checked={autoRecalc}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setAutoRecalc(on);
+                      localStorage.setItem("oko-auto-recalc", on ? "1" : "0");
+                    }}
+                  />
+                  Авто
+                </label>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleCheck}
+                disabled={checking}
+              >
+                {checking ? "Проверка…" : "Проверить форму"}
+              </button>
+              {rashMode && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void handleCheckRash()}
+                  disabled={checkingRash}
+                  title={
+                    rashRuleCount != null
+                      ? `Правил расшифровки для ${schema.id}: ${rashRuleCount}`
+                      : undefined
+                  }
+                >
+                  {checkingRash ? "Расшифровка…" : "Проверить расшифровки"}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       {status && <div className="status-bar">{status}</div>}
