@@ -202,6 +202,8 @@ export interface PackageConstructInput {
   mode: "single" | "bulk";
   targets: Array<{ zid: number }>;
   period: {
+    /** Prefer existing period by eid when set (period-first flow). */
+    eid?: number;
     name?: string;
     periodStart?: string;
     periodEnd?: string;
@@ -219,6 +221,8 @@ export interface PackageConstructInput {
   options?: {
     createInstances?: boolean;
     continueOnError?: boolean;
+    /** When false (default), construct refuses to create a missing period. */
+    allowCreatePeriod?: boolean;
   };
 }
 
@@ -763,6 +767,161 @@ export async function createPeriod(
     formSetCount,
     packageKind,
     collectionUnitZid,
+  };
+}
+
+/** Open the same reporting period for many organizations (one periods row per zid). */
+export async function createPeriodsForOrganizations(
+  db: OkoDb,
+  input: {
+    /** If omitted — all organizations. */
+    zids?: number[];
+    name?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    quarter: number;
+    year: number;
+    packageKind?: "OKO" | "BALANCE";
+    methodologyReleaseId?: string | null;
+    /** Reuse existing open/closed period with same Q/Y/kind (default true). */
+    reuseExisting?: boolean;
+  }
+): Promise<{
+  summary: {
+    targets: number;
+    created: number;
+    reused: number;
+    errors: number;
+  };
+  rows: Array<{
+    zid: number;
+    organizationName: string;
+    eid?: number;
+    periodName: string;
+    status: "created" | "reused" | "error";
+    error?: string;
+  }>;
+}> {
+  const quarter = Math.trunc(Number(input.quarter));
+  const year = Math.trunc(Number(input.year));
+  if (!(quarter >= 1 && quarter <= 4) || !(year >= 2000 && year <= 2100)) {
+    const err = new Error("Укажите квартал и год отчётного периода");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  const packageKind = input.packageKind === "BALANCE" ? "BALANCE" : "OKO";
+  const name = String(input.name ?? "").trim() || quarterPeriodName(quarter, year);
+  const range = quarterDateRange(quarter, year);
+  const periodStart = input.periodStart ?? range.periodStart;
+  const periodEnd = input.periodEnd ?? range.periodEnd;
+  const reuseExisting = input.reuseExisting !== false;
+
+  let orgs: Array<{ zid: number; name: string }>;
+  if (input.zids?.length) {
+    const unique = [...new Set(input.zids.map((z) => Number(z)).filter((z) => z > 0))];
+    orgs = [];
+    for (const zid of unique) {
+      const row = (await db
+        .prepare("SELECT zid, name FROM organizations WHERE zid = ?")
+        .get(zid)) as { zid: number; name: string } | undefined;
+      if (row) orgs.push(row);
+    }
+  } else {
+    orgs = (await db
+      .prepare("SELECT zid, name FROM organizations ORDER BY name")
+      .all()) as Array<{ zid: number; name: string }>;
+  }
+
+  if (!orgs.length) {
+    const err = new Error("Нет организаций для открытия периода");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const rows: Array<{
+    zid: number;
+    organizationName: string;
+    eid?: number;
+    periodName: string;
+    status: "created" | "reused" | "error";
+    error?: string;
+  }> = [];
+
+  for (const org of orgs) {
+    try {
+      const existing = (await db
+        .prepare(
+          `SELECT eid, name, period_status
+           FROM periods
+           WHERE zid = ?
+             AND quarter = ?
+             AND year = ?
+             AND COALESCE(package_kind, 'OKO') = ?
+           ORDER BY eid DESC
+           LIMIT 1`
+        )
+        .get(org.zid, quarter, year, packageKind)) as
+        | { eid: number; name: string; period_status: string | null }
+        | undefined;
+
+      if (existing) {
+        if (!reuseExisting) {
+          rows.push({
+            zid: org.zid,
+            organizationName: org.name,
+            eid: existing.eid,
+            periodName: existing.name,
+            status: "error",
+            error: "Период с таким кварталом уже есть",
+          });
+          continue;
+        }
+        rows.push({
+          zid: org.zid,
+          organizationName: org.name,
+          eid: existing.eid,
+          periodName: existing.name,
+          status: "reused",
+        });
+        continue;
+      }
+
+      const created = await createPeriod(db, {
+        zid: org.zid,
+        name,
+        periodStart,
+        periodEnd,
+        quarter,
+        year,
+        packageKind,
+        methodologyReleaseId: input.methodologyReleaseId,
+      });
+      rows.push({
+        zid: org.zid,
+        organizationName: org.name,
+        eid: created.eid,
+        periodName: created.name,
+        status: "created",
+      });
+    } catch (e) {
+      rows.push({
+        zid: org.zid,
+        organizationName: org.name,
+        periodName: name,
+        status: "error",
+        error: e instanceof Error ? e.message : "Ошибка создания периода",
+      });
+    }
+  }
+
+  return {
+    summary: {
+      targets: rows.length,
+      created: rows.filter((r) => r.status === "created").length,
+      reused: rows.filter((r) => r.status === "reused").length,
+      errors: rows.filter((r) => r.status === "error").length,
+    },
+    rows,
   };
 }
 
@@ -2052,10 +2211,17 @@ function normalizeConstructInput(input: PackageConstructInput): PackageConstruct
     periodEnd = range.periodEnd;
   }
 
-  if (!name) {
+  const rawEid = input.period?.eid != null ? Number(input.period.eid) : NaN;
+  const eid =
+    Number.isFinite(rawEid) && rawEid > 0 ? Math.trunc(rawEid) : undefined;
+
+  if (!name && eid == null) {
     const err = new Error("Укажите квартал и год отчётного периода");
     (err as Error & { status: number }).status = 400;
     throw err;
+  }
+  if (!name && eid != null) {
+    name = `EID ${eid}`;
   }
   const targets = (input.targets ?? [])
     .map((t) => ({ zid: Number(t.zid) }))
@@ -2071,6 +2237,7 @@ function normalizeConstructInput(input: PackageConstructInput): PackageConstruct
     mode: input.mode === "bulk" ? "bulk" : "single",
     targets: [...unique.values()],
     period: {
+      eid,
       name,
       periodStart,
       periodEnd,
@@ -2088,6 +2255,7 @@ function normalizeConstructInput(input: PackageConstructInput): PackageConstruct
     options: {
       createInstances: input.options?.createInstances !== false,
       continueOnError: input.options?.continueOnError !== false,
+      allowCreatePeriod: input.options?.allowCreatePeriod === true,
     },
   };
 }
@@ -2103,6 +2271,25 @@ async function findExistingPeriodForConstruct(
   period_status: string | null;
   package_kind: string | null;
 } | null> {
+  if (period.eid != null) {
+    const byEid = (await db
+      .prepare(
+        `SELECT eid, name, period_status, package_kind
+         FROM periods
+         WHERE eid = ? AND zid = ?
+         LIMIT 1`
+      )
+      .get(period.eid, zid)) as
+      | {
+          eid: number;
+          name: string;
+          period_status: string | null;
+          package_kind: string | null;
+        }
+      | undefined;
+    if (byEid) return byEid;
+  }
+
   if (period.quarter != null && period.year != null) {
     const byQy = (await db
       .prepare(
@@ -2227,6 +2414,20 @@ async function previewOneConstructTarget(
       warnings.push("Все выбранные формы уже заведены");
     }
   } else {
+    if (input.options?.allowCreatePeriod !== true) {
+      return {
+        zid,
+        organizationName: org.name,
+        periodName: constructPeriodLabel(input.period),
+        status: "error",
+        periodCreated: false,
+        formsTotal: formIds.length,
+        formsCreated: 0,
+        formsSkipped: 0,
+        warnings,
+        error: "Сначала создайте период",
+      };
+    }
     periodCreated = true;
     if (!input.options?.createInstances) {
       formsCreated = 0;
@@ -2287,6 +2488,20 @@ async function constructOnePackage(
 
   try {
     if (eid == null) {
+      if (input.options?.allowCreatePeriod !== true) {
+        return {
+          zid,
+          organizationName: preview.organizationName,
+          periodName: constructPeriodLabel(input.period),
+          status: "error",
+          periodCreated: false,
+          formsTotal: formIds.length,
+          formsCreated: 0,
+          formsSkipped: 0,
+          warnings: preview.warnings,
+          error: "Сначала создайте период",
+        };
+      }
       const period = await createPeriod(db, {
         zid,
         name: input.period.name!,

@@ -45,10 +45,12 @@
 
 | Что изменили | Куда обновить |
 |--------------|---------------|
-| Новый раздел UI | `portal/src/content/instructions-*.md` + `docs/PORTAL-GUIDE.md` |
+| Новый раздел UI | **пока не обновлять** инструкцию (`instructions-*.md`, `docs/PORTAL-GUIDE.md`) — рано |
 | Новый API-эндпоинт | `server/README.md` |
 | Архитектурное решение | `docs/ARCHITECTURE.md` |
 | Завершённый этап | `CHANGELOG.md`, при необходимости `PHASE*-PLAN.md` |
+
+Инструкция в портале и `PORTAL-GUIDE.md` заморожены: не дополнять при обычных доработках, только по явной просьбе.
 
 ---
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { loadCatalog } from "../api";
 import {
   constructPackages,
+  createReportPackageAsync,
   previewPackageConstruct,
 } from "../packagesApi";
 import { orgOptionLabel, packageKindLabel } from "../uiLabels";
@@ -11,6 +12,7 @@ import type {
   PackageConstructInput,
   PackageConstructPreview,
   PackageConstructResult,
+  PackageWorkspaceRow,
 } from "../types";
 import {
   currentReportingQuarter,
@@ -24,11 +26,36 @@ type ConstructMode = "single" | "bulk";
 type FormsMode = "all" | "selected";
 type PackageKind = "OKO" | "BALANCE";
 
+export type LockedPackagePeriod = {
+  zid: number;
+  eid: number;
+  packageKind: PackageKind;
+  periodName: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+};
+
+/** Shared reporting campaign (same name/kind for many orgs). */
+export type LockedPackageCampaign = {
+  periodName: string;
+  packageKind: PackageKind;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  quarter?: number;
+  year?: number;
+};
+
 type Props = {
   orgs: Organization[];
   admin: boolean;
   canMutate: boolean;
   defaultZid?: number | "";
+  /** When set, period is fixed — only forms are created (period-first wizard step 2). */
+  lockedPeriod?: LockedPackagePeriod;
+  /** Campaign mode: create packages for all orgs that already have this period. */
+  lockedCampaign?: LockedPackageCampaign;
+  /** Sibling open periods (same name/kind) for admin bulk form fill. */
+  siblingRows?: PackageWorkspaceRow[];
   onCreated: (zid: number, eid: number, packageKind: PackageKind) => void | Promise<void>;
 };
 
@@ -37,20 +64,55 @@ export function PackageConstructor({
   admin,
   canMutate,
   defaultZid = "",
+  lockedPeriod,
+  lockedCampaign,
+  siblingRows = [],
   onCreated,
 }: Props) {
+  const campaign = useMemo<LockedPackageCampaign | null>(() => {
+    if (lockedCampaign) return lockedCampaign;
+    if (lockedPeriod) {
+      return {
+        periodName: lockedPeriod.periodName,
+        packageKind: lockedPeriod.packageKind,
+        periodStart: lockedPeriod.periodStart,
+        periodEnd: lockedPeriod.periodEnd,
+      };
+    }
+    return null;
+  }, [lockedCampaign, lockedPeriod]);
+  const locked = Boolean(campaign);
   const initialQy = currentReportingQuarter();
-  const [mode, setMode] = useState<ConstructMode>("single");
+  const campaignRows = useMemo(() => {
+    if (!campaign) return [] as PackageWorkspaceRow[];
+    return siblingRows.filter(
+      (r) =>
+        r.periodStatus === "open" &&
+        r.periodName === campaign.periodName &&
+        r.packageKind === campaign.packageKind
+    );
+  }, [campaign, siblingRows]);
+
+  const [mode, setMode] = useState<ConstructMode>(
+    locked && admin && (campaignRows.length > 1 || !lockedPeriod) ? "bulk" : "single"
+  );
   const [singleZid, setSingleZid] = useState<number | "">(
-    typeof defaultZid === "number" ? defaultZid : orgs[0]?.zid ?? ""
+    lockedPeriod?.zid ??
+      campaignRows[0]?.zid ??
+      (typeof defaultZid === "number" ? defaultZid : orgs[0]?.zid ?? "")
   );
-  const [selectedZids, setSelectedZids] = useState<number[]>(
-    typeof defaultZid === "number" ? [defaultZid] : []
-  );
+  const [selectedZids, setSelectedZids] = useState<number[]>(() => {
+    if (campaignRows.length) return campaignRows.map((r) => r.zid);
+    if (lockedPeriod) return [lockedPeriod.zid];
+    if (typeof defaultZid === "number") return [defaultZid];
+    return [];
+  });
   const [orgSearch, setOrgSearch] = useState("");
   const [quarter, setQuarter] = useState(initialQy.quarter);
   const [year, setYear] = useState(initialQy.year);
-  const [packageKind, setPackageKind] = useState<PackageKind>("OKO");
+  const [packageKind, setPackageKind] = useState<PackageKind>(
+    lockedPeriod?.packageKind ?? "OKO"
+  );
   const [reuseExisting, setReuseExisting] = useState(true);
   const [createInstances, setCreateInstances] = useState(true);
   const [formsMode, setFormsMode] = useState<FormsMode>("all");
@@ -76,22 +138,50 @@ export function PackageConstructor({
   }, []);
 
   useEffect(() => {
+    if (campaign) {
+      setPackageKind(campaign.packageKind);
+      setReuseExisting(true);
+      setCreateInstances(true);
+      const zids = campaignRows.map((r) => r.zid);
+      if (zids.length) {
+        setSelectedZids(zids);
+        setSingleZid(lockedPeriod?.zid ?? zids[0] ?? "");
+        setMode(admin && zids.length > 1 ? "bulk" : "single");
+      } else if (lockedPeriod) {
+        setSelectedZids([lockedPeriod.zid]);
+        setSingleZid(lockedPeriod.zid);
+        setMode("single");
+      }
+      setPreview(null);
+      setResult(null);
+      return;
+    }
     if (typeof defaultZid === "number") {
       setSingleZid(defaultZid);
-      setSelectedZids((prev) => (prev.includes(defaultZid) ? prev : [defaultZid]));
+      setSelectedZids((prev) =>
+        prev.includes(defaultZid) ? prev : [defaultZid]
+      );
     }
-  }, [defaultZid]);
+  }, [admin, campaign, campaignRows, defaultZid, lockedPeriod]);
+
+  const bulkOrgs = useMemo(() => {
+    if (!locked || !campaign) return orgs;
+    const zids = new Set(campaignRows.map((r) => r.zid));
+    if (lockedPeriod) zids.add(lockedPeriod.zid);
+    return orgs.filter((o) => zids.has(o.zid));
+  }, [locked, campaign, campaignRows, lockedPeriod, orgs]);
 
   const filteredOrgs = useMemo(() => {
+    const source = locked ? bulkOrgs : orgs;
     const q = orgSearch.trim().toLowerCase();
-    if (!q) return orgs;
-    return orgs.filter(
+    if (!q) return source;
+    return source.filter(
       (o) =>
         o.name.toLowerCase().includes(q) ||
         (o.code ?? "").toLowerCase().includes(q) ||
         String(o.zid).includes(q)
     );
-  }, [orgs, orgSearch]);
+  }, [orgs, bulkOrgs, locked, orgSearch]);
 
   const catalogForms = useMemo(
     () => (catalog?.forms ?? []).filter((f) => !f.archived),
@@ -117,10 +207,19 @@ export function PackageConstructor({
   }, [catalogForms, categoryFilter, formSearch]);
 
   const periodMeta = useMemo(() => {
+    if (campaign) {
+      return {
+        name: campaign.periodName,
+        periodStart: campaign.periodStart ?? "",
+        periodEnd: campaign.periodEnd ?? "",
+      };
+    }
     const name = quarterPeriodName(quarter, year);
     const range = quarterDateRange(quarter, year);
     return { name, ...range };
-  }, [quarter, year]);
+  }, [campaign, quarter, year]);
+
+  const effectiveKind = campaign?.packageKind ?? packageKind;
 
   const targetZids = useMemo(() => {
     if (mode === "single") {
@@ -129,37 +228,67 @@ export function PackageConstructor({
     return selectedZids;
   }, [mode, singleZid, selectedZids]);
 
-  const buildInput = (): PackageConstructInput => ({
-    mode,
-    targets: targetZids.map((zid) => ({ zid })),
-    period: {
-      name: periodMeta.name,
-      periodStart: periodMeta.periodStart,
-      periodEnd: periodMeta.periodEnd,
-      quarter,
-      year,
-      packageKind,
-      reuseExisting,
-    },
-    forms: {
-      mode: formsMode,
-      formIds: formsMode === "selected" ? selectedFormIds : undefined,
-    },
-    options: {
-      createInstances,
-      continueOnError: true,
-    },
-  });
+  const eidByZid = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of campaignRows) map.set(r.zid, r.eid);
+    if (lockedPeriod) map.set(lockedPeriod.zid, lockedPeriod.eid);
+    return map;
+  }, [campaignRows, lockedPeriod]);
+
+  const buildInput = (): PackageConstructInput => {
+    const period: PackageConstructInput["period"] = campaign
+      ? {
+          eid:
+            mode === "single" && typeof singleZid === "number"
+              ? eidByZid.get(singleZid)
+              : undefined,
+          name: campaign.periodName,
+          periodStart: campaign.periodStart ?? undefined,
+          periodEnd: campaign.periodEnd ?? undefined,
+          quarter: campaign.quarter,
+          year: campaign.year,
+          packageKind: campaign.packageKind,
+          reuseExisting: true,
+        }
+      : {
+          name: periodMeta.name,
+          periodStart: periodMeta.periodStart,
+          periodEnd: periodMeta.periodEnd,
+          quarter,
+          year,
+          packageKind,
+          reuseExisting,
+        };
+
+    return {
+      mode,
+      targets: targetZids.map((zid) => ({ zid })),
+      period,
+      forms: {
+        mode: formsMode,
+        formIds: formsMode === "selected" ? selectedFormIds : undefined,
+      },
+      options: {
+        createInstances: locked ? true : createInstances,
+        continueOnError: true,
+        allowCreatePeriod: false,
+      },
+    };
+  };
 
   const validate = (): string | null => {
     if (!canMutate) return "Нет прав на создание";
     if (!targetZids.length) return "Выберите организацию";
-    if (quarter < 1 || quarter > 4) return "Выберите квартал";
-    if (!Number.isFinite(year) || year < 2000) return "Укажите год";
+    if (!locked) {
+      if (quarter < 1 || quarter > 4) return "Выберите квартал";
+      if (!Number.isFinite(year) || year < 2000) return "Укажите год";
+    }
     if (formsMode === "selected" && selectedFormIds.length === 0) {
       return "Выберите хотя бы одну форму";
     }
-    if (mode === "bulk" && !admin) return "Массовое создание доступно только администратору";
+    if (mode === "bulk" && !admin) {
+      return "Массовое создание доступно только администратору";
+    }
     return null;
   };
 
@@ -195,12 +324,37 @@ export function PackageConstructor({
     setBusy(true);
     setError("");
     try {
+      // Fast path: one existing period + full catalog (works in local mode too).
+      if (
+        lockedPeriod &&
+        mode === "single" &&
+        formsMode === "all" &&
+        typeof singleZid === "number" &&
+        singleZid === lockedPeriod.zid
+      ) {
+        await createReportPackageAsync(lockedPeriod.zid, lockedPeriod.eid);
+        await onCreated(
+          lockedPeriod.zid,
+          lockedPeriod.eid,
+          lockedPeriod.packageKind
+        );
+        return;
+      }
+
       const res = await constructPackages(buildInput());
       setResult(res);
       setPreview(res);
-      const firstOk = res.rows.find((r) => r.status === "created" && r.eid != null);
+      const firstOk = res.rows.find(
+        (r) => r.status === "created" && r.eid != null
+      );
       if (firstOk?.eid != null) {
-        await onCreated(firstOk.zid, firstOk.eid, packageKind);
+        await onCreated(firstOk.zid, firstOk.eid, effectiveKind);
+      } else if (lockedPeriod) {
+        await onCreated(
+          lockedPeriod.zid,
+          lockedPeriod.eid,
+          lockedPeriod.packageKind
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка создания");
@@ -218,22 +372,28 @@ export function PackageConstructor({
   };
 
   const selectChildrenOf = (parentZid: number) => {
-    const kids = orgs.filter((o) => o.parentZid === parentZid).map((o) => o.zid);
-    setSelectedZids(kids);
+    const kids = bulkOrgs
+      .filter((o) => o.parentZid === parentZid)
+      .map((o) => o.zid);
+    setSelectedZids(kids.length ? kids : [parentZid]);
     setPreview(null);
     setResult(null);
   };
 
   const toggleForm = (formId: string) => {
     setSelectedFormIds((prev) =>
-      prev.includes(formId) ? prev.filter((x) => x !== formId) : [...prev, formId]
+      prev.includes(formId)
+        ? prev.filter((x) => x !== formId)
+        : [...prev, formId]
     );
     setPreview(null);
     setResult(null);
   };
 
   const selectCategoryForms = (category: string) => {
-    const ids = catalogForms.filter((f) => f.category === category).map((f) => f.id);
+    const ids = catalogForms
+      .filter((f) => f.category === category)
+      .map((f) => f.id);
     setSelectedFormIds((prev) => [...new Set([...prev, ...ids])]);
     setPreview(null);
     setResult(null);
@@ -245,7 +405,7 @@ export function PackageConstructor({
   if (!canMutate) {
     return (
       <section className="tools-section">
-        <h2>Создание комплектов</h2>
+        <h2>Заведение форм</h2>
         <p className="tools-hint">Недостаточно прав для создания комплектов.</p>
       </section>
     );
@@ -253,25 +413,41 @@ export function PackageConstructor({
 
   return (
     <section className="tools-section package-constructor">
-      <h2>Создание комплектов</h2>
+      <h2>{locked ? "Создать комплекты" : "Создание комплектов"}</h2>
       <p className="tools-hint">
-        Один или несколько комплектов: период, состав форм, предпросмотр и создание.
+        {locked
+          ? "Период уже открыт. Заведите пустые формы (комплекты) по организациям."
+          : "Один или несколько комплектов: период, состав форм, предпросмотр и создание."}
       </p>
       {error && <p className="error">{error}</p>}
 
-      <div className="tools-tabs" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={mode === "single" ? "active" : undefined}
-          onClick={() => {
-            setMode("single");
-            setPreview(null);
-            setResult(null);
-          }}
-        >
-          Один комплект
-        </button>
-        {admin && (
+      {campaign ? (
+        <p className="tools-hint" style={{ marginBottom: 12 }}>
+          Период: <strong>{campaign.periodName}</strong>
+          {campaign.periodStart && campaign.periodEnd
+            ? ` · ${formatPeriod(campaign.periodStart, campaign.periodEnd)}`
+            : ""}
+          {" · "}
+          {packageKindLabel(campaign.packageKind)}
+          {campaignRows.length
+            ? ` · организаций с периодом: ${campaignRows.length}`
+            : ""}
+        </p>
+      ) : null}
+
+      {admin && (locked ? bulkOrgs.length > 1 : true) ? (
+        <div className="tools-tabs" style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            className={mode === "single" ? "active" : undefined}
+            onClick={() => {
+              setMode("single");
+              setPreview(null);
+              setResult(null);
+            }}
+          >
+            Одна организация
+          </button>
           <button
             type="button"
             className={mode === "bulk" ? "active" : undefined}
@@ -283,24 +459,27 @@ export function PackageConstructor({
           >
             Несколько организаций
           </button>
-        )}
-      </div>
+        </div>
+      ) : null}
 
-      <h3>1. Организации</h3>
+      <h3>{locked ? "1. Организации" : "1. Организации"}</h3>
       {mode === "single" ? (
         <div className="tools-grid" style={{ marginBottom: 12 }}>
           <label>
             Организация
             <select
               value={singleZid === "" ? "" : String(singleZid)}
+              disabled={Boolean(lockedPeriod) && !lockedCampaign}
               onChange={(e) => {
-                setSingleZid(e.target.value === "" ? "" : Number(e.target.value));
+                setSingleZid(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                );
                 setPreview(null);
                 setResult(null);
               }}
             >
               <option value="">— выберите —</option>
-              {orgs.map((o) => (
+              {(locked ? bulkOrgs : orgs).map((o) => (
                 <option key={o.zid} value={o.zid}>
                   {orgOptionLabel(o)}
                 </option>
@@ -338,14 +517,19 @@ export function PackageConstructor({
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              disabled={typeof singleZid !== "number" && typeof defaultZid !== "number"}
+              disabled={
+                typeof singleZid !== "number" &&
+                typeof defaultZid !== "number" &&
+                !lockedPeriod
+              }
               onClick={() => {
                 const parent =
-                  typeof defaultZid === "number"
+                  lockedPeriod?.zid ??
+                  (typeof defaultZid === "number"
                     ? defaultZid
                     : typeof singleZid === "number"
                       ? singleZid
-                      : orgs[0]?.zid;
+                      : orgs[0]?.zid);
                 if (parent != null) selectChildrenOf(parent);
               }}
             >
@@ -355,7 +539,7 @@ export function PackageConstructor({
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => {
-                setSelectedZids([]);
+                setSelectedZids(lockedPeriod ? [lockedPeriod.zid] : []);
                 setPreview(null);
                 setResult(null);
               }}
@@ -363,7 +547,12 @@ export function PackageConstructor({
               Снять все
             </button>
           </div>
-          <p className="tools-hint">Выбрано: {selectedZids.length}</p>
+          <p className="tools-hint">
+            Выбрано: {selectedZids.length}
+            {locked
+              ? " (только организации с уже созданным таким же периодом)"
+              : ""}
+          </p>
           <div className="aggr-list package-constructor-org-list">
             {filteredOrgs.map((o) => (
               <label key={o.zid} className="package-constructor-check-row">
@@ -380,96 +569,105 @@ export function PackageConstructor({
                 </span>
               </label>
             ))}
-            {!filteredOrgs.length && <p className="tools-hint">Нет организаций</p>}
+            {!filteredOrgs.length && (
+              <p className="tools-hint">Нет организаций</p>
+            )}
           </div>
         </div>
       )}
 
-      <h3>2. Отчётный период</h3>
-      <div className="tools-grid" style={{ marginBottom: 8 }}>
-        <label>
-          Квартал
-          <select
-            value={quarter}
-            onChange={(e) => {
-              setQuarter(Number(e.target.value));
-              setPreview(null);
-              setResult(null);
-            }}
+      {!locked ? (
+        <>
+          <h3>2. Отчётный период</h3>
+          <div className="tools-grid" style={{ marginBottom: 8 }}>
+            <label>
+              Квартал
+              <select
+                value={quarter}
+                onChange={(e) => {
+                  setQuarter(Number(e.target.value));
+                  setPreview(null);
+                  setResult(null);
+                }}
+              >
+                <option value={1}>1 квартал</option>
+                <option value={2}>2 квартал</option>
+                <option value={3}>3 квартал</option>
+                <option value={4}>4 квартал</option>
+              </select>
+            </label>
+            <label>
+              Год
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                value={year}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  if (Number.isFinite(next)) {
+                    setYear(next);
+                    setPreview(null);
+                    setResult(null);
+                  }
+                }}
+              />
+            </label>
+            <label>
+              Тип комплекта
+              <select
+                value={packageKind}
+                onChange={(e) => {
+                  setPackageKind(e.target.value as PackageKind);
+                  setPreview(null);
+                  setResult(null);
+                }}
+              >
+                <option value="OKO">ОКО</option>
+                <option value="BALANCE">Баланс</option>
+              </select>
+            </label>
+          </div>
+          <p className="tools-hint" style={{ marginBottom: 12 }}>
+            Период: <strong>{periodMeta.name}</strong>
+            {" · "}
+            {formatPeriod(periodMeta.periodStart, periodMeta.periodEnd)}
+            {" · "}
+            {packageKindLabel(packageKind)}
+          </p>
+          <div
+            className="package-workspace-checkboxes"
+            style={{ marginBottom: 12 }}
           >
-            <option value={1}>1 квартал</option>
-            <option value={2}>2 квартал</option>
-            <option value={3}>3 квартал</option>
-            <option value={4}>4 квартал</option>
-          </select>
-        </label>
-        <label>
-          Год
-          <input
-            type="number"
-            min={2000}
-            max={2100}
-            value={year}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              if (Number.isFinite(next)) {
-                setYear(next);
-                setPreview(null);
-                setResult(null);
-              }
-            }}
-          />
-        </label>
-        <label>
-          Тип комплекта
-          <select
-            value={packageKind}
-            onChange={(e) => {
-              setPackageKind(e.target.value as PackageKind);
-              setPreview(null);
-              setResult(null);
-            }}
-          >
-            <option value="OKO">ОКО</option>
-            <option value="BALANCE">Баланс</option>
-          </select>
-        </label>
-      </div>
-      <p className="tools-hint" style={{ marginBottom: 12 }}>
-        Период: <strong>{periodMeta.name}</strong>
-        {" · "}
-        {formatPeriod(periodMeta.periodStart, periodMeta.periodEnd)}
-        {" · "}
-        {packageKindLabel(packageKind)}
-      </p>
-      <div className="package-workspace-checkboxes" style={{ marginBottom: 12 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={reuseExisting}
-            onChange={(e) => {
-              setReuseExisting(e.target.checked);
-              setPreview(null);
-              setResult(null);
-            }}
-          />{" "}
-          Если период уже есть — дозавести недостающие формы
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={createInstances}
-            onChange={(e) => {
-              setCreateInstances(e.target.checked);
-              setPreview(null);
-              setResult(null);
-            }}
-          />{" "}
-          Сразу завести пустые формы
-        </label>
-      </div>
+            <label>
+              <input
+                type="checkbox"
+                checked={reuseExisting}
+                onChange={(e) => {
+                  setReuseExisting(e.target.checked);
+                  setPreview(null);
+                  setResult(null);
+                }}
+              />{" "}
+              Если период уже есть — дозавести недостающие формы
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={createInstances}
+                onChange={(e) => {
+                  setCreateInstances(e.target.checked);
+                  setPreview(null);
+                  setResult(null);
+                }}
+              />{" "}
+              Сразу завести пустые формы
+            </label>
+          </div>
+        </>
+      ) : null}
 
-      <h3>3. Состав форм</h3>
+      <h3>{locked ? "2. Состав форм" : "3. Состав форм"}</h3>
       <div className="tools-tabs" style={{ marginBottom: 8 }}>
         <button
           type="button"
@@ -597,7 +795,7 @@ export function PackageConstructor({
         >
           {busy
             ? "Создание…"
-            : `Создать${targetZids.length ? ` (${targetZids.length})` : ""}`}
+            : `Создать комплекты${targetZids.length ? ` (${targetZids.length})` : ""}`}
         </button>
       </div>
 
@@ -613,7 +811,7 @@ export function PackageConstructor({
           {" · ошибок: "}
           <strong>{summary.errors}</strong>
           {" · тип "}
-          {packageKindLabel(packageKind)}
+          {packageKindLabel(effectiveKind)}
         </p>
       )}
 

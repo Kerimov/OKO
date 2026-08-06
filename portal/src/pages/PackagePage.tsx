@@ -6,9 +6,20 @@ import {
   resolveUiPsdRole,
   type PsdRole,
 } from "../auth";
+import { PackageConstructor } from "../components/PackageConstructor";
+import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import {
+  Button,
+  PageHeader,
+  StatusBadge,
+  StatusBanner,
+  TabBar,
+} from "../components/ui";
+import {
+  constructPackages,
   createOrganization,
   createPeriod,
+  createPeriodsBulk,
   createReportPackageAsync,
   closePeriod,
   reopenPeriod,
@@ -49,18 +60,15 @@ import type {
   PackageWorkspaceDetail,
   PackageWorkspaceRow,
 } from "../types";
-import { formatPeriod, formStatusLabel, currentReportingQuarter, quarterDateRange, quarterPeriodName } from "../utils";
+import {
+  formatPeriod,
+  formStatusLabel,
+  currentReportingQuarter,
+  quarterDateRange,
+  quarterPeriodName,
+} from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
-import { PackageConstructor } from "../components/PackageConstructor";
-import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
-import {
-  Button,
-  PageHeader,
-  StatusBadge,
-  StatusBanner,
-  TabBar,
-} from "../components/ui";
 
 function ProgressMeter({ percent, label }: { percent: number; label?: string }) {
   const safe = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
@@ -74,8 +82,37 @@ function ProgressMeter({ percent, label }: { percent: number; label?: string }) 
   );
 }
 
-type WorkspaceTab = "overview" | "forms" | "bp" | "periods" | "setup" | "create";
+type WorkspaceTab =
+  | "period"
+  | "overview"
+  | "forms"
+  | "bp"
+  | "open-period"
+  | "setup"
+  | "create-packages";
 type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
+
+type PeriodCampaign = {
+  key: string;
+  periodName: string;
+  packageKind: PackageKind;
+  periodStart: string | null;
+  periodEnd: string | null;
+  orgCount: number;
+  withoutForms: number;
+  openCount: number;
+  closedCount: number;
+  /** closed = all closed; open = none closed; mixed = both */
+  status: "open" | "closed" | "mixed";
+  closableCount: number;
+};
+
+function campaignKeyOf(r: {
+  periodName: string;
+  packageKind: string;
+}): string {
+  return `${r.periodName}||${r.packageKind}`;
+}
 
 const BP_ACTIONS: Array<{
   action: BpAction;
@@ -145,14 +182,11 @@ export function PackagePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [tab, setTab] = useState<WorkspaceTab>("overview");
+  const [tab, setTab] = useState<WorkspaceTab>("period");
 
   const [listSearch, setListSearch] = useState("");
-  const [filterBp, setFilterBp] = useState("");
   const [filterKind, setFilterKind] = useState("");
   const [filterPeriod, setFilterPeriod] = useState("");
-  const [filterIncomplete, setFilterIncomplete] = useState(false);
-  const [filterBlockers, setFilterBlockers] = useState(false);
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => new Set());
 
   const [formSearch, setFormSearch] = useState("");
@@ -170,6 +204,12 @@ export function PackagePage() {
   const [periodsCreateZid, setPeriodsCreateZid] = useState<number | "">("");
   const [bpBusy, setBpBusy] = useState(false);
   const [packageChecksBusy, setPackageChecksBusy] = useState(false);
+
+  const [selectedCampaignKey, setSelectedCampaignKey] = useState("");
+  /** Filters for packages inside a period (right pane). */
+  const [filterBp, setFilterBp] = useState("");
+  const [filterIncomplete, setFilterIncomplete] = useState(false);
+  const [filterBlockers, setFilterBlockers] = useState(false);
 
   const selectedRow = useMemo(
     () =>
@@ -195,18 +235,106 @@ export function PackagePage() {
     return orgs;
   }, [orgs, orgZid]);
 
-  const periodRows = useMemo(() => {
-    const list = [...rows];
-    list.sort((a, b) => {
-      const sa = a.periodStart ?? "";
-      const sb = b.periodStart ?? "";
-      if (sa !== sb) return sb.localeCompare(sa);
-      const nameCmp = a.periodName.localeCompare(b.periodName, "ru");
-      if (nameCmp !== 0) return nameCmp;
-      return a.organizationName.localeCompare(b.organizationName, "ru");
-    });
-    return list;
-  }, [rows]);
+  /** Periods (campaigns) — top level of the workspace. */
+  const allCampaigns = useMemo(() => {
+    const map = new Map<string, PeriodCampaign>();
+    for (const r of rows) {
+      const key = campaignKeyOf(r);
+      const prev = map.get(key);
+      const closable = r.periodStatus !== "closed" && r.bpStatus === "completed";
+      if (prev) {
+        prev.orgCount += 1;
+        if (r.filled === 0) prev.withoutForms += 1;
+        if (r.periodStatus === "closed") prev.closedCount += 1;
+        else prev.openCount += 1;
+        if (closable) prev.closableCount += 1;
+      } else {
+        map.set(key, {
+          key,
+          periodName: r.periodName,
+          packageKind: r.packageKind,
+          periodStart: r.periodStart,
+          periodEnd: r.periodEnd,
+          orgCount: 1,
+          withoutForms: r.filled === 0 ? 1 : 0,
+          openCount: r.periodStatus === "closed" ? 0 : 1,
+          closedCount: r.periodStatus === "closed" ? 1 : 0,
+          status: r.periodStatus === "closed" ? "closed" : "open",
+          closableCount: closable ? 1 : 0,
+        });
+      }
+    }
+    for (const c of map.values()) {
+      if (c.openCount > 0 && c.closedCount > 0) c.status = "mixed";
+      else if (c.closedCount > 0 && c.openCount === 0) c.status = "closed";
+      else c.status = "open";
+    }
+    const q = listSearch.trim().toLowerCase();
+    return [...map.values()]
+      .filter((c) => {
+        if (filterKind && c.packageKind !== filterKind) return false;
+        if (filterPeriod === "open" && c.status === "closed") return false;
+        if (filterPeriod === "closed" && c.status !== "closed") return false;
+        if (!q) return true;
+        return (
+          c.periodName.toLowerCase().includes(q) ||
+          packageKindLabel(c.packageKind).toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const sa = a.periodStart ?? "";
+        const sb = b.periodStart ?? "";
+        if (sa !== sb) return sb.localeCompare(sa);
+        return b.periodName.localeCompare(a.periodName, "ru");
+      });
+  }, [rows, listSearch, filterKind, filterPeriod]);
+
+  const selectedCampaign = useMemo(
+    () => allCampaigns.find((c) => c.key === selectedCampaignKey) ?? null,
+    [allCampaigns, selectedCampaignKey]
+  );
+
+  const campaignPackages = useMemo(() => {
+    if (!selectedCampaign) return [];
+    return rows
+      .filter((r) => campaignKeyOf(r) === selectedCampaign.key)
+      .filter((r) => {
+        if (filterBp && r.bpStatus !== filterBp) return false;
+        if (filterIncomplete && r.filled >= r.total) return false;
+        if (filterBlockers && !r.hasBlockers) return false;
+        return true;
+      })
+      .sort((a, b) =>
+        a.organizationName.localeCompare(b.organizationName, "ru")
+      );
+  }, [
+    rows,
+    selectedCampaign,
+    filterBp,
+    filterIncomplete,
+    filterBlockers,
+  ]);
+
+  const selectCampaign = useCallback((key: string) => {
+    setSelectedCampaignKey(key);
+    setZid("");
+    setEid("");
+    setDetail(null);
+    setTab("period");
+    setCheckedKeys(new Set());
+  }, []);
+
+  useEffect(() => {
+    if (selectedRow) {
+      const key = campaignKeyOf(selectedRow);
+      if (key !== selectedCampaignKey) setSelectedCampaignKey(key);
+    }
+  }, [selectedRow, selectedCampaignKey]);
+
+  useEffect(() => {
+    if (selectedCampaignKey) return;
+    if (allCampaigns[0]) setSelectedCampaignKey(allCampaigns[0].key);
+  }, [allCampaigns, selectedCampaignKey]);
 
   useEffect(() => {
     if (periodsCreateZid !== "") return;
@@ -379,52 +507,10 @@ export function PackagePage() {
   }, [backend, zid, eid]);
 
   const filteredRows = useMemo(() => {
-    const q = listSearch.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (filterBp && r.bpStatus !== filterBp) return false;
-      if (filterKind && r.packageKind !== filterKind) return false;
-      if (filterPeriod === "open" && r.periodStatus !== "open") return false;
-      if (filterPeriod === "closed" && r.periodStatus !== "closed") return false;
-      if (filterIncomplete && r.filled >= r.total) return false;
-      if (filterBlockers && !r.hasBlockers) return false;
-      if (!q) return true;
-      return (
-        r.organizationName.toLowerCase().includes(q) ||
-        (r.organizationCode ?? "").toLowerCase().includes(q) ||
-        r.periodName.toLowerCase().includes(q)
-      );
-    });
-  }, [
-    rows,
-    listSearch,
-    filterBp,
-    filterKind,
-    filterPeriod,
-    filterIncomplete,
-    filterBlockers,
-  ]);
-
-  const listTotals = useMemo(() => {
-    let filled = 0;
-    let submitted = 0;
-    for (const r of filteredRows) {
-      filled += r.filled;
-      submitted += r.submitted;
-    }
-    return { packages: filteredRows.length, filled, submitted };
-  }, [filteredRows]);
-
-  const selectableFilteredRows = useMemo(
-    () =>
-      canBulkSelect
-        ? filteredRows.filter((r) => orgZid == null || r.zid === orgZid)
-        : [],
-    [filteredRows, canBulkSelect, orgZid]
-  );
-
-  const allSelectableChecked =
-    selectableFilteredRows.length > 0 &&
-    selectableFilteredRows.every((r) => checkedKeys.has(rowKey(r)));
+    // Bulk actions operate on packages inside the selected period.
+    if (selectedCampaign) return campaignPackages;
+    return rows;
+  }, [selectedCampaign, campaignPackages, rows]);
 
   const checkedRows = useMemo(
     () => filteredRows.filter((r) => checkedKeys.has(rowKey(r))),
@@ -526,14 +612,12 @@ export function PackagePage() {
   };
 
   const handleCreatePeriod = async () => {
-    const targetZid =
-      typeof periodsCreateZid === "number"
-        ? periodsCreateZid
-        : typeof zid === "number"
-          ? zid
-          : orgs[0]?.zid;
-    if (targetZid == null || !canMutate) return;
-    if (newPeriodQuarter < 1 || newPeriodQuarter > 4 || !Number.isFinite(newPeriodYear)) {
+    if (!canMutate) return;
+    if (
+      newPeriodQuarter < 1 ||
+      newPeriodQuarter > 4 ||
+      !Number.isFinite(newPeriodYear)
+    ) {
       setStatus("Укажите квартал и год");
       return;
     }
@@ -542,27 +626,97 @@ export function PackagePage() {
     try {
       const name = quarterPeriodName(newPeriodQuarter, newPeriodYear);
       const range = quarterDateRange(newPeriodQuarter, newPeriodYear);
-      const period = await createPeriod({
-        zid: targetZid,
-        name,
-        periodStart: range.periodStart,
-        periodEnd: range.periodEnd,
-        quarter: newPeriodQuarter,
-        year: newPeriodYear,
-        packageKind: newPackageKind,
-      });
+      const kind: PackageKind =
+        newPackageKind === "BALANCE" ? "BALANCE" : "OKO";
+
+      let created = 0;
+      let reused = 0;
+      let errors = 0;
+
+      if (admin) {
+        const res = await createPeriodsBulk({
+          quarter: newPeriodQuarter,
+          year: newPeriodYear,
+          packageKind: kind,
+          name,
+          periodStart: range.periodStart,
+          periodEnd: range.periodEnd,
+          reuseExisting: true,
+        });
+        created = res.summary.created;
+        reused = res.summary.reused;
+        errors = res.summary.errors;
+        if (created + reused === 0) {
+          throw new Error(
+            res.rows.find((r) => r.error)?.error ||
+              "Не удалось открыть период ни для одной организации"
+          );
+        }
+      } else {
+        const targetZid =
+          orgZid ??
+          (typeof periodsCreateZid === "number"
+            ? periodsCreateZid
+            : orgs[0]?.zid);
+        if (targetZid == null) {
+          throw new Error("Не выбрана организация");
+        }
+        try {
+          await createPeriod({
+            zid: targetZid,
+            name,
+            periodStart: range.periodStart,
+            periodEnd: range.periodEnd,
+            quarter: newPeriodQuarter,
+            year: newPeriodYear,
+            packageKind: kind,
+          });
+          created = 1;
+        } catch (createErr) {
+          const res = await constructPackages({
+            mode: "single",
+            targets: [{ zid: targetZid }],
+            period: {
+              quarter: newPeriodQuarter,
+              year: newPeriodYear,
+              packageKind: kind,
+              reuseExisting: true,
+            },
+            forms: { mode: "all" },
+            options: {
+              createInstances: false,
+              allowCreatePeriod: true,
+            },
+          });
+          const row = res.rows[0];
+          if (!row || row.status === "error" || row.eid == null) {
+            throw new Error(
+              row?.error ||
+                (createErr instanceof Error
+                  ? createErr.message
+                  : "Не удалось создать период")
+            );
+          }
+          if (row.periodCreated) created = 1;
+          else reused = 1;
+        }
+      }
+
       const qy = currentReportingQuarter();
       setNewPeriodQuarter(qy.quarter);
       setNewPeriodYear(qy.year);
       setNewPackageKind("OKO");
       await loadList();
-      await selectPackage(
-        targetZid,
-        period.eid,
-        period.packageKind === "BALANCE" ? "BALANCE" : "OKO"
+      const key = `${name}||${kind}`;
+      setSelectedCampaignKey(key);
+      setTab("period");
+      setStatus(
+        `Период «${name}» открыт` +
+          (admin
+            ? `: создано ${created}, уже было ${reused}` +
+              (errors ? `, ошибок ${errors}` : "")
+            : "")
       );
-      setStatus(`Период «${period.name}» создан`);
-      setTab("periods");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания периода");
     } finally {
@@ -601,6 +755,95 @@ export function PackagePage() {
       await refreshAll();
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка переоткрытия периода");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCloseCampaign = async () => {
+    if (!selectedCampaign) return;
+    const targets = rows.filter(
+      (r) =>
+        campaignKeyOf(r) === selectedCampaign.key &&
+        r.periodStatus !== "closed" &&
+        r.bpStatus === "completed"
+    );
+    if (!targets.length) {
+      setStatus(
+        "Нет комплектов для закрытия: нужен завершённый бизнес-процесс"
+      );
+      return;
+    }
+    if (
+      !confirm(
+        `Закрыть период «${selectedCampaign.periodName}» для ${targets.length} организаций? После закрытия формы нельзя будет редактировать.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const r of targets) {
+        try {
+          await closePeriod(r.zid, r.eid);
+          ok += 1;
+        } catch {
+          fail += 1;
+        }
+      }
+      setStatus(
+        `Период закрыт: ${ok}` + (fail ? ` · ошибок ${fail}` : "")
+      );
+      await refreshAll();
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка закрытия периода");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReopenCampaign = async () => {
+    if (!selectedCampaign) return;
+    const targets = rows.filter(
+      (r) =>
+        campaignKeyOf(r) === selectedCampaign.key &&
+        r.periodStatus === "closed"
+    );
+    if (!targets.length) {
+      setStatus("Нет закрытых комплектов для переоткрытия");
+      return;
+    }
+    if (
+      !confirm(
+        `Переоткрыть период «${selectedCampaign.periodName}» для ${targets.length} организаций?`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const r of targets) {
+        try {
+          await reopenPeriod(r.zid, r.eid);
+          ok += 1;
+        } catch {
+          fail += 1;
+        }
+      }
+      setStatus(
+        `Период переоткрыт: ${ok}` + (fail ? ` · ошибок ${fail}` : "")
+      );
+      await refreshAll();
+    } catch (e) {
+      setStatus(
+        e instanceof Error ? e.message : "Ошибка переоткрытия периода"
+      );
     } finally {
       setBusy(false);
     }
@@ -726,22 +969,6 @@ export function PackagePage() {
       const next = new Set(prev);
       if (checked) next.add(key);
       else next.delete(key);
-      return next;
-    });
-  };
-
-  const toggleSelectAllSelectable = () => {
-    if (allSelectableChecked) {
-      setCheckedKeys((prev) => {
-        const next = new Set(prev);
-        for (const r of selectableFilteredRows) next.delete(rowKey(r));
-        return next;
-      });
-      return;
-    }
-    setCheckedKeys((prev) => {
-      const next = new Set(prev);
-      for (const r of selectableFilteredRows) next.add(rowKey(r));
       return next;
     });
   };
@@ -1013,7 +1240,7 @@ export function PackagePage() {
         title="Комплекты отчётности"
         description={
           <>
-            Список организаций и периодов слева, карточка и действия справа.
+            Сначала период, внутри — комплекты по организациям.
             {auditorRo ? " Режим аудитора: только чтение." : ""}
           </>
         }
@@ -1028,37 +1255,23 @@ export function PackagePage() {
 
       <div className="package-workspace-layout">
         <aside className="tools-section package-workspace-list">
-          <h2>Список</h2>
+          <h2>Периоды</h2>
           <CollapsibleFilters
             activeCount={countActiveFilters(
               listSearch.trim().length > 0,
-              filterBp !== "",
               filterKind !== "",
-              filterPeriod !== "",
-              filterIncomplete,
-              filterBlockers
+              filterPeriod !== ""
             )}
             bodyClassName="package-workspace-filters"
           >
             <input
               type="search"
               className="search-input"
-              placeholder="Поиск: организация или период…"
+              placeholder="Поиск периода…"
               value={listSearch}
               onChange={(e) => setListSearch(e.target.value)}
             />
             <div className="tools-grid package-workspace-filter-grid">
-              <label>
-                Статус БП
-                <select value={filterBp} onChange={(e) => setFilterBp(e.target.value)}>
-                  <option value="">Все</option>
-                  {Object.entries(BP_STATUS_LABEL).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label>
                 Тип
                 <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}>
@@ -1068,7 +1281,7 @@ export function PackagePage() {
                 </select>
               </label>
               <label>
-                Период
+                Статус
                 <select
                   value={filterPeriod}
                   onChange={(e) => setFilterPeriod(e.target.value)}
@@ -1079,169 +1292,59 @@ export function PackagePage() {
                 </select>
               </label>
             </div>
-            <div className="package-workspace-checkboxes">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={filterIncomplete}
-                  onChange={(e) => setFilterIncomplete(e.target.checked)}
-                />{" "}
-                Неполный
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={filterBlockers}
-                  onChange={(e) => setFilterBlockers(e.target.checked)}
-                />{" "}
-                Есть блокеры
-              </label>
-            </div>
           </CollapsibleFilters>
-          <div className="package-workspace-filters-meta">
-            <p className="package-workspace-list-totals table-sub">
-              В списке: {listTotals.packages} · заведено {listTotals.filled} · сдано{" "}
-              {listTotals.submitted}
-            </p>
-            {canBulkSelect && (
-              <div className="package-workspace-bulk-bar">
-                <label className="package-workspace-bulk-select-all">
-                  <input
-                    type="checkbox"
-                    checked={allSelectableChecked}
-                    disabled={busy || selectableFilteredRows.length === 0}
-                    onChange={toggleSelectAllSelectable}
-                  />{" "}
-                  Выбрать все ({selectableFilteredRows.length})
-                </label>
-                {checkedRows.length > 0 ? (
-                  <div className="package-workspace-bulk-actions">
-                    {canBulkStartCollection && (
-                      <Button
-                        size="sm"
-                        disabled={
-                          busy ||
-                          bpBusy ||
-                          !checkedRows.some(
-                            (r) =>
-                              r.periodStatus !== "closed" &&
-                              (r.bpStatus ?? "not_started") === "not_started"
-                          )
-                        }
-                        onClick={() => void handleBulkStartCollection()}
-                      >
-                        {bpBusy ? "Запуск…" : "Запустить сбор"}
-                      </Button>
-                    )}
-                    {canBulkRunChecks && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={busy || packageChecksBusy}
-                        onClick={() => void handleBulkChecks()}
-                      >
-                        {packageChecksBusy
-                          ? "Проверки…"
-                          : "Запустить проверки"}
-                      </Button>
-                    )}
-                    {canBulkDelete && (
-                      <Button
-                        variant="danger-outline"
-                        size="sm"
-                        disabled={busy || checkedDeletableRows.length === 0}
-                        onClick={() => void handleBulkDelete()}
-                      >
-                        Удалить
-                        {checkedDeletableRows.length > 0
-                          ? ` (${checkedDeletableRows.length})`
-                          : ""}
-                      </Button>
-                    )}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy}
-                      onClick={clearSelection}
-                    >
-                      Снять выбор
-                    </Button>
-                  </div>
-                ) : (
-                  <span className="table-sub package-workspace-bulk-hint">
-                    Отметьте комплекты для действий
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          <p className="package-workspace-list-totals table-sub">
+            Периодов: {allCampaigns.length}
+          </p>
 
           <div className="package-workspace-list-scroll">
-            {filteredRows.map((r) => {
-              const key = rowKey(r);
-              const selected = selectedRow && key === rowKey(selectedRow);
-              const canCheck =
-                canBulkSelect && (orgZid == null || r.zid === orgZid);
-              const checked = checkedKeys.has(key);
+            {allCampaigns.map((c) => {
+              const selected = c.key === selectedCampaignKey;
               return (
-                <div
-                  key={key}
-                  className={`package-workspace-item${selected ? " is-selected" : ""}${
-                    checked ? " is-checked" : ""
-                  }`}
+                <button
+                  key={c.key}
+                  type="button"
+                  className={`package-workspace-item${selected ? " is-selected" : ""}`}
+                  onClick={() => selectCampaign(c.key)}
                 >
-                  {canBulkSelect && (
-                    <label
-                      className="package-workspace-item-check"
-                      title={
-                        !canCheck ? "Нет доступа к этому комплекту" : undefined
-                      }
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={busy || !canCheck}
-                        onChange={(e) => toggleChecked(key, e.target.checked)}
-                        aria-label={`Выбрать ${r.organizationName} — ${r.periodName}`}
-                      />
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    className="package-workspace-item-body"
-                    onClick={() => void selectPackage(r.zid, r.eid, r.packageKind)}
-                  >
+                  <div className="package-workspace-item-body">
                     <div className="package-workspace-item-title">
-                      {r.organizationName}
-                      {r.organizationCode ? (
-                        <span className="table-sub"> · {r.organizationCode}</span>
-                      ) : null}
+                      {c.periodName}
                     </div>
                     <div className="package-workspace-item-meta">
-                      {r.periodName} · {packageKindLabel(r.packageKind)}
+                      {packageKindLabel(c.packageKind)}
+                      {c.periodStart && c.periodEnd
+                        ? ` · ${formatPeriod(c.periodStart, c.periodEnd)}`
+                        : ""}
                     </div>
                     <div className="package-workspace-item-stats">
-                      {r.bpStatus ? (
-                        <StatusBadge status={r.bpStatus} label={bpStatusLabel(r.bpStatus)} />
-                      ) : (
-                        <StatusBadge tone="not_started" label="Нет БП" />
-                      )}
-                      <ProgressMeter
-                        percent={r.percent}
-                        label={`${r.filled}/${r.total}`}
+                      <StatusBadge
+                        tone={
+                          c.status === "closed"
+                            ? "returned"
+                            : c.status === "mixed"
+                              ? "draft"
+                              : "accepted"
+                        }
+                        label={
+                          c.status === "closed"
+                            ? "закрыт"
+                            : c.status === "mixed"
+                              ? "частично закрыт"
+                              : "открыт"
+                        }
                       />
                       <span className="table-sub">
-                        {r.filled}/{r.total}
-                        {r.periodStatus === "closed" ? " · закрыт" : ""}
-                        {r.hasBlockers ? " · блокеры" : ""}
+                        {c.orgCount} орг.
+                        {c.withoutForms ? ` · без форм: ${c.withoutForms}` : ""}
                       </span>
                     </div>
-                  </button>
-                </div>
+                  </div>
+                </button>
               );
             })}
-            {!filteredRows.length && (
-              <p className="tools-hint">Нет комплектов по фильтрам</p>
+            {!allCampaigns.length && (
+              <p className="tools-hint">Периодов пока нет</p>
             )}
           </div>
 
@@ -1250,19 +1353,9 @@ export function PackagePage() {
               variant="secondary"
               size="sm"
               className="package-workspace-create-btn"
-              onClick={() => setTab("create")}
+              onClick={() => setTab("open-period")}
             >
-              Создать комплект…
-            </Button>
-          )}
-          {canMutate && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="package-workspace-create-btn"
-              onClick={() => setTab("periods")}
-            >
-              Периоды
+              Открыть период…
             </Button>
           )}
           {admin && canMutate && (
@@ -1278,14 +1371,25 @@ export function PackagePage() {
         </aside>
 
         <div className="package-workspace-detail">
-          {canMutate || selectedRow ? (
+          {(selectedCampaign || selectedRow || canMutate) && (
             <TabBar
-              ariaLabel="Разделы комплекта"
-              value={tab}
+              ariaLabel="Разделы"
+              value={
+                tab === "open-period" || tab === "setup" || tab === "create-packages"
+                  ? tab
+                  : selectedRow && (tab === "overview" || tab === "forms" || tab === "bp")
+                    ? tab
+                    : "period"
+              }
               onChange={(id) => setTab(id as WorkspaceTab)}
               items={
                 (
                   [
+                    ...(selectedCampaign
+                      ? ([["period", "Комплекты периода"]] as Array<
+                          [WorkspaceTab, string]
+                        >)
+                      : []),
                     ...(selectedRow
                       ? ([
                           ["overview", "Обзор"],
@@ -1294,9 +1398,13 @@ export function PackagePage() {
                         ] as Array<[WorkspaceTab, string]>)
                       : []),
                     ...(canMutate
+                      ? ([["open-period", "Открыть период"]] as Array<
+                          [WorkspaceTab, string]
+                        >)
+                      : []),
+                    ...(selectedCampaign && canMutate
                       ? ([
-                          ["create", "Создание"],
-                          ["periods", "Периоды"],
+                          ["create-packages", "Создать комплекты"],
                         ] as Array<[WorkspaceTab, string]>)
                       : []),
                     ...(admin && canMutate
@@ -1306,51 +1414,40 @@ export function PackagePage() {
                 ).map(([id, label]) => ({ id, label }))
               }
             />
-          ) : null}
-
-          {tab === "create" && canMutate && (
-            <PackageConstructor
-              orgs={orgs}
-              admin={admin}
-              canMutate={canMutate}
-              defaultZid={typeof zid === "number" ? zid : ""}
-              onCreated={async (nextZid, nextEid, kind) => {
-                setStatus("Комплект создан");
-                await loadList();
-                await selectPackage(nextZid, nextEid, kind);
-                setTab("overview");
-              }}
-            />
           )}
 
-          {tab === "periods" && canMutate && (
+          {tab === "open-period" && canMutate && (
             <section className="tools-section">
-              <h2>Периоды</h2>
+              <h2>
+                {admin
+                  ? "Открыть период для всех организаций"
+                  : "Открыть период"}
+              </h2>
               <p className="tools-hint">
-                Создание, закрытие и переоткрытие отчётных периодов по организациям.
-                Закрытие доступно после завершения бизнес-процесса комплекта.
+                Период — верхний уровень. После открытия внутри периода создаются
+                комплекты по организациям.
               </p>
-
-              <h3>Создать период</h3>
               <div className="tools-grid">
-                <label>
-                  Организация
-                  <select
-                    value={periodsCreateZid}
-                    onChange={(e) =>
-                      setPeriodsCreateZid(
-                        e.target.value === "" ? "" : Number(e.target.value)
-                      )
-                    }
-                  >
-                    <option value="">— выберите —</option>
-                    {periodsCreateOrgs.map((o) => (
-                      <option key={o.zid} value={o.zid}>
-                        {orgOptionLabel(o)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {!admin ? (
+                  <label>
+                    Организация
+                    <select
+                      value={periodsCreateZid}
+                      onChange={(e) =>
+                        setPeriodsCreateZid(
+                          e.target.value === "" ? "" : Number(e.target.value)
+                        )
+                      }
+                    >
+                      <option value="">— выберите —</option>
+                      {periodsCreateOrgs.map((o) => (
+                        <option key={o.zid} value={o.zid}>
+                          {orgOptionLabel(o)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label>
                   Квартал
                   <select
@@ -1386,71 +1483,292 @@ export function PackagePage() {
                   </select>
                 </label>
               </div>
-              {typeof periodsCreateZid === "number" && (
-                <p className="tools-hint">
-                  Будет создан:{" "}
-                  <strong>
-                    {quarterPeriodName(newPeriodQuarter, newPeriodYear)}
-                  </strong>
-                  {" · "}
-                  {formatPeriod(
-                    quarterDateRange(newPeriodQuarter, newPeriodYear).periodStart,
-                    quarterDateRange(newPeriodQuarter, newPeriodYear).periodEnd
-                  )}
-                </p>
-              )}
+              <p className="tools-hint">
+                Будет открыт{" "}
+                <strong>
+                  {quarterPeriodName(newPeriodQuarter, newPeriodYear)}
+                </strong>
+                {" · "}
+                {formatPeriod(
+                  quarterDateRange(newPeriodQuarter, newPeriodYear).periodStart,
+                  quarterDateRange(newPeriodQuarter, newPeriodYear).periodEnd
+                )}
+                {admin ? ` · для ${orgs.length} организаций` : ""}
+              </p>
               <button
                 type="button"
-                className="btn btn-secondary"
-                style={{ marginTop: 8, marginBottom: 20 }}
-                disabled={busy || typeof periodsCreateZid !== "number"}
+                className="btn btn-primary"
+                style={{ marginTop: 8 }}
+                disabled={busy || (!admin && typeof periodsCreateZid !== "number")}
                 onClick={() => void handleCreatePeriod()}
               >
-                Создать период
+                Открыть период
               </button>
+            </section>
+          )}
 
-              <h3>Список периодов</h3>
-              {periodRows.length === 0 ? (
-                <p className="tools-hint">Периодов пока нет.</p>
-              ) : (
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Организация</th>
-                        <th>Период</th>
-                        <th>Тип</th>
-                        <th>Статус</th>
-                        <th>БП</th>
-                        <th>Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {periodRows.map((r) => {
-                        const closed = r.periodStatus === "closed";
-                        const canClose =
-                          !closed && r.bpStatus === "completed";
-                        return (
-                          <tr key={`${r.zid}:${r.eid}:${r.packageKind}`}>
-                            <td>{r.organizationName}</td>
+          {tab === "create-packages" && canMutate && selectedCampaign && (
+            <PackageConstructor
+              orgs={orgs}
+              admin={admin}
+              canMutate={canMutate}
+              lockedCampaign={{
+                periodName: selectedCampaign.periodName,
+                packageKind: selectedCampaign.packageKind,
+                periodStart: selectedCampaign.periodStart,
+                periodEnd: selectedCampaign.periodEnd,
+              }}
+              siblingRows={rows}
+              onCreated={async (nextZid, nextEid, kind) => {
+                setStatus("Комплекты созданы");
+                await loadList();
+                await selectPackage(nextZid, nextEid, kind);
+                setTab("overview");
+              }}
+            />
+          )}
+
+          {(tab === "period" ||
+            (!selectedRow &&
+              tab !== "open-period" &&
+              tab !== "setup" &&
+              tab !== "create-packages")) &&
+          selectedCampaign ? (
+            <section className="tools-section package-workspace-card">
+              <div className="package-workspace-card-head">
+                <div>
+                  <h2>
+                    {selectedCampaign.periodName}
+                    {" · "}
+                    {packageKindLabel(selectedCampaign.packageKind)}
+                  </h2>
+                  <p className="tools-hint package-workspace-card-meta">
+                    {selectedCampaign.periodStart && selectedCampaign.periodEnd
+                      ? formatPeriod(
+                          selectedCampaign.periodStart,
+                          selectedCampaign.periodEnd
+                        )
+                      : ""}
+                    {" · "}
+                    <strong>
+                      {selectedCampaign.status === "closed"
+                        ? "закрыт"
+                        : selectedCampaign.status === "mixed"
+                          ? "частично закрыт"
+                          : "открыт"}
+                    </strong>
+                    {` · ${selectedCampaign.orgCount} организаций`}
+                    {selectedCampaign.withoutForms
+                      ? ` · без форм: ${selectedCampaign.withoutForms}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="toolbar-actions">
+                  {canMutate && selectedCampaign.status !== "closed" && (
+                    <Button
+                      onClick={() => setTab("create-packages")}
+                      disabled={busy}
+                    >
+                      Создать комплекты…
+                    </Button>
+                  )}
+                  {canMutate && selectedCampaign.closableCount > 0 && (
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => void handleCloseCampaign()}
+                    >
+                      Закрыть период
+                      {selectedCampaign.closableCount > 1
+                        ? ` (${selectedCampaign.closableCount})`
+                        : ""}
+                    </Button>
+                  )}
+                  {canMutate && selectedCampaign.closedCount > 0 && (
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => void handleReopenCampaign()}
+                    >
+                      Переоткрыть период
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="package-workspace-filters" style={{ marginBottom: 12 }}>
+                <div className="tools-grid package-workspace-filter-grid">
+                  <label>
+                    Статус БП
+                    <select
+                      value={filterBp}
+                      onChange={(e) => setFilterBp(e.target.value)}
+                    >
+                      <option value="">Все</option>
+                      {Object.entries(BP_STATUS_LABEL).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="package-workspace-checkboxes">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={filterIncomplete}
+                      onChange={(e) => setFilterIncomplete(e.target.checked)}
+                    />{" "}
+                    Неполный
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={filterBlockers}
+                      onChange={(e) => setFilterBlockers(e.target.checked)}
+                    />{" "}
+                    Есть блокеры
+                  </label>
+                </div>
+              </div>
+
+              {canBulkSelect && (
+                <div className="package-workspace-bulk-bar" style={{ marginBottom: 12 }}>
+                  <label className="package-workspace-bulk-select-all">
+                    <input
+                      type="checkbox"
+                      checked={
+                        campaignPackages.length > 0 &&
+                        campaignPackages.every((r) => checkedKeys.has(rowKey(r)))
+                      }
+                      disabled={busy || campaignPackages.length === 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCheckedKeys(
+                            new Set(campaignPackages.map((r) => rowKey(r)))
+                          );
+                        } else {
+                          clearSelection();
+                        }
+                      }}
+                    />{" "}
+                    Выбрать все ({campaignPackages.length})
+                  </label>
+                  {checkedRows.length > 0 ? (
+                    <div className="package-workspace-bulk-actions">
+                      {canBulkStartCollection && (
+                        <Button
+                          size="sm"
+                          disabled={busy || bpBusy}
+                          onClick={() => void handleBulkStartCollection()}
+                        >
+                          {bpBusy ? "Запуск…" : "Запустить сбор"}
+                        </Button>
+                      )}
+                      {canBulkRunChecks && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy || packageChecksBusy}
+                          onClick={() => void handleBulkChecks()}
+                        >
+                          {packageChecksBusy ? "Проверки…" : "Запустить проверки"}
+                        </Button>
+                      )}
+                      {canBulkDelete && (
+                        <Button
+                          variant="danger-outline"
+                          size="sm"
+                          disabled={busy || checkedDeletableRows.length === 0}
+                          onClick={() => void handleBulkDelete()}
+                        >
+                          Удалить
+                          {checkedDeletableRows.length > 0
+                            ? ` (${checkedDeletableRows.length})`
+                            : ""}
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={busy}
+                        onClick={clearSelection}
+                      >
+                        Снять выбор
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      {canBulkSelect ? <th /> : null}
+                      <th>Организация</th>
+                      <th>Формы</th>
+                      <th>БП</th>
+                      <th>Период</th>
+                      <th>Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaignPackages.map((r) => {
+                      const key = rowKey(r);
+                      const closed = r.periodStatus === "closed";
+                      const canClose = !closed && r.bpStatus === "completed";
+                      const canCheck =
+                        canBulkSelect && (orgZid == null || r.zid === orgZid);
+                      return (
+                        <tr key={key}>
+                          {canBulkSelect ? (
                             <td>
-                              {r.periodName}
-                              <div className="tools-hint">
-                                {formatPeriod(
-                                  r.periodStart ?? "",
-                                  r.periodEnd ?? ""
-                                )}
-                              </div>
+                              <input
+                                type="checkbox"
+                                checked={checkedKeys.has(key)}
+                                disabled={busy || !canCheck}
+                                onChange={(e) =>
+                                  toggleChecked(key, e.target.checked)
+                                }
+                                aria-label={`Выбрать ${r.organizationName}`}
+                              />
                             </td>
-                            <td>{packageKindLabel(r.packageKind)}</td>
-                            <td>{closed ? "закрыт" : "открыт"}</td>
-                            <td>
-                              {r.bpStatus
-                                ? bpStatusLabel(r.bpStatus)
-                                : "—"}
-                            </td>
-                            <td>
-                              <div className="toolbar-actions">
+                          ) : null}
+                          <td>
+                            {r.organizationName}
+                            {r.organizationCode ? (
+                              <div className="table-sub">{r.organizationCode}</div>
+                            ) : null}
+                          </td>
+                          <td>
+                            {r.filled}/{r.total}
+                            <div className="table-sub">сдано {r.submitted}</div>
+                          </td>
+                          <td>
+                            {r.bpStatus
+                              ? bpStatusLabel(r.bpStatus)
+                              : "—"}
+                            {r.hasBlockers ? (
+                              <div className="table-sub">блокеры</div>
+                            ) : null}
+                          </td>
+                          <td>{closed ? "закрыт" : "открыт"}</td>
+                          <td>
+                            <div className="toolbar-actions">
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                disabled={busy}
+                                onClick={() => {
+                                  void selectPackage(r.zid, r.eid, r.packageKind);
+                                  setTab("overview");
+                                }}
+                              >
+                                Открыть
+                              </button>
+                              {!closed && r.filled === 0 && canMutate && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
@@ -1461,76 +1779,101 @@ export function PackagePage() {
                                       r.eid,
                                       r.packageKind
                                     );
-                                    setTab("overview");
+                                    void handleCreatePackage();
                                   }}
                                 >
-                                  Открыть
+                                  Завести формы
                                 </button>
-                                {canClose && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      void handleClosePeriodFor(r.zid, r.eid)
-                                    }
-                                  >
-                                    Закрыть
-                                  </button>
-                                )}
-                                {closed && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      void handleReopenPeriodFor(r.zid, r.eid)
-                                    }
-                                  >
-                                    Переоткрыть
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              )}
+                              {canClose && canMutate && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void handleClosePeriodFor(r.zid, r.eid)
+                                  }
+                                >
+                                  Закрыть
+                                </button>
+                              )}
+                              {closed && canMutate && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void handleReopenPeriodFor(r.zid, r.eid)
+                                  }
+                                >
+                                  Переоткрыть
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!campaignPackages.length && (
+                      <tr>
+                        <td colSpan={canBulkSelect ? 6 : 5}>
+                          В периоде нет комплектов по фильтру.
+                          {canMutate
+                            ? " Создайте комплекты кнопкой выше."
+                            : ""}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </section>
-          )}
+          ) : null}
 
-          {!selectedRow &&
-          tab !== "create" &&
+          {!selectedCampaign &&
+          !selectedRow &&
+          tab !== "open-period" &&
           tab !== "setup" &&
-          tab !== "periods" ? (
+          tab !== "create-packages" ? (
             <section className="tools-section">
-              <h2>Комплект не выбран</h2>
+              <h2>Период не выбран</h2>
               <p className="tools-hint">
-                {rows.length === 0
+                {allCampaigns.length === 0
                   ? admin
-                    ? "Создайте комплект через конструктор, период во вкладке «Периоды» или организацию во вкладке «Настройка»."
-                    : "Нет доступных комплектов. Обратитесь к сопровождению."
-                  : "Выберите комплект в списке слева."}
+                    ? "Сначала откройте период для организаций, затем создайте комплекты внутри периода."
+                    : "Нет доступных периодов. Обратитесь к сопровождению."
+                  : "Выберите период в списке слева."}
               </p>
               {canMutate && (
-                <Button onClick={() => setTab("create")}>
-                  Открыть конструктор
+                <Button onClick={() => setTab("open-period")}>
+                  Открыть период…
                 </Button>
               )}
             </section>
           ) : null}
 
           {selectedRow &&
-          tab !== "create" &&
+          tab !== "open-period" &&
           tab !== "setup" &&
-          tab !== "periods" ? (
+          tab !== "create-packages" &&
+          tab !== "period" ? (
             <>
               <section className="tools-section package-workspace-card">
                 <div className="package-workspace-card-head">
                   <div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ marginBottom: 8 }}
+                      onClick={() => {
+                        setZid("");
+                        setEid("");
+                        setDetail(null);
+                        setTab("period");
+                      }}
+                    >
+                      ← К периоду
+                    </button>
                     <h2>
                       {selectedRow.organizationName}
                       {" · "}
@@ -1904,7 +2247,9 @@ export function PackagePage() {
                         Создать организацию
                       </button>
                       <p className="tools-hint">
-                        Создание и закрытие периодов — во вкладке «Периоды».
+                        Период — в списке слева и «Открыть период». Комплекты
+                        создаются внутри выбранного периода. Закрытие — на
+                        карточке периода.
                       </p>
                     </>
                   )}

@@ -17,6 +17,7 @@ import { getDb } from "../../../server/src/db.js";
 import { logAudit } from "../../../server/src/audit.js";
 import {
   createPeriod,
+  createPeriodsForOrganizations,
   distributePackagesToChildren,
   listPeriods,
 } from "../../../server/src/packages.js";
@@ -62,6 +63,43 @@ class DistributeDto {
   fallbackAllOthers?: boolean;
 }
 
+class CreatePeriodsBulkDto {
+  @ApiPropertyOptional({ type: [Number], description: "Организации; пусто = все" })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  zids?: number[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  quarter!: number;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  year!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  periodStart?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  periodEnd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  packageKind?: "OKO" | "BALANCE";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  reuseExisting?: boolean;
+}
+
 @ApiTags("periods")
 @ApiBearerAuth()
 @Controller("periods")
@@ -88,6 +126,34 @@ export class PeriodsController {
     } catch (e) {
       throw new BadRequestException({
         error: e instanceof Error ? e.message : "create failed",
+      });
+    }
+  }
+
+  @Post("bulk")
+  @UseGuards(AdminGuard)
+  @HttpCode(201)
+  @ApiOperation({
+    summary: "Открыть отчётный период для всех (или выбранных) организаций",
+  })
+  async createBulk(@Body() body: CreatePeriodsBulkDto) {
+    if (body.quarter == null || body.year == null) {
+      throw new BadRequestException({ error: "quarter and year required" });
+    }
+    try {
+      return await createPeriodsForOrganizations(await getDb(), {
+        zids: body.zids,
+        name: body.name,
+        periodStart: body.periodStart,
+        periodEnd: body.periodEnd,
+        quarter: body.quarter,
+        year: body.year,
+        packageKind: body.packageKind,
+        reuseExisting: body.reuseExisting,
+      });
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "bulk create failed",
       });
     }
   }

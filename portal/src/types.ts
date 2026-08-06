@@ -307,6 +307,7 @@ export interface PackageConstructInput {
   mode: "single" | "bulk";
   targets: Array<{ zid: number }>;
   period: {
+    eid?: number;
     name?: string;
     periodStart?: string;
     periodEnd?: string;
@@ -324,6 +325,7 @@ export interface PackageConstructInput {
   options?: {
     createInstances?: boolean;
     continueOnError?: boolean;
+    allowCreatePeriod?: boolean;
   };
 }
 

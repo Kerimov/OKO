@@ -86,7 +86,7 @@ python scripts/export_mdb_data.py
 - `src/content/instructions-admin.md`
 - `src/content/instructions-appendix.md`
 
-Синхронизация с `docs/PORTAL-GUIDE.md` — см. [docs/README.md](../docs/README.md).
+Сейчас инструкция **заморожена** (см. [docs/README.md](../docs/README.md)): не дополнять при обычных доработках.
 
 ---
 

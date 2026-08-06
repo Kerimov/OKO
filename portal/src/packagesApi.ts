@@ -201,6 +201,99 @@ export async function createPeriod(input: {
   return period;
 }
 
+export type CreatePeriodsBulkResult = {
+  summary: {
+    targets: number;
+    created: number;
+    reused: number;
+    errors: number;
+  };
+  rows: Array<{
+    zid: number;
+    organizationName: string;
+    eid?: number;
+    periodName: string;
+    status: "created" | "reused" | "error";
+    error?: string;
+  }>;
+};
+
+/** Open the same calendar period for all (or selected) organizations. */
+export async function createPeriodsBulk(input: {
+  zids?: number[];
+  name?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  quarter: number;
+  year: number;
+  packageKind?: "OKO" | "BALANCE";
+  reuseExisting?: boolean;
+}): Promise<CreatePeriodsBulkResult> {
+  if (isBackendMode()) {
+    return apiFetch<CreatePeriodsBulkResult>("/api/periods/bulk", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+  // Local fallback: loop createPeriod with reuse by Q/Y/kind.
+  await ensureLocalDefaults();
+  const periods = readLocalPeriods();
+  const orgs = await listOrganizations();
+  const targets =
+    input.zids?.length
+      ? orgs.filter((o) => input.zids!.includes(o.zid))
+      : orgs;
+  const kind = input.packageKind === "BALANCE" ? "BALANCE" : "OKO";
+  const name =
+    input.name?.trim() ||
+    `${Math.min(4, Math.max(1, input.quarter))} квартал ${input.year}`;
+  const rows: CreatePeriodsBulkResult["rows"] = [];
+  for (const org of targets) {
+    const existing = periods.find(
+      (p) =>
+        p.zid === org.zid &&
+        p.quarter === input.quarter &&
+        p.year === input.year &&
+        (p.packageKind ?? "OKO") === kind
+    );
+    if (existing) {
+      rows.push({
+        zid: org.zid,
+        organizationName: org.name,
+        eid: existing.eid,
+        periodName: existing.name,
+        status: "reused",
+      });
+      continue;
+    }
+    const created = await createPeriod({
+      zid: org.zid,
+      name,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      quarter: input.quarter,
+      year: input.year,
+      packageKind: kind,
+    });
+    rows.push({
+      zid: org.zid,
+      organizationName: org.name,
+      eid: created.eid,
+      periodName: created.name,
+      status: "created",
+    });
+  }
+  return {
+    summary: {
+      targets: rows.length,
+      created: rows.filter((r) => r.status === "created").length,
+      reused: rows.filter((r) => r.status === "reused").length,
+      errors: rows.filter((r) => r.status === "error").length,
+    },
+    rows,
+  };
+}
+
 export async function closePeriod(
   zid: number,
   eid: number,

@@ -1,0 +1,15 @@
+---
+description: Do not update portal instructions or PORTAL-GUIDE unless the user explicitly asks
+alwaysApply: true
+---
+
+# Instructions frozen
+
+Do **not** edit, sync, expand, or rewrite these files unless the user **explicitly** asks in the current message:
+
+- `portal/src/content/instructions-user.md`
+- `portal/src/content/instructions-admin.md`
+- `portal/src/content/instructions-appendix.md`
+- `docs/PORTAL-GUIDE.md`
+
+UI/API feature work must **not** include instruction or guide updates by default. Ignore CONTRIBUTING / docs/README notes that say to sync the guide after UI changes until the user re-enables that.
