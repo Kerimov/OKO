@@ -14,7 +14,7 @@ import { normalizePackageKind, type PackageKind } from "./businessProcessTypes.j
 import { evaluateCheckNotation12, parseCheckNotation12 } from "./checkNotation12.js";
 import { listActivePackageRules } from "./checkRulesRegistry.js";
 import { appendCheckRunJournal } from "./checkJournal.js";
-import { findInstanceIdByPackageTemplate, loadInstance } from "./instances.js";
+import { findInstanceIdByPackageTemplate, loadInstance, loadInstancesForPackage } from "./instances.js";
 import { exportChecksPayload } from "./checks.js";
 import { ROOT } from "./paths.js";
 import type { OkoFormInstance } from "./types.js";
@@ -44,29 +44,12 @@ function numeric(value: unknown): number | null {
   return Number.isFinite(result) ? result : null;
 }
 
-async function listPackageInstanceIds(
-  db: OkoDb,
-  zid: number,
-  eid: number
-): Promise<string[]> {
-  const rows = (await db
-    .prepare("SELECT instance_id FROM form_instances WHERE zid = ? AND eid = ?")
-    .all(zid, eid)) as Array<{ instance_id: string }>;
-  return rows.map((r) => r.instance_id);
-}
-
 async function loadPackageInstances(
   db: OkoDb,
   zid: number,
   eid: number
 ): Promise<OkoFormInstance[]> {
-  const ids = await listPackageInstanceIds(db, zid, eid);
-  const out: OkoFormInstance[] = [];
-  for (const id of ids) {
-    const inst = await loadInstance(db, id);
-    if (inst) out.push(inst);
-  }
-  return out;
+  return loadInstancesForPackage(db, zid, eid);
 }
 
 function loadRequiredSchItems(): RequiredSchItem[] {
@@ -277,7 +260,7 @@ export async function runPackageChecks(
         eid,
         BALANCE_FORM_ID
       );
-      balInst = id ? await loadInstance(db, id) : null;
+      balInst = id ? (await loadInstance(db, id)) ?? undefined : undefined;
       if (balInst) byTemplate.set(BALANCE_FORM_ID, balInst);
     }
     const sch = checkRequiredSch({

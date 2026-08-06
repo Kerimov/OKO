@@ -112,6 +112,32 @@ export async function loadRashEntries(
   return rows.map(rowToDto);
 }
 
+/** Load rash entries for many instances in one query, grouped by instance_id. */
+export async function loadRashEntriesByInstanceIds(
+  db: OkoDb,
+  instanceIds: string[]
+): Promise<Map<string, RashEntryDto[]>> {
+  const out = new Map<string, RashEntryDto[]>();
+  if (instanceIds.length === 0) return out;
+  const placeholders = instanceIds.map(() => "?").join(",");
+  const rows = (await db
+    .prepare(
+      `SELECT id, instance_id, form_id, parent_row_no, column_key, rash_kod, line_no,
+              kontr_id, kontr_name, inn, kpp, attr_a2, attr_a3, attr_a4,
+              template_row_key, values_json
+       FROM form_rash_entries
+       WHERE instance_id IN (${placeholders})
+       ORDER BY instance_id, parent_row_no, rash_kod, line_no, id`
+    )
+    .all(...instanceIds)) as RashEntryRow[];
+  for (const row of rows) {
+    const list = out.get(row.instance_id) ?? [];
+    list.push(rowToDto(row));
+    out.set(row.instance_id, list);
+  }
+  return out;
+}
+
 export async function saveRashEntries(
   db: OkoDb,
   instanceId: string,

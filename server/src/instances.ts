@@ -1,6 +1,6 @@
 import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
-import { loadRashEntries, saveRashEntries } from "./rash-data.js";
+import { loadRashEntries, loadRashEntriesByInstanceIds, saveRashEntries } from "./rash-data.js";
 import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
@@ -61,6 +61,34 @@ export function normalizeInstanceStatus(status: string | null | undefined): "dra
   return status === "submitted" ? "submitted" : "draft";
 }
 
+/** Multi-row INSERT chunk size (6 params/row; stay well under PG 65535 param limit). */
+const CELL_INSERT_CHUNK = 800;
+
+type CellInsertRow = [
+  string,
+  number,
+  string | null,
+  string,
+  number | null,
+  string | null,
+];
+
+async function insertCellValuesBulk(db: OkoDb, cells: CellInsertRow[]): Promise<void> {
+  if (cells.length === 0) return;
+  for (let offset = 0; offset < cells.length; offset += CELL_INSERT_CHUNK) {
+    const chunk = cells.slice(offset, offset + CELL_INSERT_CHUNK);
+    const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const params: unknown[] = [];
+    for (const row of chunk) params.push(...row);
+    await db
+      .prepare(
+        `INSERT INTO form_cell_values (instance_id, row_no, row_name, column_key, value_num, value_text)
+         VALUES ${placeholders}`
+      )
+      .run(...params);
+  }
+}
+
 export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promise<void> {
   const signaturesJson = JSON.stringify(inst.signatures ?? {});
   const status = normalizeInstanceStatus(inst.status);
@@ -111,37 +139,35 @@ export async function saveInstanceCells(db: OkoDb, inst: OkoFormInstance): Promi
 
   await db.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(inst.instanceId);
 
-  const insert = db.prepare(
-    `INSERT INTO form_cell_values (instance_id, row_no, row_name, column_key, value_num, value_text)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-
+  const cells: CellInsertRow[] = [];
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
     const rowNo = resolveRowNo(row, index);
-    const rowName = String(row.name ?? "");
+    const rowName = String(row.name ?? "") || null;
     let wrote = false;
     for (const [key, val] of Object.entries(row)) {
       const { value_num, value_text } = cellValueParts(val);
       if (value_num === null && value_text === null) continue;
-      await insert.run(inst.instanceId, rowNo, rowName || null, key, value_num, value_text);
+      cells.push([inst.instanceId, rowNo, rowName, key, value_num, value_text]);
       wrote = true;
     }
     // Строка только с номером/пустыми графами иначе пропадает при load (rowsFromCells).
     if (!wrote && rowNo < 900_000_000) {
-      await insert.run(
+      cells.push([
         inst.instanceId,
         rowNo,
-        rowName || null,
+        rowName,
         "num",
         null,
-        String(row.num ?? rowNo)
-      );
+        String(row.num ?? rowNo),
+      ]);
     }
     if (!row.num && rowNo >= 900_000_000) {
-      await insert.run(inst.instanceId, rowNo, rowName || null, "_row_index", index, null);
+      cells.push([inst.instanceId, rowNo, rowName, "_row_index", index, null]);
     }
   }
+
+  await insertCellValuesBulk(db, cells);
 }
 
 export function rowsFromCells(
@@ -190,59 +216,56 @@ export async function loadInstanceFromDb(
   db: OkoDb,
   instanceId: string
 ): Promise<OkoFormInstance | null> {
-  const header = (await db
-    .prepare(
-      `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
-              period_start, period_end, unit, enterprise_code, signatures_json, status,
-              revision, template_schema_version, created_at, updated_at
-       FROM form_instances WHERE instance_id = ?`
-    )
-    .get(instanceId)) as
-    | {
-        instance_id: string;
-        template_id: string;
-        zid: number | null;
-        eid: number | null;
-        template_title: string | null;
-        display_name: string;
-        organization: string | null;
-        period_start: string | null;
-        period_end: string | null;
-        unit: string | null;
-        enterprise_code: string | null;
-        signatures_json: string;
-        status: string | null;
-        revision: number | null;
-        template_schema_version: number | null;
-        created_at: string;
-        updated_at: string;
-      }
-    | undefined;
+  const map = await loadInstancesBulk(db, { instanceIds: [instanceId] });
+  return map.get(instanceId) ?? null;
+}
 
-  if (!header) return null;
+type InstanceHeaderRow = {
+  instance_id: string;
+  template_id: string;
+  zid: number | null;
+  eid: number | null;
+  template_title: string | null;
+  display_name: string;
+  organization: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  unit: string | null;
+  enterprise_code: string | null;
+  signatures_json: string;
+  status: string | null;
+  revision: number | null;
+  template_schema_version: number | null;
+  created_at: string;
+  updated_at: string;
+};
 
-  const cells = (await db
-    .prepare(
-      `SELECT row_no, row_name, column_key, value_num, value_text
-       FROM form_cell_values WHERE instance_id = ?
-       ORDER BY row_no, column_key`
-    )
-    .all(instanceId)) as Array<{
+type CellValueRow = {
+  instance_id: string;
+  row_no: number;
+  row_name: string | null;
+  column_key: string;
+  value_num: number | null;
+  value_text: string | null;
+};
+
+function headerToInstance(
+  header: InstanceHeaderRow,
+  cells: Array<{
     row_no: number;
     row_name: string | null;
     column_key: string;
     value_num: number | null;
     value_text: string | null;
-  }>;
-
+  }>,
+  rashEntries?: Awaited<ReturnType<typeof loadRashEntries>>
+): OkoFormInstance {
   let signatures: Record<string, string> = {};
   try {
     signatures = JSON.parse(header.signatures_json || "{}");
   } catch {
     signatures = {};
   }
-
-  const rashEntries = await loadRashEntries(db, instanceId);
 
   return {
     instanceId: header.instance_id,
@@ -263,10 +286,110 @@ export async function loadInstanceFromDb(
     },
     rows: rowsFromCells(cells),
     signatures,
-    rashEntries: rashEntries.length > 0 ? rashEntries : undefined,
+    rashEntries: rashEntries && rashEntries.length > 0 ? rashEntries : undefined,
     createdAt: header.created_at,
     updatedAt: header.updated_at,
   };
+}
+
+/**
+ * Bulk-load full instances (headers + cells + rash) with a few SQL queries
+ * instead of N× (header + cells + rash).
+ */
+export async function loadInstancesBulk(
+  db: OkoDb,
+  filter?: { zid?: number; zids?: number[]; eid?: number; instanceIds?: string[] }
+): Promise<Map<string, OkoFormInstance>> {
+  const out = new Map<string, OkoFormInstance>();
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter?.instanceIds?.length) {
+    const ids = [...new Set(filter.instanceIds.filter(Boolean))];
+    if (ids.length === 0) return out;
+    conditions.push(`instance_id IN (${ids.map(() => "?").join(",")})`);
+    params.push(...ids);
+  }
+  if (filter?.zids?.length) {
+    const zids = [...new Set(filter.zids.filter((z) => Number.isFinite(z)))];
+    if (zids.length === 0) return out;
+    conditions.push(`zid IN (${zids.map(() => "?").join(",")})`);
+    params.push(...zids);
+  } else if (filter?.zid != null) {
+    conditions.push("zid = ?");
+    params.push(filter.zid);
+  }
+  if (filter?.eid != null) {
+    conditions.push("eid = ?");
+    params.push(filter.eid);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const headers = (await db
+    .prepare(
+      `SELECT instance_id, template_id, zid, eid, template_title, display_name, organization,
+              period_start, period_end, unit, enterprise_code, signatures_json, status,
+              revision, template_schema_version, created_at, updated_at
+       FROM form_instances ${where}
+       ORDER BY updated_at DESC`
+    )
+    .all(...params)) as InstanceHeaderRow[];
+
+  if (headers.length === 0) return out;
+
+  const ids = headers.map((h) => h.instance_id);
+  const cellsByInstance = new Map<string, CellValueRow[]>();
+  const ID_CHUNK = 500;
+  for (let offset = 0; offset < ids.length; offset += ID_CHUNK) {
+    const chunk = ids.slice(offset, offset + ID_CHUNK);
+    const idPlaceholders = chunk.map(() => "?").join(",");
+    const cells = (await db
+      .prepare(
+        `SELECT instance_id, row_no, row_name, column_key, value_num, value_text
+         FROM form_cell_values
+         WHERE instance_id IN (${idPlaceholders})
+         ORDER BY instance_id, row_no, column_key`
+      )
+      .all(...chunk)) as CellValueRow[];
+    for (const cell of cells) {
+      const list = cellsByInstance.get(cell.instance_id) ?? [];
+      list.push(cell);
+      cellsByInstance.set(cell.instance_id, list);
+    }
+  }
+
+  const rashByInstance = new Map<string, Awaited<ReturnType<typeof loadRashEntries>>>();
+  for (let offset = 0; offset < ids.length; offset += ID_CHUNK) {
+    const chunk = ids.slice(offset, offset + ID_CHUNK);
+    const part = await loadRashEntriesByInstanceIds(db, chunk);
+    for (const [id, entries] of part) {
+      rashByInstance.set(id, entries);
+    }
+  }
+
+  for (const header of headers) {
+    out.set(
+      header.instance_id,
+      headerToInstance(
+        header,
+        cellsByInstance.get(header.instance_id) ?? [],
+        rashByInstance.get(header.instance_id)
+      )
+    );
+  }
+  return out;
+}
+
+/** Convenience: full instances for a package (zid + eid), as array. */
+export async function loadInstancesForPackage(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<OkoFormInstance[]> {
+  const map = await loadInstancesBulk(db, { zid, eid });
+  return [...map.values()].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
 }
 
 export async function loadInstanceFromPayload(

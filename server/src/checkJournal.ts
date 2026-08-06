@@ -308,35 +308,140 @@ export async function getApprovalBlockers(
   blocked: boolean;
   missingExplanations: MissingExplanation[];
 }> {
-  const latest = (await db
-    .prepare(
-      `SELECT run_id FROM check_run_journal
-       WHERE zid = ? AND eid = ? AND package_kind = ? AND check_type = 'package_run'
-       ORDER BY created_at DESC LIMIT 1`
-    )
-    .get(zid, eid, packageKind)) as { run_id: string } | undefined;
+  const map = await getApprovalBlockersBatch(db, [{ zid, eid, packageKind }]);
+  return (
+    map.get(`${zid}:${eid}:${normalizePackageKind(packageKind)}`) ?? {
+      blocked: false,
+      missingExplanations: [],
+    }
+  );
+}
 
-  if (!latest) {
-    return { blocked: false, missingExplanations: [] };
+export type ApprovalBlockersTarget = {
+  zid: number;
+  eid: number;
+  packageKind?: PackageKind;
+};
+
+/**
+ * Batch blockers for many packages (few SQL queries instead of N×3).
+ * Key: `${zid}:${eid}:${packageKind}`.
+ */
+export async function getApprovalBlockersBatch(
+  db: OkoDb,
+  targets: ApprovalBlockersTarget[]
+): Promise<
+  Map<string, { blocked: boolean; missingExplanations: MissingExplanation[] }>
+> {
+  const out = new Map<
+    string,
+    { blocked: boolean; missingExplanations: MissingExplanation[] }
+  >();
+  const unique = new Map<string, { zid: number; eid: number; packageKind: PackageKind }>();
+  for (const t of targets) {
+    const packageKind = normalizePackageKind(t.packageKind);
+    const key = `${t.zid}:${t.eid}:${packageKind}`;
+    if (!unique.has(key)) {
+      unique.set(key, { zid: t.zid, eid: t.eid, packageKind });
+    }
+  }
+  if (unique.size === 0) return out;
+
+  const list = [...unique.values()];
+  for (const t of list) {
+    out.set(`${t.zid}:${t.eid}:${t.packageKind}`, {
+      blocked: false,
+      missingExplanations: [],
+    });
   }
 
+  // Latest package_run per (zid,eid,kind) via DISTINCT ON.
+  const orClauses: string[] = [];
+  const params: unknown[] = [];
+  for (const t of list) {
+    orClauses.push("(zid = ? AND eid = ? AND package_kind = ?)");
+    params.push(t.zid, t.eid, t.packageKind);
+  }
+  const latestRuns = (await db
+    .prepare(
+      `SELECT DISTINCT ON (zid, eid, package_kind)
+         run_id, zid, eid, package_kind
+       FROM check_run_journal
+       WHERE check_type = 'package_run'
+         AND (${orClauses.join(" OR ")})
+       ORDER BY zid, eid, package_kind, created_at DESC`
+    )
+    .all(...params)) as Array<{
+    run_id: string;
+    zid: number;
+    eid: number;
+    package_kind: string;
+  }>;
+
+  if (latestRuns.length === 0) return out;
+
+  const runIds = latestRuns.map((r) => r.run_id);
+  const runPlaceholders = runIds.map(() => "?").join(",");
   const failed = (await db
     .prepare(
-      `SELECT rule_number, form_id, message
+      `SELECT run_id, rule_number, form_id, message
        FROM check_run_journal
-       WHERE run_id = ? AND passed = 0 AND requires_explanation = 1`
+       WHERE run_id IN (${runPlaceholders})
+         AND passed = 0 AND requires_explanation = 1`
     )
-    .all(latest.run_id)) as Array<{
+    .all(...runIds)) as Array<{
+    run_id: string;
     rule_number: number | null;
     form_id: string | null;
     message: string | null;
   }>;
 
-  const explanations = await listCheckExplanations(db, zid, eid, packageKind);
-  const explained = new Set(
-    explanations.map((e) => `${e.ruleNumber}::${e.formId ?? ""}`)
-  );
+  const failedByRun = new Map<string, typeof failed>();
+  for (const f of failed) {
+    const listF = failedByRun.get(f.run_id) ?? [];
+    listF.push(f);
+    failedByRun.set(f.run_id, listF);
+  }
 
-  const missing = computeMissingExplanations(failed, explained);
-  return { blocked: missing.length > 0, missingExplanations: missing };
+  const explanations = (await db
+    .prepare(
+      `SELECT zid, eid, package_kind, rule_number, form_id
+       FROM check_explanations
+       WHERE ${orClauses.join(" OR ")}`
+    )
+    .all(...params)) as Array<{
+    zid: number;
+    eid: number;
+    package_kind: string;
+    rule_number: number;
+    form_id: string | null;
+  }>;
+
+  const explainedByPkg = new Map<string, Set<string>>();
+  for (const e of explanations) {
+    const key = `${Number(e.zid)}:${Number(e.eid)}:${normalizePackageKind(e.package_kind)}`;
+    const set = explainedByPkg.get(key) ?? new Set();
+    set.add(`${Number(e.rule_number)}::${e.form_id ?? ""}`);
+    explainedByPkg.set(key, set);
+  }
+
+  for (const run of latestRuns) {
+    const key = `${Number(run.zid)}:${Number(run.eid)}:${normalizePackageKind(run.package_kind)}`;
+    const runFailed = failedByRun.get(run.run_id) ?? [];
+    const explained = explainedByPkg.get(key) ?? new Set();
+    const missing = computeMissingExplanations(
+      runFailed.map((f) => ({
+        ruleNumber: f.rule_number,
+        formId: f.form_id,
+        message: f.message,
+      })),
+      explained
+    );
+    out.set(key, {
+      blocked: missing.length > 0,
+      missingExplanations: missing,
+    });
+  }
+
+  return out;
 }

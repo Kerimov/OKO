@@ -24,6 +24,7 @@ import {
 import type { FormCatalog, FormColumn, FormRowTemplate, FormSchema } from "../types";
 import { buildInitialRows } from "../utils";
 import { isBackendMode } from "../storage";
+import { clearRecalcCache } from "../engine/recalcEngine";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 import {
   defaultColumn,
@@ -292,6 +293,7 @@ export function FormsEditorPage() {
     }
     try {
       const saved = await saveFormSchema(schema);
+      clearRecalcCache();
       setSchema(saved);
       setSavedFp(schemaFingerprint(saved));
       setStatus(`Форма ${saved.id} сохранена (версия ${saved.schemaVersion ?? "—"})`);

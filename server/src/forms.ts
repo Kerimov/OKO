@@ -277,99 +277,83 @@ export async function reimportFormsFromJson(db: OkoDb): Promise<number> {
   });
 }
 
-export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSchemaDto | null> {
-  const tpl = (await db
-    .prepare(
-      `SELECT form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json,
-              unit, archived, schema_version
-       FROM form_templates WHERE form_id = ?`
-    )
-    .get(formId)) as
-    | {
-        form_id: string;
-        title: string;
-        category: string;
-        pages: number;
-        pdf_file: string | null;
-        allow_add_rows: number;
-        kontr_form: number;
-        signatures_json: string;
-        unit: string | null;
-        archived: number | null;
-        schema_version: number | null;
-      }
-    | undefined;
+type FormTemplateRow = {
+  form_id: string;
+  title: string;
+  category: string;
+  pages: number;
+  pdf_file: string | null;
+  allow_add_rows: number;
+  kontr_form: number;
+  signatures_json: string;
+  unit: string | null;
+  archived: number | null;
+  schema_version: number | null;
+};
 
-  if (!tpl) return null;
+type FormColumnRow = {
+  form_id?: string;
+  column_key: string;
+  label: string;
+  col_type: string;
+  width: number;
+  frozen: number;
+  readonly: number;
+  f_total: number;
+  help_text: string | null;
+  align: string | null;
+  decimals: number | null;
+  hidden: number | null;
+  formula: string | null;
+};
 
-  const columns = (
-    (await db
-      .prepare(
-        `SELECT column_key, label, col_type, width, frozen, readonly, f_total,
-                help_text, align, decimals, hidden, formula
-         FROM form_template_columns WHERE form_id = ? ORDER BY sort_order`
-      )
-      .all(formId)) as Array<{
-      column_key: string;
-      label: string;
-      col_type: string;
-      width: number;
-      frozen: number;
-      readonly: number;
-      f_total: number;
-      help_text: string | null;
-      align: string | null;
-      decimals: number | null;
-      hidden: number | null;
-      formula: string | null;
-    }>
-  ).map((c) => {
-    const col: FormColumnDto = {
-      key: c.column_key,
-      label: c.label,
-      type: c.col_type as "text" | "number",
-      width: c.width,
-      frozen: !!c.frozen,
-      readonly: !!c.readonly,
-      fTotal: !!c.f_total,
-    };
-    if (c.help_text) col.helpText = c.help_text;
-    if (c.align === "left" || c.align === "center" || c.align === "right") col.align = c.align;
-    if (c.decimals != null) col.decimals = c.decimals;
-    if (c.hidden) col.hidden = true;
-    if (c.formula) col.formula = c.formula;
-    return col;
-  });
+type FormRowTemplateRow = {
+  form_id?: string;
+  row_num: string | null;
+  row_code: string | null;
+  row_name: string;
+  row_kind: string | null;
+  row_level: number | null;
+  readonly: number | null;
+  formula: string | null;
+};
 
-  const rows = (
-    (await db
-      .prepare(
-        `SELECT row_num, row_code, row_name, row_kind, row_level, readonly, formula
-         FROM form_template_rows
-         WHERE form_id = ? ORDER BY sort_order`
-      )
-      .all(formId)) as Array<{
-      row_num: string | null;
-      row_code: string | null;
-      row_name: string;
-      row_kind: string | null;
-      row_level: number | null;
-      readonly: number | null;
-      formula: string | null;
-    }>
-  ).map((r) => {
-    const item: FormRowDto = { name: r.row_name };
-    if (r.row_num) item.num = r.row_num;
-    if (r.row_code) item.code = r.row_code;
-    if (r.row_kind && r.row_kind !== "data") {
-      item.kind = r.row_kind as FormRowDto["kind"];
-    }
-    if (r.row_level) item.level = r.row_level;
-    if (r.readonly) item.readonly = true;
-    if (r.formula) item.formula = r.formula;
-    return item;
-  });
+function mapColumnRow(c: FormColumnRow): FormColumnDto {
+  const col: FormColumnDto = {
+    key: c.column_key,
+    label: c.label,
+    type: c.col_type as "text" | "number",
+    width: c.width,
+    frozen: !!c.frozen,
+    readonly: !!c.readonly,
+    fTotal: !!c.f_total,
+  };
+  if (c.help_text) col.helpText = c.help_text;
+  if (c.align === "left" || c.align === "center" || c.align === "right") col.align = c.align;
+  if (c.decimals != null) col.decimals = c.decimals;
+  if (c.hidden) col.hidden = true;
+  if (c.formula) col.formula = c.formula;
+  return col;
+}
 
+function mapRowTemplate(r: FormRowTemplateRow): FormRowDto {
+  const item: FormRowDto = { name: r.row_name };
+  if (r.row_num) item.num = r.row_num;
+  if (r.row_code) item.code = r.row_code;
+  if (r.row_kind && r.row_kind !== "data") {
+    item.kind = r.row_kind as FormRowDto["kind"];
+  }
+  if (r.row_level) item.level = r.row_level;
+  if (r.readonly) item.readonly = true;
+  if (r.formula) item.formula = r.formula;
+  return item;
+}
+
+function assembleFormSchema(
+  tpl: FormTemplateRow,
+  columns: FormColumnDto[],
+  rows: FormRowDto[]
+): FormSchemaDto {
   let signatures: string[] = ["Руководитель", "Главный бухгалтер"];
   try {
     signatures = JSON.parse(tpl.signatures_json);
@@ -399,6 +383,82 @@ export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSch
   if (tpl.kontr_form) schema.kontrForm = true;
   if (tpl.archived) schema.archived = true;
   return schema;
+}
+
+/** Batch-load form schemas (3 SQL queries total instead of 3×N). */
+export async function loadFormSchemas(
+  db: OkoDb,
+  formIds: string[]
+): Promise<Map<string, FormSchemaDto>> {
+  const out = new Map<string, FormSchemaDto>();
+  const unique = [...new Set(formIds.filter(Boolean))];
+  if (unique.length === 0) return out;
+
+  const placeholders = unique.map(() => "?").join(",");
+  const templates = (await db
+    .prepare(
+      `SELECT form_id, title, category, pages, pdf_file, allow_add_rows, kontr_form, signatures_json,
+              unit, archived, schema_version
+       FROM form_templates WHERE form_id IN (${placeholders})`
+    )
+    .all(...unique)) as FormTemplateRow[];
+
+  if (templates.length === 0) return out;
+
+  const foundIds = templates.map((t) => t.form_id);
+  const foundPlaceholders = foundIds.map(() => "?").join(",");
+
+  const columnRows = (await db
+    .prepare(
+      `SELECT form_id, column_key, label, col_type, width, frozen, readonly, f_total,
+              help_text, align, decimals, hidden, formula
+       FROM form_template_columns
+       WHERE form_id IN (${foundPlaceholders})
+       ORDER BY form_id, sort_order`
+    )
+    .all(...foundIds)) as FormColumnRow[];
+
+  const rowRows = (await db
+    .prepare(
+      `SELECT form_id, row_num, row_code, row_name, row_kind, row_level, readonly, formula
+       FROM form_template_rows
+       WHERE form_id IN (${foundPlaceholders})
+       ORDER BY form_id, sort_order`
+    )
+    .all(...foundIds)) as FormRowTemplateRow[];
+
+  const columnsByForm = new Map<string, FormColumnDto[]>();
+  for (const c of columnRows) {
+    const formId = String(c.form_id ?? "");
+    const list = columnsByForm.get(formId) ?? [];
+    list.push(mapColumnRow(c));
+    columnsByForm.set(formId, list);
+  }
+
+  const rowsByForm = new Map<string, FormRowDto[]>();
+  for (const r of rowRows) {
+    const formId = String(r.form_id ?? "");
+    const list = rowsByForm.get(formId) ?? [];
+    list.push(mapRowTemplate(r));
+    rowsByForm.set(formId, list);
+  }
+
+  for (const tpl of templates) {
+    out.set(
+      tpl.form_id,
+      assembleFormSchema(
+        tpl,
+        columnsByForm.get(tpl.form_id) ?? [],
+        rowsByForm.get(tpl.form_id) ?? []
+      )
+    );
+  }
+  return out;
+}
+
+export async function loadFormSchema(db: OkoDb, formId: string): Promise<FormSchemaDto | null> {
+  const map = await loadFormSchemas(db, [formId]);
+  return map.get(formId) ?? null;
 }
 
 export async function exportCatalog(db: OkoDb): Promise<FormCatalogDto & { forms: Array<FormCatalogDto["forms"][number] & { archived?: boolean }> }> {

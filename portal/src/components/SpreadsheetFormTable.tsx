@@ -9,8 +9,6 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
-  buildSheetModel,
-  makeRowId,
   type RangeSelection,
 } from "@oko/spreadsheet";
 import type { FormColumn, KontrAgent, RashThresholds, RowData } from "../types";
@@ -25,6 +23,7 @@ import {
   rashSlotVisible,
 } from "../engine/rashEngine";
 import { cellErrorKey } from "../engine/cellErrors";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import { KontrInput } from "./KontrInput";
 import type {
   CellBlurInfo,
@@ -132,9 +131,12 @@ export function SpreadsheetFormTable({
   const [redoStack, setRedoStack] = useState<RowData[][]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [kontrShowFilter, setKontrShowFilter] = useState("1,2");
   const [density, setDensity] = useTableDensity();
+  const rowHeight = density === "compact" ? 28 : 40;
+  const virtual = useVirtualRows(scrollRef, rows.length, rowHeight);
   const kontrShowOptions = useMemo(
     () => kontrShowOptionsForRule(kontrRefA1Name),
     [kontrRefA1Name]
@@ -228,6 +230,10 @@ export function SpreadsheetFormTable({
     }
     setEditing(false);
   };
+
+  useEffect(() => {
+    if (active) virtual.scrollRowIntoView(active.r);
+  }, [active?.r]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing) inputRef.current?.focus({ preventScroll: true });
@@ -494,27 +500,9 @@ export function SpreadsheetFormTable({
     return `${letter}${active.r + 1}`;
   }, [active, visibleCols]);
 
-  // Keep buildSheetModel wired for future Univer host / designer export.
-  useMemo(
-    () =>
-      buildSheetModel({
-        schema: {
-          id: formId,
-          title: formId,
-          columns: visibleCols,
-          rows: rows.map((r, i) => ({
-            num: String(r.num ?? ""),
-            name: String(r.name ?? ""),
-            rowId: makeRowId(formId, String(r.num ?? ""), i),
-          })),
-        },
-        dataRows: rows,
-      }),
-    [formId, visibleCols, rows]
-  );
-
   return (
     <div
+      ref={scrollRef}
       className={`table-wrap spreadsheet-wrap${density === "compact" ? " table-density-compact" : ""}`}
     >
       <div className="table-wrap-toolbar">
@@ -590,7 +578,7 @@ export function SpreadsheetFormTable({
         tabIndex={0}
         onKeyDown={onKeyDown}
         role="grid"
-        aria-label="Таблица формы"
+        aria-label={formId ? `Таблица формы ${formId}` : "Таблица формы"}
       >
         <table className="form-table spreadsheet-table">
           <thead>
@@ -611,7 +599,19 @@ export function SpreadsheetFormTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, rowIdx) => {
+            {virtual.enabled && virtual.offsetTop > 0 ? (
+              <tr aria-hidden className="virtual-spacer">
+                <td
+                  colSpan={visibleCols.length + 1 + ((allowAddRows || kontrMode) ? 1 : 0)}
+                  style={{ height: virtual.offsetTop, padding: 0, border: "none" }}
+                />
+              </tr>
+            ) : null}
+            {(virtual.enabled
+              ? rows.slice(virtual.startIndex, virtual.endIndex)
+              : rows
+            ).map((row, localIdx) => {
+              const rowIdx = virtual.enabled ? virtual.startIndex + localIdx : localIdx;
               const kind = rowKinds?.[rowIdx] ?? "data";
               const kindClass =
                 kind === "header"
@@ -629,6 +629,7 @@ export function SpreadsheetFormTable({
                 className={`${kindClass}${
                   String(row.num ?? "") === "" && kontrMode ? " row-kontr" : ""
                 }`}
+                style={virtual.enabled ? { height: rowHeight } : undefined}
               >
                 <td className="row-num">{rowIdx + 1}</td>
                 {visibleCols.map((col, colIdx) => {
@@ -814,6 +815,14 @@ export function SpreadsheetFormTable({
               </tr>
               );
             })}
+            {virtual.enabled && virtual.offsetBottom > 0 ? (
+              <tr aria-hidden className="virtual-spacer">
+                <td
+                  colSpan={visibleCols.length + 1 + ((allowAddRows || kontrMode) ? 1 : 0)}
+                  style={{ height: virtual.offsetBottom, padding: 0, border: "none" }}
+                />
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

@@ -66,7 +66,7 @@ import {
   dryRunMethodology,
   type MethodologyRelease,
 } from "../engine/packageRules";
-import { prepareRecalcPackage, type RecalcPackageItem } from "../engine/recalcEngine";
+import { prepareRecalcPackage, type RecalcPackageItem, clearRecalcCache } from "../engine/recalcEngine";
 import {
   applySaldoToTarget,
   compareSaldoByColumns,
@@ -1331,6 +1331,7 @@ export function ToolsPage() {
               void (async () => {
                 try {
                   const m = await snapshotMethodology();
+                  clearRecalcCache();
                   await refreshMethodology();
                   setStatus(`Методология активирована: ${m.version}`);
                 } catch (e) {
@@ -1359,6 +1360,7 @@ export function ToolsPage() {
               void (async () => {
                 try {
                   const m = await rollbackMethodology(id);
+                  clearRecalcCache();
                   await refreshMethodology();
                   setStatus(`Откат методологии: ${m.version}`);
                 } catch (e) {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
 import { dateOrNull, dateToString, intOrNull } from "./dbValues.js";
-import { exportCatalog, loadFormSchema, type FormSchemaDto } from "./forms.js";
+import { exportCatalog, loadFormSchemas, type FormSchemaDto } from "./forms.js";
 import { deleteInstanceFromDb, saveInstanceCells } from "./instances.js";
 import {
   assertPeriodWritable,
@@ -1007,7 +1007,7 @@ export async function getPackageWorkspace(
   const { normalizeBpStatus, normalizePackageKind, bpIdFor } = await import(
     "./businessProcessTypes.js"
   );
-  const { getApprovalBlockers } = await import("./checkJournal.js");
+  const { getApprovalBlockersBatch } = await import("./checkJournal.js");
 
   const catalog = await exportCatalog(db);
   const catalogIds = catalog.forms.map((f) => f.id);
@@ -1130,6 +1130,23 @@ export async function getPackageWorkspace(
     /* marks are optional — do not break the package list */
   }
 
+  const pendingBlockerTargets = bpRows
+    .filter((b) => normalizeBpStatus(b.status) === "pending_curator_approval")
+    .map((b) => ({
+      zid: Number(b.zid),
+      eid: Number(b.eid),
+      packageKind: normalizePackageKind(b.package_kind),
+    }));
+  let blockersByKey = new Map<
+    string,
+    { blocked: boolean; missingExplanations: unknown[] }
+  >();
+  try {
+    blockersByKey = await getApprovalBlockersBatch(db, pendingBlockerTargets);
+  } catch {
+    blockersByKey = new Map();
+  }
+
   const rows: PackageWorkspaceRow[] = [];
   for (const p of periods) {
     const zid = Number(p.zid);
@@ -1156,12 +1173,8 @@ export async function getPackageWorkspace(
 
     let hasBlockers = false;
     if (bpStatus === "pending_curator_approval") {
-      try {
-        const blockers = await getApprovalBlockers(db, zid, eid, packageKind);
-        hasBlockers = blockers.blocked;
-      } catch {
-        hasBlockers = false;
-      }
+      hasBlockers =
+        blockersByKey.get(`${zid}:${eid}:${packageKind}`)?.blocked ?? false;
     }
 
     const exchange = exchangeByKey.get(`${zid}:${eid}`);
@@ -1775,13 +1788,17 @@ export async function createReportPackage(
     }
   })();
 
+  const toCreate = formSet.filter((entry) => !existing.has(entry.formId));
+  skipped += formSet.length - toCreate.length;
+
+  const schemas = await loadFormSchemas(
+    db,
+    toCreate.map((e) => e.formId)
+  );
+
   await db.transaction(async (tx) => {
-    for (const entry of formSet) {
-      if (existing.has(entry.formId)) {
-        skipped++;
-        continue;
-      }
-      const schema = await loadFormSchema(tx, entry.formId);
+    for (const entry of toCreate) {
+      const schema = schemas.get(entry.formId);
       if (!schema) {
         skipped++;
         continue;

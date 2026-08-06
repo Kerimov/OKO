@@ -70,7 +70,7 @@ function ProgressMeter({ percent, label }: { percent: number; label?: string }) 
   );
 }
 
-type WorkspaceTab = "overview" | "forms" | "bp" | "setup" | "create";
+type WorkspaceTab = "overview" | "forms" | "bp" | "periods" | "setup" | "create";
 type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
 
 const BP_ACTIONS: Array<{
@@ -163,6 +163,7 @@ export function PackagePage() {
     () => currentReportingQuarter().year
   );
   const [newPackageKind, setNewPackageKind] = useState<PackageKind>("OKO");
+  const [periodsCreateZid, setPeriodsCreateZid] = useState<number | "">("");
   const [bpBusy, setBpBusy] = useState(false);
   const [packageChecksBusy, setPackageChecksBusy] = useState(false);
 
@@ -184,6 +185,37 @@ export function PackagePage() {
     () => (typeof zid === "number" ? orgs.filter((o) => o.parentZid === zid) : []),
     [orgs, zid]
   );
+
+  const periodsCreateOrgs = useMemo(() => {
+    if (orgZid != null) return orgs.filter((o) => o.zid === orgZid);
+    return orgs;
+  }, [orgs, orgZid]);
+
+  const periodRows = useMemo(() => {
+    const list = [...rows];
+    list.sort((a, b) => {
+      const sa = a.periodStart ?? "";
+      const sb = b.periodStart ?? "";
+      if (sa !== sb) return sb.localeCompare(sa);
+      const nameCmp = a.periodName.localeCompare(b.periodName, "ru");
+      if (nameCmp !== 0) return nameCmp;
+      return a.organizationName.localeCompare(b.organizationName, "ru");
+    });
+    return list;
+  }, [rows]);
+
+  useEffect(() => {
+    if (periodsCreateZid !== "") return;
+    if (typeof zid === "number") {
+      setPeriodsCreateZid(zid);
+      return;
+    }
+    if (orgZid != null) {
+      setPeriodsCreateZid(orgZid);
+      return;
+    }
+    if (periodsCreateOrgs[0]) setPeriodsCreateZid(periodsCreateOrgs[0].zid);
+  }, [periodsCreateZid, zid, orgZid, periodsCreateOrgs]);
 
   const canDeletePackage =
     admin || (orgZid != null && typeof zid === "number" && zid === orgZid);
@@ -431,7 +463,12 @@ export function PackagePage() {
   };
 
   const handleCreatePeriod = async () => {
-    const targetZid = typeof zid === "number" ? zid : orgs[0]?.zid;
+    const targetZid =
+      typeof periodsCreateZid === "number"
+        ? periodsCreateZid
+        : typeof zid === "number"
+          ? zid
+          : orgs[0]?.zid;
     if (targetZid == null || !canMutate) return;
     if (newPeriodQuarter < 1 || newPeriodQuarter > 4 || !Number.isFinite(newPeriodYear)) {
       setStatus("Укажите квартал и год");
@@ -462,9 +499,45 @@ export function PackagePage() {
         period.packageKind === "BALANCE" ? "BALANCE" : "OKO"
       );
       setStatus(`Период «${period.name}» создан`);
-      setTab("overview");
+      setTab("periods");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания периода");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClosePeriodFor = async (targetZid: number, targetEid: number) => {
+    if (
+      !confirm(
+        "Закрыть период для этого комплекта? После закрытия формы нельзя будет редактировать."
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      await closePeriod(targetZid, targetEid);
+      setStatus("Период закрыт");
+      await refreshAll();
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка закрытия периода");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReopenPeriodFor = async (targetZid: number, targetEid: number) => {
+    if (!confirm("Переоткрыть закрытый период?")) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      await reopenPeriod(targetZid, targetEid);
+      setStatus("Период переоткрыт");
+      await refreshAll();
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка переоткрытия периода");
     } finally {
       setBusy(false);
     }
@@ -747,38 +820,6 @@ export function PackagePage() {
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка массового удаления");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleClosePeriod = async () => {
-    if (typeof zid !== "number" || typeof eid !== "number") return;
-    if (!confirm("Закрыть период? После закрытия формы нельзя будет редактировать.")) return;
-    setBusy(true);
-    setStatus("");
-    try {
-      await closePeriod(zid, eid);
-      setStatus("Период закрыт");
-      await refreshAll();
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка закрытия периода");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleReopenPeriod = async () => {
-    if (typeof zid !== "number" || typeof eid !== "number") return;
-    if (!confirm("Переоткрыть закрытый период?")) return;
-    setBusy(true);
-    setStatus("");
-    try {
-      await reopenPeriod(zid, eid);
-      setStatus("Период переоткрыт");
-      await refreshAll();
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка переоткрытия");
     } finally {
       setBusy(false);
     }
@@ -1112,6 +1153,16 @@ export function PackagePage() {
               Создать комплект…
             </Button>
           )}
+          {canMutate && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="package-workspace-create-btn"
+              onClick={() => setTab("periods")}
+            >
+              Периоды
+            </Button>
+          )}
           {admin && canMutate && (
             <Button
               variant="secondary"
@@ -1140,7 +1191,12 @@ export function PackagePage() {
                           ["bp", "Бизнес-процесс"],
                         ] as Array<[WorkspaceTab, string]>)
                       : []),
-                    ...(canMutate ? ([["create", "Создание"]] as Array<[WorkspaceTab, string]>) : []),
+                    ...(canMutate
+                      ? ([
+                          ["create", "Создание"],
+                          ["periods", "Периоды"],
+                        ] as Array<[WorkspaceTab, string]>)
+                      : []),
                     ...(admin && canMutate
                       ? ([["setup", "Настройка"]] as Array<[WorkspaceTab, string]>)
                       : []),
@@ -1165,13 +1221,195 @@ export function PackagePage() {
             />
           )}
 
-          {!selectedRow && tab !== "create" && tab !== "setup" ? (
+          {tab === "periods" && canMutate && (
+            <section className="tools-section">
+              <h2>Периоды</h2>
+              <p className="tools-hint">
+                Создание, закрытие и переоткрытие отчётных периодов по организациям.
+                Закрытие доступно после завершения бизнес-процесса комплекта.
+              </p>
+
+              <h3>Создать период</h3>
+              <div className="tools-grid">
+                <label>
+                  Организация
+                  <select
+                    value={periodsCreateZid}
+                    onChange={(e) =>
+                      setPeriodsCreateZid(
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                  >
+                    <option value="">— выберите —</option>
+                    {periodsCreateOrgs.map((o) => (
+                      <option key={o.zid} value={o.zid}>
+                        {orgOptionLabel(o)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Квартал
+                  <select
+                    value={newPeriodQuarter}
+                    onChange={(e) => setNewPeriodQuarter(Number(e.target.value))}
+                  >
+                    <option value={1}>1 квартал</option>
+                    <option value={2}>2 квартал</option>
+                    <option value={3}>3 квартал</option>
+                    <option value={4}>4 квартал</option>
+                  </select>
+                </label>
+                <label>
+                  Год
+                  <input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={newPeriodYear}
+                    onChange={(e) => setNewPeriodYear(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Тип комплекта
+                  <select
+                    value={newPackageKind}
+                    onChange={(e) =>
+                      setNewPackageKind(e.target.value as PackageKind)
+                    }
+                  >
+                    <option value="OKO">ОКО</option>
+                    <option value="BALANCE">Баланс</option>
+                  </select>
+                </label>
+              </div>
+              {typeof periodsCreateZid === "number" && (
+                <p className="tools-hint">
+                  Будет создан:{" "}
+                  <strong>
+                    {quarterPeriodName(newPeriodQuarter, newPeriodYear)}
+                  </strong>
+                  {" · "}
+                  {formatPeriod(
+                    quarterDateRange(newPeriodQuarter, newPeriodYear).periodStart,
+                    quarterDateRange(newPeriodQuarter, newPeriodYear).periodEnd
+                  )}
+                </p>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ marginTop: 8, marginBottom: 20 }}
+                disabled={busy || typeof periodsCreateZid !== "number"}
+                onClick={() => void handleCreatePeriod()}
+              >
+                Создать период
+              </button>
+
+              <h3>Список периодов</h3>
+              {periodRows.length === 0 ? (
+                <p className="tools-hint">Периодов пока нет.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Организация</th>
+                        <th>Период</th>
+                        <th>Тип</th>
+                        <th>Статус</th>
+                        <th>БП</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periodRows.map((r) => {
+                        const closed = r.periodStatus === "closed";
+                        const canClose =
+                          !closed && r.bpStatus === "completed";
+                        return (
+                          <tr key={`${r.zid}:${r.eid}:${r.packageKind}`}>
+                            <td>{r.organizationName}</td>
+                            <td>
+                              {r.periodName}
+                              <div className="tools-hint">
+                                {formatPeriod(
+                                  r.periodStart ?? "",
+                                  r.periodEnd ?? ""
+                                )}
+                              </div>
+                            </td>
+                            <td>{packageKindLabel(r.packageKind)}</td>
+                            <td>{closed ? "закрыт" : "открыт"}</td>
+                            <td>
+                              {r.bpStatus
+                                ? bpStatusLabel(r.bpStatus)
+                                : "—"}
+                            </td>
+                            <td>
+                              <div className="toolbar-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    void selectPackage(
+                                      r.zid,
+                                      r.eid,
+                                      r.packageKind
+                                    );
+                                    setTab("overview");
+                                  }}
+                                >
+                                  Открыть
+                                </button>
+                                {canClose && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      void handleClosePeriodFor(r.zid, r.eid)
+                                    }
+                                  >
+                                    Закрыть
+                                  </button>
+                                )}
+                                {closed && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      void handleReopenPeriodFor(r.zid, r.eid)
+                                    }
+                                  >
+                                    Переоткрыть
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {!selectedRow &&
+          tab !== "create" &&
+          tab !== "setup" &&
+          tab !== "periods" ? (
             <section className="tools-section">
               <h2>Комплект не выбран</h2>
               <p className="tools-hint">
                 {rows.length === 0
                   ? admin
-                    ? "Создайте комплект через конструктор или организацию во вкладке «Настройка»."
+                    ? "Создайте комплект через конструктор, период во вкладке «Периоды» или организацию во вкладке «Настройка»."
                     : "Нет доступных комплектов. Обратитесь к сопровождению."
                   : "Выберите комплект в списке слева."}
               </p>
@@ -1183,7 +1421,10 @@ export function PackagePage() {
             </section>
           ) : null}
 
-          {selectedRow && tab !== "create" && tab !== "setup" ? (
+          {selectedRow &&
+          tab !== "create" &&
+          tab !== "setup" &&
+          tab !== "periods" ? (
             <>
               <section className="tools-section package-workspace-card">
                 <div className="package-workspace-card-head">
@@ -1507,26 +1748,6 @@ export function PackagePage() {
                           : ""}
                       </button>
                     )}
-                    {canMutate && !periodClosed && bp?.status === "completed" && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={busy}
-                        onClick={() => void handleClosePeriod()}
-                      >
-                        Закрыть период
-                      </button>
-                    )}
-                    {canMutate && periodClosed && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={busy}
-                        onClick={() => void handleReopenPeriod()}
-                      >
-                        Переоткрыть период
-                      </button>
-                    )}
                     {canDeletePackage && canMutate && (
                       <button
                         type="button"
@@ -1580,76 +1801,9 @@ export function PackagePage() {
                       >
                         Создать организацию
                       </button>
-
-                      <h3>Добавить период</h3>
                       <p className="tools-hint">
-                        Период создаётся для выбранной организации
-                        {typeof zid === "number" && selectedRow
-                          ? `: ${selectedRow.organizationName}`
-                          : ""}
-                        . Для полного сценария используйте вкладку «Создание».
+                        Создание и закрытие периодов — во вкладке «Периоды».
                       </p>
-                      <div className="tools-grid">
-                        <label>
-                          Квартал
-                          <select
-                            value={newPeriodQuarter}
-                            onChange={(e) => setNewPeriodQuarter(Number(e.target.value))}
-                            disabled={typeof zid !== "number"}
-                          >
-                            <option value={1}>1 квартал</option>
-                            <option value={2}>2 квартал</option>
-                            <option value={3}>3 квартал</option>
-                            <option value={4}>4 квартал</option>
-                          </select>
-                        </label>
-                        <label>
-                          Год
-                          <input
-                            type="number"
-                            min={2000}
-                            max={2100}
-                            value={newPeriodYear}
-                            onChange={(e) => setNewPeriodYear(Number(e.target.value))}
-                            disabled={typeof zid !== "number"}
-                          />
-                        </label>
-                        <label>
-                          Тип комплекта
-                          <select
-                            value={newPackageKind}
-                            onChange={(e) =>
-                              setNewPackageKind(e.target.value as PackageKind)
-                            }
-                            disabled={typeof zid !== "number"}
-                          >
-                            <option value="OKO">ОКО</option>
-                            <option value="BALANCE">Баланс</option>
-                          </select>
-                        </label>
-                      </div>
-                      {typeof zid === "number" && (
-                        <p className="tools-hint">
-                          Будет создан:{" "}
-                          <strong>
-                            {quarterPeriodName(newPeriodQuarter, newPeriodYear)}
-                          </strong>
-                          {" · "}
-                          {formatPeriod(
-                            quarterDateRange(newPeriodQuarter, newPeriodYear).periodStart,
-                            quarterDateRange(newPeriodQuarter, newPeriodYear).periodEnd
-                          )}
-                        </p>
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ marginTop: 8 }}
-                        disabled={busy || typeof zid !== "number"}
-                        onClick={() => void handleCreatePeriod()}
-                      >
-                        Создать период
-                      </button>
                     </>
                   )}
                 </section>

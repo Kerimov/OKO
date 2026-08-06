@@ -11,9 +11,67 @@ import {
 export type { RecalcRule, RowFormula };
 export { recalcRows, recalcRowsFull, mergeRules };
 
+type ModernRules = Awaited<ReturnType<typeof loadRecalcRules>>;
+type LegacyRules = Awaited<ReturnType<typeof loadRowFormulas>>;
+
+let cachedModern: ModernRules | null | undefined;
+let cachedLegacy: LegacyRules | null | undefined;
+let modernPromise: Promise<ModernRules | null> | null = null;
+let legacyPromise: Promise<LegacyRules | null> | null = null;
+
+async function getModernRules(): Promise<ModernRules | null> {
+  if (cachedModern !== undefined) return cachedModern;
+  if (!modernPromise) {
+    modernPromise = loadRecalcRules()
+      .then((data) => {
+        cachedModern = data;
+        return data;
+      })
+      .catch(() => {
+        cachedModern = null;
+        return null;
+      })
+      .finally(() => {
+        modernPromise = null;
+      });
+  }
+  return modernPromise;
+}
+
+async function getLegacyRules(): Promise<LegacyRules | null> {
+  if (cachedLegacy !== undefined) return cachedLegacy;
+  if (!legacyPromise) {
+    legacyPromise = loadRowFormulas()
+      .then((data) => {
+        cachedLegacy = data;
+        return data;
+      })
+      .catch(() => {
+        cachedLegacy = null;
+        return null;
+      })
+      .finally(() => {
+        legacyPromise = null;
+      });
+  }
+  return legacyPromise;
+}
+
+async function loadRulesPair(): Promise<[ModernRules | null, LegacyRules | null]> {
+  return Promise.all([getModernRules(), getLegacyRules()]);
+}
+
+/** Drop cached recalc/row-formula payloads after admin edits. */
+export function clearRecalcCache(): void {
+  cachedModern = undefined;
+  cachedLegacy = undefined;
+  modernPromise = null;
+  legacyPromise = null;
+}
+
 function rulesForForm(
-  modern: Awaited<ReturnType<typeof loadRecalcRules>> | null,
-  legacy: Awaited<ReturnType<typeof loadRowFormulas>> | null,
+  modern: ModernRules | null,
+  legacy: LegacyRules | null,
   formId: string
 ): RecalcRule[] {
   return mergeRules(
@@ -26,31 +84,20 @@ export async function recalcForm(
   schema: FormSchema,
   rows: RowData[]
 ): Promise<RowData[]> {
-  const [modern, legacy] = await Promise.all([
-    loadRecalcRules().catch(() => null),
-    loadRowFormulas().catch(() => null),
-  ]);
-
+  const [modern, legacy] = await loadRulesPair();
   const rules = rulesForForm(modern, legacy, schema.id);
-
   return recalcRowsFull(schema, rows, rules);
 }
 
 export async function countRecalcRules(formId: string): Promise<number> {
-  const [modern, legacy] = await Promise.all([
-    loadRecalcRules().catch(() => null),
-    loadRowFormulas().catch(() => null),
-  ]);
+  const [modern, legacy] = await loadRulesPair();
   return rulesForForm(modern, legacy, formId).length;
 }
 
 export async function recalcAllForms(
   instances: Array<{ schema: FormSchema; rows: RowData[] }>
 ): Promise<RowData[][]> {
-  const [modern, legacy] = await Promise.all([
-    loadRecalcRules().catch(() => null),
-    loadRowFormulas().catch(() => null),
-  ]);
+  const [modern, legacy] = await loadRulesPair();
 
   return instances.map(({ schema, rows }) => {
     const rules = rulesForForm(modern, legacy, schema.id);
@@ -87,10 +134,7 @@ export async function prepareRecalcPackage(
   instances: OkoFormInstance[],
   loadSchema: (templateId: string) => Promise<FormSchema>
 ): Promise<RecalcPackagePrepareResult> {
-  const [modern, legacy] = await Promise.all([
-    loadRecalcRules().catch(() => null),
-    loadRowFormulas().catch(() => null),
-  ]);
+  const [modern, legacy] = await loadRulesPair();
 
   const schemaCache = new Map<string, FormSchema>();
   const items: RecalcPackageItem[] = [];

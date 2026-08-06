@@ -28,6 +28,7 @@ import {
   getInstanceStorageStats,
   listInstanceSummaries,
   loadInstance,
+  loadInstancesBulk,
   migratePortalPayloadsToCells,
   patchInstanceCells,
   setInstanceStatus,
@@ -95,13 +96,19 @@ export class InstancesController {
   }
 
   @Get()
-  @ApiOperation({ summary: "Список экземпляров" })
+  @ApiOperation({
+    summary: "Список экземпляров",
+    description:
+      "По умолчанию — summaries. full=1 — полные экземпляры (cells+rash) одним bulk-запросом.",
+  })
   @ApiQuery({ name: "zid", required: false })
   @ApiQuery({ name: "eid", required: false })
+  @ApiQuery({ name: "full", required: false, description: "1 = full instances bulk" })
   async list(
     @Req() req: Request,
     @Query("zid") zidRaw?: string,
-    @Query("eid") eidRaw?: string
+    @Query("eid") eidRaw?: string,
+    @Query("full") fullRaw?: string
   ) {
     const filter =
       zidRaw != null || eidRaw != null
@@ -110,7 +117,14 @@ export class InstancesController {
             eid: eidRaw != null ? Number(eidRaw) : undefined,
           }
         : undefined;
-    return listInstanceSummaries(await getDb(), mergeOrgFilter(req, filter));
+    const scoped = mergeOrgFilter(req, filter);
+    if (fullRaw === "1" || fullRaw === "true") {
+      const map = await loadInstancesBulk(await getDb(), scoped);
+      return [...map.values()].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+    }
+    return listInstanceSummaries(await getDb(), scoped);
   }
 
   @Post("migrate")

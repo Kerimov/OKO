@@ -1,11 +1,6 @@
 import type { OkoFormInstance, RowData } from "../types";
 import type { EvalContext } from "./cellExpression";
-import {
-  loadAllInstances,
-  loadInstance,
-  listInstances,
-  isBackendMode,
-} from "../storage";
+import { loadAllInstances, isBackendMode } from "../storage";
 import { fetchEvalSnapshot } from "../api";
 
 /** Scope for check evaluation: prefer ZID/EID package; fall back to period dates. */
@@ -211,23 +206,21 @@ export async function loadInstancesForCheck(
   filter?: CheckScopeFilter
 ): Promise<OkoFormInstance[]> {
   if (filter?.zid != null && filter?.eid != null) {
-    const summaries = await listInstances({ zid: filter.zid, eid: filter.eid });
-    const out: OkoFormInstance[] = [];
-    for (const s of summaries) {
-      const inst = await loadInstance(s.instanceId);
-      if (inst) {
-        out.push({
-          ...inst,
-          zid: numId(inst.zid) ?? filter.zid,
-          eid: numId(inst.eid) ?? filter.eid,
-        });
-      }
-    }
-    return out;
+    const out = await loadAllInstances({ zid: filter.zid, eid: filter.eid });
+    return out.map((inst) => ({
+      ...inst,
+      zid: numId(inst.zid) ?? filter.zid,
+      eid: numId(inst.eid) ?? filter.eid,
+    }));
+  }
+
+  if (filter?.zid != null) {
+    const scoped = await loadAllInstances({ zid: filter.zid });
+    return scoped.filter((inst) => instanceMatchesCheckScope(inst, filter));
   }
 
   const all = await loadAllInstances();
-  if (!filter?.start && !filter?.end && filter?.zid == null && filter?.eid == null) {
+  if (!filter?.start && !filter?.end && filter?.eid == null) {
     return all;
   }
   return all.filter((inst) => instanceMatchesCheckScope(inst, filter));

@@ -466,8 +466,18 @@ export async function listInstances(filter?: {
   return apiFetch<InstanceSummary[]>(`/api/instances${q ? `?${q}` : ""}`);
 }
 
-export async function loadAllInstances(): Promise<OkoFormInstance[]> {
-  const index = await listInstances();
+export async function loadAllInstances(filter?: {
+  zid?: number;
+  eid?: number;
+}): Promise<OkoFormInstance[]> {
+  if (useBackend) {
+    const params = new URLSearchParams();
+    params.set("full", "1");
+    if (filter?.zid != null) params.set("zid", String(filter.zid));
+    if (filter?.eid != null) params.set("eid", String(filter.eid));
+    return apiFetch<OkoFormInstance[]>(`/api/instances?${params.toString()}`);
+  }
+  const index = await listInstances(filter);
   const out: OkoFormInstance[] = [];
   for (const s of index) {
     const inst = await loadInstance(s.instanceId);

@@ -33,6 +33,7 @@ import { exportCatalog } from "./forms.js";
 import {
   assertInstanceEditable,
   loadInstance,
+  loadInstancesBulk,
   normalizeInstanceStatus,
   upsertInstance,
 } from "./instances.js";
@@ -525,20 +526,72 @@ async function latestInstanceForTemplate(
   return loadInstance(db, row.instance_id);
 }
 
-async function hasDraftOnlySource(
+type InstanceIndexEntry = {
+  instanceId: string;
+  zid: number;
+  templateId: string;
+  status: "draft" | "submitted";
+  updatedAt: string;
+};
+
+/** One query: latest any + latest submitted per (zid, template) for eid. */
+async function loadLatestInstanceIndex(
   db: OkoDb,
+  zids: number[],
+  eid: number
+): Promise<{
+  any: Map<string, InstanceIndexEntry>;
+  submitted: Map<string, InstanceIndexEntry>;
+}> {
+  const any = new Map<string, InstanceIndexEntry>();
+  const submitted = new Map<string, InstanceIndexEntry>();
+  const uniqueZids = [...new Set(zids.filter((z) => Number.isFinite(z)))];
+  if (uniqueZids.length === 0) return { any, submitted };
+
+  const placeholders = uniqueZids.map(() => "?").join(",");
+  const rows = (await db
+    .prepare(
+      `SELECT instance_id, zid, template_id, status, updated_at
+       FROM form_instances
+       WHERE eid = ? AND zid IN (${placeholders})
+       ORDER BY updated_at DESC`
+    )
+    .all(eid, ...uniqueZids)) as Array<{
+    instance_id: string;
+    zid: number;
+    template_id: string;
+    status: string | null;
+    updated_at: string;
+  }>;
+
+  for (const r of rows) {
+    const key = `${Number(r.zid)}:${r.template_id}`;
+    const entry: InstanceIndexEntry = {
+      instanceId: r.instance_id,
+      zid: Number(r.zid),
+      templateId: r.template_id,
+      status: r.status === "submitted" ? "submitted" : "draft",
+      updatedAt: r.updated_at,
+    };
+    if (!any.has(key)) any.set(key, entry);
+    if (entry.status === "submitted" && !submitted.has(key)) {
+      submitted.set(key, entry);
+    }
+  }
+  return { any, submitted };
+}
+
+function indexKey(zid: number, templateId: string): string {
+  return `${zid}:${templateId}`;
+}
+
+function hasDraftOnlyFromIndex(
+  index: { any: Map<string, InstanceIndexEntry>; submitted: Map<string, InstanceIndexEntry> },
   zid: number,
-  eid: number,
   templateId: string
-): Promise<boolean> {
-  const submitted = await latestInstanceForTemplate(db, zid, eid, templateId, {
-    includeDraft: false,
-  });
-  if (submitted) return false;
-  const any = await latestInstanceForTemplate(db, zid, eid, templateId, {
-    includeDraft: true,
-  });
-  return !!any;
+): boolean {
+  const key = indexKey(zid, templateId);
+  return !index.submitted.has(key) && index.any.has(key);
 }
 
 export interface AggregationLockInfo {
@@ -734,6 +787,9 @@ export async function previewPackageAggregation(
   const gateReorg = reorg || updateCorrSet;
   const sourceOpts = { includeDraft: includeDraftSources };
 
+  const indexZids = [...new Set([...children, targetZid])];
+  const index = await loadLatestInstanceIndex(db, indexZids, eid);
+
   const forms: AggFormPreview[] = [];
   for (const form of catalog.forms) {
     if (formFilter && !formFilter.has(form.id)) continue;
@@ -741,14 +797,14 @@ export async function previewPackageAggregation(
     const missingChildZids: number[] = [];
     const draftChildZids: number[] = [];
     for (const childZid of children) {
-      const inst = await latestInstanceForTemplate(db, childZid, eid, form.id, sourceOpts);
-      if (inst) presentChildZids.push(childZid);
+      const key = indexKey(childZid, form.id);
+      const hit = sourceOpts.includeDraft
+        ? index.any.get(key)
+        : index.submitted.get(key);
+      if (hit) presentChildZids.push(childZid);
       else {
         missingChildZids.push(childZid);
-        if (
-          !includeDraftSources &&
-          (await hasDraftOnlySource(db, childZid, eid, form.id))
-        ) {
+        if (!includeDraftSources && hasDraftOnlyFromIndex(index, childZid, form.id)) {
           draftChildZids.push(childZid);
         }
       }
@@ -766,9 +822,7 @@ export async function previewPackageAggregation(
     ) {
       skippedReason = "reorg-update-blocked";
     } else if (updateCorrSet && colorMode !== "full") {
-      const existing = await latestInstanceForTemplate(db, targetZid, eid, form.id, {
-        includeDraft: true,
-      });
+      const existing = index.any.get(indexKey(targetZid, form.id));
       if (!existing) skippedReason = "no-existing-corr";
     }
 
@@ -777,13 +831,8 @@ export async function previewPackageAggregation(
     }
 
     if (!skippedReason && !overwriteSubmitted) {
-      const existingTarget = await latestInstanceForTemplate(db, targetZid, eid, form.id, {
-        includeDraft: true,
-      });
-      if (
-        existingTarget &&
-        normalizeInstanceStatus(existingTarget.status) === "submitted"
-      ) {
+      const existingTarget = index.any.get(indexKey(targetZid, form.id));
+      if (existingTarget && existingTarget.status === "submitted") {
         skippedReason = "target-submitted";
       }
     }
@@ -867,6 +916,22 @@ export async function runPackageAggregation(
       let aggregated = 0;
       let skipped = 0;
 
+      const scopeZids = [...new Set([...children, targetZid])];
+      const index = await loadLatestInstanceIndex(tx, scopeZids, eid);
+      const bulkMap = await loadInstancesBulk(tx, { zids: scopeZids, eid });
+
+      const pickLatest = (
+        zid: number,
+        templateId: string,
+        includeDraft: boolean
+      ): OkoFormInstance | null => {
+        const meta = includeDraft
+          ? index.any.get(indexKey(zid, templateId))
+          : index.submitted.get(indexKey(zid, templateId));
+        if (!meta) return null;
+        return bulkMap.get(meta.instanceId) ?? null;
+      };
+
       for (const form of catalog.forms) {
         if (formFilter && !formFilter.has(form.id)) continue;
 
@@ -888,9 +953,7 @@ export async function runPackageAggregation(
           continue;
         }
 
-        const existing = await latestInstanceForTemplate(tx, targetZid, eid, form.id, {
-          includeDraft: true,
-        });
+        const existing = pickLatest(targetZid, form.id, true);
         if (updateCorrSet && colorMode !== "full" && !existing) {
           skipped++;
           formResults.push({ formId: form.id, status: "skipped", sourceChildZids: [] });
@@ -912,7 +975,7 @@ export async function runPackageAggregation(
         const sources: OkoFormInstance[] = [];
         const sourceChildZids: number[] = [];
         for (const childZid of children) {
-          const inst = await latestInstanceForTemplate(tx, childZid, eid, form.id, sourceOpts);
+          const inst = pickLatest(childZid, form.id, sourceOpts.includeDraft === true);
           if (inst) {
             sources.push(inst);
             sourceChildZids.push(childZid);
