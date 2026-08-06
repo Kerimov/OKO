@@ -117,6 +117,35 @@ function campaignKeyOf(r: {
   return `${r.periodName}||${r.packageKind}`;
 }
 
+function quarterYearFromPeriodName(
+  periodName: string
+): { quarter: number; year: number } | null {
+  const m = periodName.trim().match(/^(\d)\s*квартал\s+(\d{4})$/i);
+  if (!m) return null;
+  const quarter = Number(m[1]);
+  const year = Number(m[2]);
+  if (!(quarter >= 1 && quarter <= 4) || !(year >= 2000)) return null;
+  return { quarter, year };
+}
+
+function quarterYearFromCampaign(c: {
+  periodName: string;
+  periodStart: string | null;
+}): { quarter: number; year: number } | null {
+  const fromName = quarterYearFromPeriodName(c.periodName);
+  if (fromName) return fromName;
+  if (c.periodStart) {
+    const d = new Date(c.periodStart);
+    if (!Number.isNaN(d.getTime())) {
+      return {
+        quarter: Math.floor(d.getMonth() / 3) + 1,
+        year: d.getFullYear(),
+      };
+    }
+  }
+  return null;
+}
+
 const BP_ACTIONS: Array<{
   action: BpAction;
   label: string;
@@ -207,6 +236,9 @@ export function PackagePage() {
   const [packageChecksBusy, setPackageChecksBusy] = useState(false);
 
   const [selectedCampaignKey, setSelectedCampaignKey] = useState("");
+  /** Orgs from directory to attach to the open period. */
+  const [addOrgZids, setAddOrgZids] = useState<number[]>([]);
+  const [addOrgSearch, setAddOrgSearch] = useState("");
   /** Targets for «Завести формы» dialog (one org or multi-select). */
   const [fillTargets, setFillTargets] = useState<PackageWorkspaceRow[] | null>(
     null
@@ -324,6 +356,32 @@ export function PackagePage() {
     filterBlockers,
   ]);
 
+  const periodLocked = selectedCampaign?.status === "closed";
+
+  /** Organizations from directory that are not yet in this period. */
+  const orgsMissingFromCampaign = useMemo(() => {
+    if (!selectedCampaign) return [];
+    const inPeriod = new Set(
+      rows
+        .filter((r) => campaignKeyOf(r) === selectedCampaign.key)
+        .map((r) => r.zid)
+    );
+    const source =
+      orgZid != null ? orgs.filter((o) => o.zid === orgZid) : orgs;
+    const q = addOrgSearch.trim().toLowerCase();
+    return source
+      .filter((o) => !inPeriod.has(o.zid))
+      .filter((o) => {
+        if (!q) return true;
+        return (
+          o.name.toLowerCase().includes(q) ||
+          (o.code ?? "").toLowerCase().includes(q) ||
+          String(o.zid).includes(q)
+        );
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }, [selectedCampaign, rows, orgs, orgZid, addOrgSearch]);
+
   const selectCampaign = useCallback((key: string) => {
     setSelectedCampaignKey(key);
     setZid("");
@@ -331,6 +389,8 @@ export function PackagePage() {
     setDetail(null);
     setTab("period");
     setCheckedKeys(new Set());
+    setAddOrgZids([]);
+    setAddOrgSearch("");
   }, []);
 
   useEffect(() => {
@@ -892,6 +952,10 @@ export function PackagePage() {
   };
 
   const openFillForms = (targets: PackageWorkspaceRow[]) => {
+    if (periodLocked) {
+      setStatus("Период закрыт — заведение форм недоступно");
+      return;
+    }
     const open = targets.filter((r) => r.periodStatus !== "closed");
     if (!open.length) {
       setStatus("Нет открытых комплектов для заведения форм");
@@ -902,6 +966,113 @@ export function PackagePage() {
     }
     setFillTargets(open);
     setTab("fill-forms");
+  };
+
+  const handleAddOrgsToPeriod = async () => {
+    if (!selectedCampaign || !canMutate) return;
+    if (periodLocked) {
+      setStatus("Период закрыт — нельзя добавлять организации");
+      return;
+    }
+    if (!addOrgZids.length) {
+      setStatus("Выберите организации из справочника");
+      return;
+    }
+    const qy = quarterYearFromCampaign(selectedCampaign);
+    if (!qy) {
+      setStatus(
+        "Не удалось определить квартал и год периода. Откройте период заново."
+      );
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      let created = 0;
+      let reused = 0;
+      let errors = 0;
+
+      if (admin) {
+        const res = await createPeriodsBulk({
+          zids: addOrgZids,
+          quarter: qy.quarter,
+          year: qy.year,
+          packageKind: selectedCampaign.packageKind,
+          name: selectedCampaign.periodName,
+          periodStart: selectedCampaign.periodStart ?? undefined,
+          periodEnd: selectedCampaign.periodEnd ?? undefined,
+          reuseExisting: true,
+        });
+        created = res.summary.created;
+        reused = res.summary.reused;
+        errors = res.summary.errors;
+        if (created + reused === 0) {
+          throw new Error(
+            res.rows.find((r) => r.error)?.error ||
+              "Не удалось добавить организации в период"
+          );
+        }
+      } else {
+        for (const targetZid of addOrgZids) {
+          try {
+            await createPeriod({
+              zid: targetZid,
+              name: selectedCampaign.periodName,
+              periodStart: selectedCampaign.periodStart ?? undefined,
+              periodEnd: selectedCampaign.periodEnd ?? undefined,
+              quarter: qy.quarter,
+              year: qy.year,
+              packageKind: selectedCampaign.packageKind,
+            });
+            created += 1;
+          } catch {
+            const res = await constructPackages({
+              mode: "single",
+              targets: [{ zid: targetZid }],
+              period: {
+                quarter: qy.quarter,
+                year: qy.year,
+                packageKind: selectedCampaign.packageKind,
+                name: selectedCampaign.periodName,
+                reuseExisting: true,
+              },
+              forms: { mode: "all" },
+              options: {
+                createInstances: false,
+                allowCreatePeriod: true,
+              },
+            });
+            const row = res.rows[0];
+            if (!row || row.status === "error" || row.eid == null) {
+              errors += 1;
+            } else if (row.periodCreated) {
+              created += 1;
+            } else {
+              reused += 1;
+            }
+          }
+        }
+        if (created + reused === 0) {
+          throw new Error("Не удалось добавить организацию в период");
+        }
+      }
+
+      setAddOrgZids([]);
+      await loadList();
+      setStatus(
+        `В период добавлено: создано ${created}` +
+          (reused ? `, уже было ${reused}` : "") +
+          (errors ? `, ошибок ${errors}` : "") +
+          ". Далее заведите формы у новых комплектов."
+      );
+      setTab("period");
+    } catch (e) {
+      setStatus(
+        e instanceof Error ? e.message : "Ошибка добавления организаций"
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleFillFormsConfirm = async (opts: {
@@ -1662,6 +1833,101 @@ export function PackagePage() {
                 </li>
               </ul>
 
+              {periodLocked ? (
+                <p className="tools-hint" style={{ marginBottom: 16 }}>
+                  Период закрыт — нельзя добавлять организации и заводить формы.
+                  Можно только переоткрыть период.
+                </p>
+              ) : null}
+
+              <h3>Добавить организации</h3>
+              {periodLocked ? (
+                <p className="tools-hint">
+                  Справочник недоступен для дополнения: период закрыт.
+                </p>
+              ) : (
+                <>
+                  <p className="tools-hint">
+                    Организации из справочника, у которых ещё нет комплекта в этом
+                    периоде. После добавления заведите формы в списке комплектов.
+                  </p>
+                  {orgsMissingFromCampaign.length === 0 ? (
+                    <p className="tools-hint">
+                      {addOrgSearch.trim()
+                        ? "По поиску ничего не найдено среди организаций вне периода."
+                        : "Все организации справочника уже в периоде."}
+                    </p>
+                  ) : (
+                    <>
+                      <label style={{ display: "block", marginBottom: 8 }}>
+                        Поиск
+                        <input
+                          type="search"
+                          className="search-input"
+                          value={addOrgSearch}
+                          onChange={(e) => setAddOrgSearch(e.target.value)}
+                          placeholder="Название, код, ZID…"
+                          style={{ display: "block", marginTop: 4, minWidth: 240 }}
+                        />
+                      </label>
+                      <div className="toolbar-actions" style={{ marginBottom: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() =>
+                            setAddOrgZids(
+                              orgsMissingFromCampaign.map((o) => o.zid)
+                            )
+                          }
+                        >
+                          Выбрать все ({orgsMissingFromCampaign.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setAddOrgZids([])}
+                        >
+                          Снять выбор
+                        </button>
+                        <span className="tools-hint">
+                          Выбрано: {addOrgZids.length}
+                        </span>
+                      </div>
+                      <div className="aggr-list package-constructor-org-list">
+                        {orgsMissingFromCampaign.map((o) => (
+                          <label
+                            key={o.zid}
+                            className="package-constructor-check-row"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={addOrgZids.includes(o.zid)}
+                              onChange={() => {
+                                setAddOrgZids((prev) =>
+                                  prev.includes(o.zid)
+                                    ? prev.filter((z) => z !== o.zid)
+                                    : [...prev, o.zid]
+                                );
+                              }}
+                            />
+                            <span>{orgOptionLabel(o)}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="toolbar-actions" style={{ marginTop: 12 }}>
+                        <Button
+                          disabled={busy || addOrgZids.length === 0}
+                          onClick={() => void handleAddOrgsToPeriod()}
+                        >
+                          Добавить в период
+                          {addOrgZids.length ? ` (${addOrgZids.length})` : ""}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
               <h3>Закрытие и переоткрытие</h3>
               <p className="tools-hint">
                 Обычное закрытие доступно для комплектов с завершённым
@@ -1772,6 +2038,13 @@ export function PackagePage() {
                 </div>
               </div>
 
+              {periodLocked ? (
+                <p className="tools-hint" style={{ marginBottom: 12 }}>
+                  Период закрыт — заведение форм и добавление организаций
+                  недоступны.
+                </p>
+              ) : null}
+
               <div className="package-workspace-filters" style={{ marginBottom: 12 }}>
                 <div className="tools-grid package-workspace-filter-grid">
                   <label>
@@ -1833,7 +2106,7 @@ export function PackagePage() {
                   </label>
                   {checkedRows.length > 0 ? (
                     <div className="package-workspace-bulk-actions">
-                      {canMutate && (
+                      {canMutate && !periodLocked && (
                         <Button
                           size="sm"
                           disabled={
@@ -1980,7 +2253,10 @@ export function PackagePage() {
                               >
                                 Открыть
                               </button>
-                              {!closed && r.filled < r.total && canMutate && (
+                              {!periodLocked &&
+                                !closed &&
+                                r.filled < r.total &&
+                                canMutate && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
@@ -1992,7 +2268,7 @@ export function PackagePage() {
                                     : "Дозавести формы"}
                                 </button>
                               )}
-                              {canClose && canMutate && (
+                              {!periodLocked && canClose && canMutate && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
@@ -2004,7 +2280,7 @@ export function PackagePage() {
                                   Закрыть
                                 </button>
                               )}
-                              {closed && canMutate && (
+                              {closed && canMutate && !periodLocked && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
