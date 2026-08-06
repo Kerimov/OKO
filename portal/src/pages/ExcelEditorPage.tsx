@@ -14,9 +14,14 @@ import {
   formCellKey,
   type FormCellPick,
 } from "../components/FormCellGrid";
+import { EditorWizardNav, EditorWizardSteps } from "../components/EditorWizard";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+
+type WizardStep = 1 | 2 | 3;
+
+const WIZARD_STEPS = ["Основное", "Ячейка формы", "Проверка"];
 
 const EMPTY_MAPPING: ExcelMapping = {
   formName: "",
@@ -28,6 +33,15 @@ const EMPTY_MAPPING: ExcelMapping = {
   period: false,
   addText: null,
 };
+
+function cellLabel(
+  form: string | null | undefined,
+  column: string | null | undefined,
+  row: number | null | undefined
+): string {
+  if (!form) return "—";
+  return `${form} · ${column ?? "?"} · ${row ?? "?"}`;
+}
 
 function applyFormPick(draft: ExcelMapping, pick: FormCellPick): ExcelMapping {
   const row = Number(pick.rowNo);
@@ -48,35 +62,27 @@ export function ExcelEditorPage() {
   const [items, setItems] = useState<ExcelMapping[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [workspaceFormId, setWorkspaceFormId] = useState(
-    () => searchParams.get("form") ?? searchParams.get("formId") ?? ""
-  );
-  const [gridFormId, setGridFormId] = useState(
+  const [formFilter, setFormFilter] = useState(
     () => searchParams.get("form") ?? searchParams.get("formId") ?? ""
   );
   const [formOptions, setFormOptions] = useState<Array<{ id: string; label: string }>>(
     []
   );
+
   const [selected, setSelected] = useState<ExcelMapping | null>(null);
   const [draft, setDraft] = useState<ExcelMapping>(EMPTY_MAPPING);
   const [creating, setCreating] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+  const [gridFormId, setGridFormId] = useState("");
+
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const limit = 80;
 
   const editing = creating || selected != null;
-
-  const usedCellKeys = useMemo(() => {
-    const keys = new Set<string>();
-    if (!gridFormId) return keys;
-    for (const m of items) {
-      if (m.formName !== gridFormId || !m.formColumn) continue;
-      keys.add(formCellKey(m.formRow ?? "", m.formColumn));
-    }
-    return keys;
-  }, [items, gridFormId]);
 
   const activeCellKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -107,10 +113,12 @@ export function ExcelEditorPage() {
       .then((catalog) => {
         if (cancelled) return;
         setFormOptions(
-          catalog.forms.map((f) => ({
-            id: f.id,
-            label: f.title ? `${f.id} — ${f.title}` : f.id,
-          }))
+          catalog.forms
+            .map((f) => ({
+              id: f.id,
+              label: f.title ? `${f.id} — ${f.title}` : f.id,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id))
         );
       })
       .catch(() => undefined);
@@ -121,19 +129,13 @@ export function ExcelEditorPage() {
 
   const loadPage = useCallback(async () => {
     if (!backend) return;
-    if (!workspaceFormId) {
-      setItems([]);
-      setTotal(0);
-      setStats(null);
-      return;
-    }
     setLoading(true);
     setError("");
     try {
       const [page, st] = await Promise.all([
         fetchExcelPage({
           q: search || undefined,
-          formName: workspaceFormId,
+          formName: formFilter || undefined,
           limit,
           offset,
         }),
@@ -147,57 +149,49 @@ export function ExcelEditorPage() {
     } finally {
       setLoading(false);
     }
-  }, [backend, search, workspaceFormId, offset]);
+  }, [backend, search, formFilter, offset]);
 
   useEffect(() => {
     void loadPage();
   }, [loadPage]);
 
-  const selectWorkspaceForm = (formId: string) => {
-    setWorkspaceFormId(formId);
-    setGridFormId(formId);
-    setOffset(0);
-    setSelected(null);
-    setDraft(EMPTY_MAPPING);
-    setCreating(false);
-    setStatus("");
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput);
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   const selectItem = (item: ExcelMapping) => {
     setSelected(item);
     setDraft({ ...item });
     setCreating(false);
-    if (item.formName) setGridFormId(item.formName);
+    setWizardStep(1);
+    setGridFormId(item.formName || formFilter || "");
   };
 
   const handleNew = () => {
-    if (!workspaceFormId) return;
     setSelected(null);
     setDraft({
       ...EMPTY_MAPPING,
-      formName: workspaceFormId,
-      sheetName: workspaceFormId,
+      formName: formFilter || "",
+      sheetName: formFilter || "",
     });
     setCreating(true);
-    setGridFormId(workspaceFormId);
+    setWizardStep(1);
+    setGridFormId(formFilter || "");
+  };
+
+  const handleDiscard = () => {
+    if (selected) selectItem(selected);
+    else {
+      setCreating(false);
+      setDraft(EMPTY_MAPPING);
+    }
   };
 
   const handlePick = (pick: FormCellPick) => {
-    if (!editing) {
-      setCreating(true);
-      setSelected(null);
-      setDraft(
-        applyFormPick(
-          {
-            ...EMPTY_MAPPING,
-            formName: workspaceFormId || pick.formId,
-            sheetName: workspaceFormId || pick.formId,
-          },
-          pick
-        )
-      );
-      return;
-    }
     setDraft((prev) => applyFormPick(prev, pick));
   };
 
@@ -212,6 +206,7 @@ export function ExcelEditorPage() {
       setSelected(saved);
       setDraft({ ...saved });
       setCreating(false);
+      setError("");
       await loadPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -245,276 +240,334 @@ export function ExcelEditorPage() {
   };
 
   const access = useAdminAccess();
+
+  const stepBlocked = useMemo(() => {
+    if (wizardStep === 2) return !draft.formName || !draft.formColumn;
+    return false;
+  }, [wizardStep, draft]);
+
+  const canSave = !!draft.formName.trim();
+
   if (!access.ok) {
     return <AdminAccessGate title="Маппинг Excel" />;
   }
 
-  const formCellLabel =
-    draft.formName && draft.formColumn
-      ? `${draft.formName} · ${draft.formColumn} · ${draft.formRow ?? "?"}`
-      : "— не выбрана —";
-
   return (
-    <div className="admin-page checks-editor excel-editor">
-      <header className="admin-header">
-        <div>
-          <h1>Маппинг Excel</h1>
-          <p className="admin-desc">
-            Выберите форму — список маппингов и таблица ячеек. Клик по ячейке задаёт
-            поле формы; координаты листа Excel — справа.
-          </p>
-        </div>
-        {stats && (
-          <div className="admin-stats">
-            <span>Всего: {stats.total}</span>
-            <span>Форм: {stats.formsCount}</span>
-          </div>
-        )}
-      </header>
+    <div className="admin-editor-page rash-constructor-page">
+      <h1>Конструктор маппинга Excel</h1>
+      <p className="tools-intro">
+        Соответствие ячеек выгрузки Excel и граф форм: лист/строка/колонка Excel →
+        ячейка формы.
+      </p>
 
+      {!backend && (
+        <div className="status-bar">Режим только чтения. Подключите API для редактирования.</div>
+      )}
       {status && <div className="status-bar">{status}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <section className="checks-workspace-formbar">
-        <label className="checks-workspace-form-select">
-          Форма
+      {stats && (
+        <p className="tools-hint">
+          Всего: <strong>{stats.total}</strong>, форм: <strong>{stats.formsCount}</strong>
+        </p>
+      )}
+
+      <div className="editor-list-toolbar">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(
+            searchInput.trim().length > 0,
+            formFilter !== ""
+          )}
+          bodyClassName="checks-filters"
+        >
+          <input
+            placeholder="Поиск по листу, ячейке…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="search-input"
+          />
           <select
-            value={workspaceFormId}
-            onChange={(e) => selectWorkspaceForm(e.target.value)}
+            value={formFilter}
+            onChange={(e) => {
+              setFormFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="category-select"
           >
-            <option value="">— выберите форму —</option>
+            <option value="">Все формы</option>
             {formOptions.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.label}
               </option>
             ))}
           </select>
-        </label>
-        <div className="checks-filters-actions">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={handleReimport}
-          >
-            Импорт из файла
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            disabled={!workspaceFormId}
-            onClick={handleNew}
-          >
-            + Новая запись
-          </button>
-        </div>
-      </section>
+        </CollapsibleFilters>
+        {backend && (
+          <div className="checks-filters-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleReimport()}
+            >
+              Импорт
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleNew}>
+              + Новая
+            </button>
+          </div>
+        )}
+      </div>
 
-      {!workspaceFormId ? (
-        <section className="tools-section checks-workspace-empty">
-          <h2>Выберите форму</h2>
-          <p className="tools-hint">
-            После выбора отобразятся маппинги Excel для формы и таблица ячеек шаблона.
-          </p>
-        </section>
-      ) : (
-        <div className="checks-layout checks-layout-workspace">
-          <section className="checks-list-panel">
-            <div className="checks-list-toolbar">
-              <h2 className="checks-panel-title">
-                Маппинги · <code>{workspaceFormId}</code>
-                {total > 0 ? ` · ${total}` : ""}
-              </h2>
-              <CollapsibleFilters
-                activeCount={countActiveFilters(search.trim().length > 0)}
-                bodyClassName="checks-filters"
-              >
-                <input
-                  type="search"
-                  placeholder="Поиск по листу, ячейке…"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setOffset(0);
-                  }}
-                  className="search-input"
-                />
-              </CollapsibleFilters>
-            </div>
-
-            {loading ? (
-              <p className="loading">Загрузка…</p>
-            ) : items.length === 0 ? (
-              <p className="tools-hint">Нет маппингов для формы.</p>
-            ) : (
-              <>
-                <table className="checks-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Лист Excel</th>
-                      <th>Ячейка Excel</th>
-                      <th>Ячейка формы</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((r) => (
-                      <tr
-                        key={r.id}
-                        className={selected?.id === r.id ? "selected" : ""}
-                        onClick={() => selectItem(r)}
-                      >
-                        <td>{r.id}</td>
-                        <td className="expr-cell">{r.sheetName ?? "—"}</td>
-                        <td>
-                          {r.excelRow ?? "?"},{r.excelColumn ?? "?"}
-                        </td>
-                        <td>
-                          {r.formColumn ?? "—"}
-                          {r.formRow != null ? ` R${r.formRow}` : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="checks-pager">
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled={offset === 0}
-                    onClick={() => setOffset(Math.max(0, offset - limit))}
-                  >
-                    ← Назад
-                  </button>
-                  <span>
-                    {offset + 1}–{Math.min(offset + limit, total)} из {total}
+      <div className="checks-layout rash-constructor-layout">
+        <div className="checks-list-panel">
+          {loading ? (
+            <div className="loading">Загрузка…</div>
+          ) : items.length === 0 ? (
+            <p className="tools-hint">Нет маппингов по фильтру.</p>
+          ) : (
+            <div className="rash-rule-catalog">
+              {items.map((r) => (
+                <button
+                  type="button"
+                  key={r.id}
+                  className={`rash-rule-card${selected?.id === r.id ? " selected" : ""}`}
+                  onClick={() => selectItem(r)}
+                >
+                  <span className="rash-rule-card-title">
+                    <strong>#{r.id}</strong> {r.sheetName ?? "—"}
                   </span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled={offset + limit >= total}
-                    onClick={() => setOffset(offset + limit)}
-                  >
-                    Вперёд →
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="checks-edit-panel">
-            <h2>
-              {selected
-                ? `Запись #${selected.id}`
-                : creating
-                  ? "Новая запись"
-                  : "Таблица и настройка"}
-            </h2>
-
-            <div className="saldo-pick-slots" role="group" aria-label="Ячейка формы">
-              <button type="button" className="saldo-pick-slot is-active">
-                <span className="saldo-pick-slot-label">Ячейка формы</span>
-                <span className="saldo-pick-slot-value">{formCellLabel}</span>
-              </button>
+                  <span className="rash-rule-card-meta">
+                    <span>
+                      Excel: {r.excelRow ?? "?"}, {r.excelColumn ?? "?"}
+                    </span>
+                    <span>
+                      Форма: {r.formName} {r.formColumn ?? ""}
+                      {r.formRow != null ? ` R${r.formRow}` : ""}
+                    </span>
+                  </span>
+                </button>
+              ))}
             </div>
+          )}
+          <div className="toolbar-actions" style={{ marginTop: "0.5rem" }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+            >
+              ←
+            </button>
+            <span className="muted">
+              {total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} / {total}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={offset + limit >= total}
+              onClick={() => setOffset(offset + limit)}
+            >
+              →
+            </button>
+          </div>
+        </div>
 
-            <FormCellGrid
-              workspaceFormId={workspaceFormId}
-              gridFormId={gridFormId}
-              onGridFormIdChange={setGridFormId}
-              usedCellKeys={usedCellKeys}
-              activeCellKeys={activeCellKeys}
-              cellOwners={cellOwners}
-              pickHint="Клик по ячейке задаёт поле формы в маппинге Excel"
-              onPick={handlePick}
-              onOpenOwner={(ownerId) => {
-                const id = Number(String(ownerId).replace(/^#/, ""));
-                const item = items.find((r) => r.id === id);
-                if (item) selectItem(item);
-              }}
-            />
+        <div className="checks-detail-panel">
+          {editing ? (
+            <>
+              <header className="rash-constructor-header">
+                <div>
+                  <h2>
+                    {selected
+                      ? `Запись #${selected.id}: ${draft.sheetName || "—"}`
+                      : "Новая запись"}
+                  </h2>
+                  <span className={`status-badge ${draft.formColumn ? "accepted" : "returned"}`}>
+                    {draft.formColumn ? "Ячейка формы выбрана" : "Ячейка формы не выбрана"}
+                  </span>
+                </div>
+              </header>
 
-            {editing ? (
-              <div className="checks-form-grid" style={{ marginTop: 12 }}>
-                <p className="form-section-label">Лист Excel</p>
-                <label>
-                  Имя листа
-                  <input
-                    value={draft.sheetName ?? ""}
-                    onChange={(e) =>
-                      setDraft({ ...draft, sheetName: e.target.value || null })
+              <EditorWizardSteps
+                steps={WIZARD_STEPS}
+                value={wizardStep}
+                onChange={(step) => setWizardStep(step as WizardStep)}
+              />
+
+              {wizardStep === 1 && (
+                <section className="tools-section">
+                  <h2>1. Основное</h2>
+                  <div className="checks-form-grid">
+                    <label>
+                      Имя листа
+                      <input
+                        value={draft.sheetName ?? ""}
+                        onChange={(e) =>
+                          setDraft({ ...draft, sheetName: e.target.value || null })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Строка Excel
+                      <input
+                        type="number"
+                        value={draft.excelRow ?? ""}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            excelRow: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Колонка Excel
+                      <input
+                        value={draft.excelColumn ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setDraft({
+                            ...draft,
+                            excelColumn: v === "" ? null : /^\d+$/.test(v) ? Number(v) : v,
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      Дополнительный текст
+                      <input
+                        value={draft.addText ?? ""}
+                        onChange={(e) =>
+                          setDraft({ ...draft, addText: e.target.value || null })
+                        }
+                      />
+                    </label>
+                    <div className="checks-flags full-width">
+                      <label className="check-flag">
+                        <input
+                          type="checkbox"
+                          checked={!!draft.period}
+                          onChange={(e) =>
+                            setDraft({ ...draft, period: e.target.checked })
+                          }
+                        />
+                        Привязка к периоду
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {wizardStep === 2 && (
+                <section className="tools-section">
+                  <h2>2. Ячейка формы</h2>
+                  <p className="tools-hint">
+                    Текущая ячейка: <strong>{cellLabel(draft.formName, draft.formColumn, draft.formRow)}</strong>
+                  </p>
+                  <FormCellGrid
+                    workspaceFormId={draft.formName}
+                    gridFormId={gridFormId}
+                    onGridFormIdChange={setGridFormId}
+                    activeCellKeys={activeCellKeys}
+                    cellOwners={cellOwners}
+                    currentOwnerId={
+                      selected?.id != null ? `#${selected.id}` : undefined
                     }
-                  />
-                </label>
-                <label>
-                  Строка Excel
-                  <input
-                    type="number"
-                    value={draft.excelRow ?? ""}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        excelRow: e.target.value ? Number(e.target.value) : null,
-                      })
+                    pickHint="Отметьте ячейку формы. Если занята другим маппингом — откройте его по ссылке."
+                    onPick={handlePick}
+                    onClear={() =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        formColumn: null,
+                        formRow: null,
+                      }))
                     }
-                  />
-                </label>
-                <label>
-                  Колонка Excel
-                  <input
-                    value={draft.excelColumn ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setDraft({
-                        ...draft,
-                        excelColumn: v === "" ? null : /^\d+$/.test(v) ? Number(v) : v,
-                      });
+                    onOpenOwner={(ownerId) => {
+                      const id = Number(String(ownerId).replace(/^#/, ""));
+                      const item = items.find((r) => r.id === id);
+                      if (item) selectItem(item);
                     }}
                   />
-                </label>
-                <label>
-                  Дополнительный текст
-                  <input
-                    value={draft.addText ?? ""}
-                    onChange={(e) =>
-                      setDraft({ ...draft, addText: e.target.value || null })
-                    }
-                  />
-                </label>
-                <div className="checks-flags">
-                  <label className="check-flag">
-                    <input
-                      type="checkbox"
-                      checked={!!draft.period}
-                      onChange={(e) =>
-                        setDraft({ ...draft, period: e.target.checked })
-                      }
-                    />
-                    Привязка к периоду
-                  </label>
-                </div>
-                <div className="checks-actions">
-                  <button type="button" className="btn btn-primary" onClick={handleSave}>
-                    Сохранить
-                  </button>
-                  {selected?.id && (
+                </section>
+              )}
+
+              {wizardStep === 3 && (
+                <section className="tools-section">
+                  <h2>3. Проверка перед сохранением</h2>
+                  {canSave ? (
+                    <p className="status-ok">Запись заполнена корректно и готова к сохранению.</p>
+                  ) : (
+                    <ul className="rash-validation">
+                      <li className="err">Выберите ячейку формы в таблице.</li>
+                    </ul>
+                  )}
+                  <div className="rash-rule-summary">
+                    <p>
+                      Лист Excel: <strong>{draft.sheetName || "—"}</strong>, ячейка{" "}
+                      <strong>
+                        {draft.excelRow ?? "?"}, {draft.excelColumn ?? "?"}
+                      </strong>
+                    </p>
+                    <p>
+                      Ячейка формы:{" "}
+                      <strong>{cellLabel(draft.formName, draft.formColumn, draft.formRow)}</strong>
+                    </p>
+                    {draft.addText ? (
+                      <p>
+                        Доп. текст: <strong>{draft.addText}</strong>
+                      </p>
+                    ) : null}
+                    <p>Привязка к периоду: <strong>{draft.period ? "да" : "нет"}</strong></p>
+                  </div>
+                </section>
+              )}
+
+              <EditorWizardNav
+                step={wizardStep}
+                maxStep={3}
+                onBack={() => setWizardStep((wizardStep - 1) as WizardStep)}
+                onNext={() => setWizardStep((wizardStep + 1) as WizardStep)}
+                nextDisabled={stepBlocked}
+              >
+                {backend && (
+                  <>
+                    <span>{selected ? "Изменения" : "Новая запись"}</span>
                     <button
                       type="button"
-                      className="btn btn-danger-outline"
-                      onClick={handleDelete}
+                      className="btn btn-primary"
+                      disabled={!canSave}
+                      onClick={() => void handleSave()}
                     >
-                      Удалить
+                      Сохранить
                     </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="tools-hint">
-                Выберите запись слева или «+ Новая», затем кликните ячейку в таблице.
-              </p>
-            )}
-          </section>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleDiscard}
+                    >
+                      Отменить
+                    </button>
+                    {selected?.id && (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => void handleDelete()}
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </>
+                )}
+              </EditorWizardNav>
+            </>
+          ) : (
+            <p className="tools-hint">
+              Выберите запись слева или «+ Новая», затем задайте ячейку Excel и ячейку
+              формы.
+            </p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

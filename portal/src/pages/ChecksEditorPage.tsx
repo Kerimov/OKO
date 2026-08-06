@@ -26,6 +26,7 @@ import {
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import { EditorWizardNav, EditorWizardSteps } from "../components/EditorWizard";
 import {
   CellPicker,
   cellKey,
@@ -46,6 +47,9 @@ const EMPTY_RULE: CheckRule = {
   periodActive: false,
 };
 
+const WIZARD_STEPS = ["Основное", "Выражение", "Проверка"];
+type WizardStep = 1 | 2 | 3;
+
 function refsToCellKeys(
   expression: string,
   expressionAlt: string | null | undefined,
@@ -59,6 +63,12 @@ function refsToCellKeys(
     keys.add(cellKey(ref.row, ref.column));
   }
   return keys;
+}
+
+function shortExpression(rule: CheckRule): string {
+  const combined = combineCheckExpression(rule.expression, rule.expressionAlt);
+  const trimmed = combined.trim();
+  return trimmed.length > 70 ? `${trimmed.slice(0, 70)}…` : trimmed || "— пусто —";
 }
 
 export function ChecksEditorPage() {
@@ -76,20 +86,17 @@ export function ChecksEditorPage() {
   const [search, setSearch] = useState(
     () => searchParams.get("q") ?? searchParams.get("number") ?? ""
   );
-  /** Форма, чьи увязки показываем в списке. */
-  const [workspaceFormId, setWorkspaceFormId] = useState(
-    () => searchParams.get("form") ?? ""
-  );
-  /** Форма таблицы ячеек (может быть другой для межформенных ссылок). */
-  const [gridFormId, setGridFormId] = useState(
-    () => searchParams.get("form") ?? ""
-  );
+  /** Форма-фильтр списка увязок (необязательная — пусто значит «все формы»). */
+  const [formFilter, setFormFilter] = useState(() => searchParams.get("form") ?? "");
+  /** Форма таблицы ячеек (может отличаться для межформенных ссылок). */
+  const [gridFormId, setGridFormId] = useState(() => searchParams.get("form") ?? "");
   const [formOptions, setFormOptions] = useState<Array<{ id: string; label: string }>>(
     []
   );
   const [onlyPeriod, setOnlyPeriod] = useState(false);
   const [selected, setSelected] = useState<CheckRule | null>(null);
   const [draft, setDraft] = useState<CheckRule>(EMPTY_RULE);
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [testResult, setTestResult] = useState<string>("");
@@ -137,37 +144,14 @@ export function ChecksEditorPage() {
   const otherFormsInDraft = useMemo(() => {
     const forms = new Set<string>();
     for (const ref of expressionPreview.refs) {
-      if (workspaceFormId && ref.form === workspaceFormId) continue;
+      if (formFilter && ref.form === formFilter) continue;
       forms.add(ref.form);
     }
     return [...forms].sort();
-  }, [expressionPreview.refs, workspaceFormId]);
+  }, [expressionPreview.refs, formFilter]);
 
   const insertIntoExpression = useCallback(
     (text: string) => {
-      const startFresh = !creating && selected == null;
-      if (startFresh) {
-        const nextNumber =
-          items.reduce((max, r) => Math.max(max, r.number), 0) + 1 || 1;
-        setCreating(true);
-        setSelected(null);
-        if (pickTarget === "expressionAlt") {
-          setDraft({
-            ...EMPTY_RULE,
-            number: nextNumber,
-            periodActive: true,
-            expressionAlt: text,
-          });
-        } else {
-          setDraft({
-            ...EMPTY_RULE,
-            number: nextNumber,
-            periodActive: true,
-            expression: text,
-          });
-        }
-        return;
-      }
       setDraft((prev) => {
         if (pickTarget === "expressionAlt") {
           const cur = prev.expressionAlt ?? "";
@@ -179,7 +163,7 @@ export function ChecksEditorPage() {
         return { ...prev, expression: next };
       });
     },
-    [pickTarget, creating, selected, items]
+    [pickTarget]
   );
 
   const applyRemoveToDraft = useCallback((pick: PickedCell) => {
@@ -211,6 +195,7 @@ export function ChecksEditorPage() {
       setSelected(rule);
       setDraft({ ...rule });
       setCreating(false);
+      setWizardStep(2);
       setTestResult("");
       setReplaceFrom(null);
     },
@@ -237,19 +222,13 @@ export function ChecksEditorPage() {
 
   const loadPage = useCallback(async () => {
     if (!backend) return;
-    if (!workspaceFormId) {
-      setItems([]);
-      setTotal(0);
-      setStats(null);
-      return;
-    }
     setLoading(true);
     setError("");
     try {
       const [page, st] = await Promise.all([
         fetchChecksPage({
           q: search || undefined,
-          formId: workspaceFormId,
+          formId: formFilter || undefined,
           periodActive: onlyPeriod || undefined,
           limit,
           offset,
@@ -264,7 +243,7 @@ export function ChecksEditorPage() {
     } finally {
       setLoading(false);
     }
-  }, [backend, search, workspaceFormId, onlyPeriod, offset]);
+  }, [backend, search, formFilter, onlyPeriod, offset]);
 
   const removeFromOwnerRule = useCallback(
     async (ruleNumber: number, pick: PickedCell) => {
@@ -324,6 +303,8 @@ export function ChecksEditorPage() {
     if (fromList) {
       setSelected(fromList);
       setDraft({ ...fromList });
+      setCreating(false);
+      setWizardStep(1);
       setTestResult("");
       return;
     }
@@ -334,43 +315,38 @@ export function ChecksEditorPage() {
         const r = rule as CheckRule;
         setSelected(r);
         setDraft({ ...r });
+        setCreating(false);
+        setWizardStep(1);
         setTestResult("");
         const refs = extractCellRefs(
           combineCheckExpression(r.expression, r.expressionAlt)
         );
-        if (!workspaceFormId && refs[0]?.form) {
-          setWorkspaceFormId(refs[0].form);
-          setGridFormId(refs[0].form);
-        }
+        if (refs[0]?.form) setGridFormId(refs[0].form);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [backend, items, searchParams, selected?.number, workspaceFormId]);
-
-  const selectWorkspaceForm = (formId: string) => {
-    setWorkspaceFormId(formId);
-    setGridFormId(formId);
-    setOffset(0);
-    setSelected(null);
-    setDraft(EMPTY_RULE);
-    setCreating(false);
-    setReplaceFrom(null);
-    setTestResult("");
-    setStatus("");
-  };
+  }, [backend, items, searchParams, selected?.number]);
 
   const selectRule = (rule: CheckRule) => {
     setSelected(rule);
     setDraft({ ...rule });
     setCreating(false);
+    setWizardStep(1);
     setTestResult("");
+    setReplaceFrom(null);
+    const refs = extractCellRefs(
+      combineCheckExpression(rule.expression, rule.expressionAlt)
+    );
+    if (refs[0]?.form) setGridFormId(refs[0].form);
+    else if (formFilter) setGridFormId(formFilter);
   };
 
   const handleSave = async () => {
     if (!draft.number || !draft.expression.trim()) {
       setError("Укажите номер и выражение");
+      setWizardStep(draft.number ? 2 : 1);
       return;
     }
     try {
@@ -381,6 +357,7 @@ export function ChecksEditorPage() {
       }
       setStatus(`Правило ${draft.number} сохранено`);
       setSelected(draft);
+      setCreating(false);
       await loadPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -394,6 +371,7 @@ export function ChecksEditorPage() {
       await deleteCheckRule(selected.number);
       setSelected(null);
       setDraft(EMPTY_RULE);
+      setCreating(false);
       setStatus("Удалено");
       await loadPage();
     } catch (e) {
@@ -458,8 +436,10 @@ export function ChecksEditorPage() {
     setSelected(null);
     setDraft({ ...EMPTY_RULE, number: nextNumber, periodActive: true });
     setCreating(true);
+    setWizardStep(1);
     setTestResult("");
-    if (workspaceFormId) setGridFormId(workspaceFormId);
+    setReplaceFrom(null);
+    if (formFilter) setGridFormId(formFilter);
   };
 
   const editing = creating || selected != null;
@@ -467,240 +447,265 @@ export function ChecksEditorPage() {
   const access = useAdminAccess();
 
   if (!access.ok) {
-    return <AdminAccessGate title="Редактор увязок" />;
+    return <AdminAccessGate title="Конструктор увязок" />;
   }
 
   return (
-    <div className="admin-page checks-editor">
-      <header className="admin-header">
-        <div>
-          <h1>Редактор увязок</h1>
-          <p className="admin-desc">
-            Выберите форму — справа список её увязок, ниже таблица ячеек для настройки.
-            Увязка может ссылаться на ячейки других форм.
-          </p>
-        </div>
-        {stats && (
-          <div className="admin-stats">
-            <span>Всего: {stats.total}</span>
-            <span>Активных: {stats.active}</span>
-            <span>Период: {stats.periodActive}</span>
-            <span>Только агрег.: {stats.aggrOnly}</span>
-          </div>
-        )}
-      </header>
+    <div className="admin-editor-page rash-constructor-page">
+      <h1>Конструктор увязок</h1>
+      <p className="tools-intro">
+        Список увязок слева, редактирование — справа. Увязка может ссылаться на ячейки
+        нескольких форм: таблица ячеек и выбор формы находятся на шаге «Выражение».
+      </p>
 
       {status && <div className="status-bar">{status}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <section className="checks-workspace-formbar">
-        <label className="checks-workspace-form-select">
-          Форма
+      {stats && (
+        <p className="tools-hint">
+          Всего: <strong>{stats.total}</strong> · активных: <strong>{stats.active}</strong>{" "}
+          · за период: <strong>{stats.periodActive}</strong> · только агрег.:{" "}
+          <strong>{stats.aggrOnly}</strong>
+        </p>
+      )}
+
+      <div className="editor-list-toolbar">
+        <CollapsibleFilters
+          activeCount={countActiveFilters(
+            search.trim().length > 0,
+            formFilter !== "",
+            onlyPeriod
+          )}
+          bodyClassName="checks-filters"
+        >
+          <input
+            type="search"
+            placeholder="Поиск по №, выражению, сообщению…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setOffset(0);
+            }}
+            className="search-input"
+          />
           <select
-            value={workspaceFormId}
-            onChange={(e) => selectWorkspaceForm(e.target.value)}
+            value={formFilter}
+            title="Включая увязки с привязками к форме"
+            onChange={(e) => {
+              setFormFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="category-select"
           >
-            <option value="">— выберите форму —</option>
+            <option value="">Все формы</option>
             {formOptions.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.label}
               </option>
             ))}
           </select>
-        </label>
-        <label className="check-flag">
-          <input
-            type="checkbox"
-            checked={onlyPeriod}
-            onChange={(e) => {
-              setOnlyPeriod(e.target.checked);
-              setOffset(0);
-            }}
-            disabled={!workspaceFormId}
-          />
-          Только для периода
-        </label>
+          <label className="check-flag">
+            <input
+              type="checkbox"
+              checked={onlyPeriod}
+              onChange={(e) => {
+                setOnlyPeriod(e.target.checked);
+                setOffset(0);
+              }}
+            />
+            Только для периода
+          </label>
+        </CollapsibleFilters>
         <div className="checks-filters-actions">
-          <button type="button" className="btn btn-secondary btn-sm" onClick={handleReimport}>
+          <button type="button" className="btn btn-secondary" onClick={handleReimport}>
             Импорт из файла
           </button>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            disabled={!workspaceFormId}
-            onClick={handleNew}
-          >
+          <button type="button" className="btn btn-primary" onClick={handleNew}>
             + Новая увязка
           </button>
         </div>
-      </section>
+      </div>
 
-      {!workspaceFormId ? (
-        <section className="tools-section checks-workspace-empty">
-          <h2>Выберите форму</h2>
-          <p className="tools-hint">
-            После выбора формы отобразятся увязки, в которых она участвует, и таблица
-            её ячеек. Для межформенных правил в таблице можно переключиться на другую
-            форму.
-          </p>
-        </section>
-      ) : (
-        <div className="checks-layout checks-layout-workspace">
-          <section className="checks-list-panel">
-            <div className="checks-list-toolbar">
-              <h2 className="checks-panel-title">
-                Увязки формы <code>{workspaceFormId}</code>
-                {total > 0 ? ` · ${total}` : ""}
-              </h2>
-              <CollapsibleFilters
-                activeCount={countActiveFilters(search.trim().length > 0)}
-                bodyClassName="checks-filters"
-              >
-                <input
-                  type="search"
-                  placeholder="Поиск по №, выражению, сообщению…"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setOffset(0);
-                  }}
-                  className="search-input"
-                />
-              </CollapsibleFilters>
+      <div className="checks-layout rash-constructor-layout">
+        <div className="checks-list-panel">
+          {loading ? (
+            <div className="loading">Загрузка…</div>
+          ) : items.length === 0 ? (
+            <p className="tools-hint">
+              Увязок не найдено{search || formFilter ? " по фильтру" : ""}. Создайте
+              новую или снимите фильтры.
+            </p>
+          ) : (
+            <div className="rash-rule-catalog">
+              {items.map((r) => {
+                const refs = extractCellRefs(
+                  combineCheckExpression(r.expression, r.expressionAlt)
+                );
+                const forms = [...new Set(refs.map((ref) => ref.form))].sort();
+                return (
+                  <button
+                    type="button"
+                    key={r.number}
+                    className={`rash-rule-card${
+                      selected?.number === r.number ? " selected" : ""
+                    }`}
+                    onClick={() => selectRule(r)}
+                  >
+                    <span className="rash-rule-card-title">
+                      <strong>№{r.number}</strong> {shortExpression(r)}
+                    </span>
+                    <span className="rash-rule-card-meta">
+                      <span>{r.periodActive ? "За период" : "Не за период"}</span>
+                      <span>{r.active ? "Активна" : "Выключена"}</span>
+                      <span>{forms.join(", ") || "Без формы"}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+          )}
+          <div className="toolbar-actions" style={{ marginTop: "0.5rem" }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+            >
+              ←
+            </button>
+            <span className="muted">
+              {total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} / {total}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={offset + limit >= total}
+              onClick={() => setOffset(offset + limit)}
+            >
+              →
+            </button>
+          </div>
+        </div>
 
-            {loading ? (
-              <p className="loading">Загрузка…</p>
-            ) : items.length === 0 ? (
-              <p className="tools-hint">
-                Для формы нет увязок
-                {search ? " по фильтру" : ""}. Создайте новую или снимите поиск.
-              </p>
-            ) : (
-              <>
-                <table className="checks-table">
-                  <thead>
-                    <tr>
-                      <th>№</th>
-                      <th>Выражение</th>
-                      <th>П</th>
-                      <th>А</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((r) => {
-                      const refs = extractCellRefs(
-                        combineCheckExpression(r.expression, r.expressionAlt)
-                      );
-                      const cross = refs.some((ref) => ref.form !== workspaceFormId);
-                      return (
-                        <tr
-                          key={r.number}
-                          className={selected?.number === r.number ? "selected" : ""}
-                          onClick={() => selectRule(r)}
-                        >
-                          <td>
-                            {r.number}
-                            {cross ? (
-                              <span className="checks-cross-badge" title="Ссылки на другие формы">
-                                ↔
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="expr-cell" title={r.expression}>
-                            {r.expression.slice(0, 80)}
-                            {(r.expression?.length ?? 0) > 80 ? "…" : ""}
-                          </td>
-                          <td>{r.periodActive ? "✓" : ""}</td>
-                          <td>{r.active ? "✓" : ""}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="checks-pager">
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled={offset === 0}
-                    onClick={() => setOffset(Math.max(0, offset - limit))}
+        <div className="checks-detail-panel">
+          {!editing ? (
+            <p className="tools-hint">Выберите увязку или создайте новую</p>
+          ) : (
+            <>
+              <header className="rash-constructor-header">
+                <div>
+                  <h2>{selected ? `Увязка №${draft.number}` : "Новая увязка"}</h2>
+                  <span
+                    className={`status-badge ${draft.active ? "accepted" : "returned"}`}
                   >
-                    ← Назад
-                  </button>
-                  <span>
-                    {offset + 1}–{Math.min(offset + limit, total)} из {total}
+                    {draft.active ? "Активна" : "Выключена"}
                   </span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled={offset + limit >= total}
-                    onClick={() => setOffset(offset + limit)}
-                  >
-                    Вперёд →
-                  </button>
+                  {draft.periodActive && (
+                    <span className="status-badge accepted">За период</span>
+                  )}
+                  {draft.forAggrOnly && (
+                    <span className="status-badge">Только агрегация</span>
+                  )}
                 </div>
-              </>
-            )}
-          </section>
+              </header>
 
-          <section className="checks-edit-panel">
-            <h2>
-              {selected
-                ? `Увязка №${selected.number}`
-                : creating
-                  ? "Новая увязка"
-                  : "Таблица и настройка"}
-            </h2>
-            <div className="checks-form">
-              <CellPicker
-                target={pickTarget}
-                onTargetChange={setPickTarget}
-                onInsert={insertIntoExpression}
-                workspaceFormId={workspaceFormId}
-                gridFormId={gridFormId}
-                onGridFormIdChange={setGridFormId}
-                usedCellKeys={usedCellKeys}
-                activeCellKeys={activeCellKeys}
-                cellOwners={cellOwners}
-                replaceFrom={replaceFrom}
-                onReplaceFromChange={setReplaceFrom}
-                onRemoveActive={(pick) => {
-                  if (!creating && selected == null) {
-                    const owners = cellOwners.get(
-                      cellKey(pick.rowNo, pick.columnKey)
-                    );
-                    if (owners?.[0] != null) {
-                      void removeFromOwnerRule(owners[0], pick);
-                      return;
-                    }
-                  }
-                  applyRemoveToDraft(pick);
-                }}
-                onOpenOwner={(ruleNumber) => openOwnerRule(ruleNumber)}
-                onRemoveOwner={(ruleNumber, pick) => {
-                  void removeFromOwnerRule(ruleNumber, pick);
-                }}
-                onReplaceCell={(from, to) => applyReplaceToDraft(from, to)}
+              <EditorWizardSteps
+                steps={WIZARD_STEPS}
+                value={wizardStep}
+                onChange={(step) => setWizardStep(step as WizardStep)}
               />
 
-              {!editing ? (
-                <p className="tools-hint">
-                  Выберите увязку слева или нажмите «+». На привязанной ячейке:
-                  ✎ заменить, × удалить; клик по ● — меню.
-                </p>
-              ) : (
-                <>
-                  <label>
-                    Номер
-                    <input
-                      type="number"
-                      value={draft.number || ""}
-                      disabled={!!selected}
-                      onChange={(e) =>
-                        setDraft({ ...draft, number: Number(e.target.value) })
-                      }
-                    />
-                  </label>
+              {wizardStep === 1 && (
+                <section className="tools-section">
+                  <h2>1. Основное</h2>
+                  <div className="checks-form-grid">
+                    <label>
+                      Номер
+                      <input
+                        type="number"
+                        value={draft.number || ""}
+                        disabled={!!selected}
+                        onChange={(e) =>
+                          setDraft({ ...draft, number: Number(e.target.value) })
+                        }
+                      />
+                    </label>
+                    <label className="full-width">
+                      Сообщение об ошибке
+                      <input
+                        value={draft.message ?? ""}
+                        onChange={(e) =>
+                          setDraft({ ...draft, message: e.target.value || null })
+                        }
+                      />
+                    </label>
+                    <label className="rash-check">
+                      <input
+                        type="checkbox"
+                        checked={!!draft.periodActive}
+                        onChange={(e) =>
+                          setDraft({ ...draft, periodActive: e.target.checked })
+                        }
+                      />
+                      Учитывать в проверке за период
+                    </label>
+                    <label className="rash-check">
+                      <input
+                        type="checkbox"
+                        checked={!!draft.active}
+                        onChange={(e) =>
+                          setDraft({ ...draft, active: e.target.checked })
+                        }
+                      />
+                      Активно
+                    </label>
+                    <label className="rash-check">
+                      <input
+                        type="checkbox"
+                        checked={!!draft.forAggrOnly}
+                        onChange={(e) =>
+                          setDraft({ ...draft, forAggrOnly: e.target.checked })
+                        }
+                      />
+                      Только для агрегации
+                    </label>
+                    <label className="rash-check">
+                      <input
+                        type="checkbox"
+                        checked={!!draft.firstLevel}
+                        onChange={(e) =>
+                          setDraft({ ...draft, firstLevel: e.target.checked })
+                        }
+                      />
+                      Первый уровень
+                    </label>
+                  </div>
+                </section>
+              )}
+
+              {wizardStep === 2 && (
+                <section className="tools-section">
+                  <h2>2. Выражение</h2>
+                  <CellPicker
+                    target={pickTarget}
+                    onTargetChange={setPickTarget}
+                    onInsert={insertIntoExpression}
+                    workspaceFormId={formFilter}
+                    gridFormId={gridFormId}
+                    onGridFormIdChange={setGridFormId}
+                    usedCellKeys={usedCellKeys}
+                    activeCellKeys={activeCellKeys}
+                    cellOwners={cellOwners}
+                    currentRuleNumber={draft.number || undefined}
+                    replaceFrom={replaceFrom}
+                    onReplaceFromChange={setReplaceFrom}
+                    onRemoveActive={(pick) => applyRemoveToDraft(pick)}
+                    onOpenOwner={(ruleNumber) => openOwnerRule(ruleNumber)}
+                    onRemoveOwner={(ruleNumber, pick) => {
+                      void removeFromOwnerRule(ruleNumber, pick);
+                    }}
+                    onReplaceCell={(from, to) => applyReplaceToDraft(from, to)}
+                  />
 
                   <div className="checks-expression-preview">
                     <div className="checks-expression-preview-label">Предпросмотр</div>
@@ -798,89 +803,72 @@ export function ChecksEditorPage() {
                       }
                     />
                   </label>
-                  <label className="full-width">
-                    Сообщение об ошибке
-                    <input
-                      value={draft.message ?? ""}
-                      onChange={(e) =>
-                        setDraft({ ...draft, message: e.target.value || null })
-                      }
-                    />
-                  </label>
-                  <div className="checks-flags">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={!!draft.periodActive}
-                        onChange={(e) =>
-                          setDraft({ ...draft, periodActive: e.target.checked })
-                        }
-                      />
-                      Учитывать в проверке за период
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={!!draft.active}
-                        onChange={(e) =>
-                          setDraft({ ...draft, active: e.target.checked })
-                        }
-                      />
-                      Активно
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={!!draft.forAggrOnly}
-                        onChange={(e) =>
-                          setDraft({ ...draft, forAggrOnly: e.target.checked })
-                        }
-                      />
-                      Только для агрегации
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={!!draft.firstLevel}
-                        onChange={(e) =>
-                          setDraft({ ...draft, firstLevel: e.target.checked })
-                        }
-                      />
-                      Первый уровень
-                    </label>
-                  </div>
-                  <div className="checks-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handleTest}
-                    >
-                      Проверить на данных
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleSave}
-                    >
-                      Сохранить
-                    </button>
-                    {selected && (
-                      <button
-                        type="button"
-                        className="btn btn-danger-outline"
-                        onClick={handleDelete}
-                      >
-                        Удалить
-                      </button>
-                    )}
-                  </div>
-                  {testResult && <p className="test-result">{testResult}</p>}
-                </>
+                </section>
               )}
-            </div>
-          </section>
+
+              {wizardStep === 3 && (
+                <section className="tools-section">
+                  <h2>3. Проверка</h2>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => void handleTest()}
+                  >
+                    Проверить на данных
+                  </button>
+                  {testResult && <p className="test-result">{testResult}</p>}
+                  <div className="rash-rule-summary">
+                    <p>
+                      Выражение:{" "}
+                      <code>{expressionPreview.combined.trim() || "—"}</code>
+                    </p>
+                    <p>
+                      Ссылок на ячейки: <strong>{expressionPreview.refs.length}</strong>
+                      {otherFormsInDraft.length > 0
+                        ? `, других форм: ${otherFormsInDraft.length}`
+                        : ""}
+                    </p>
+                    <p>Сообщение об ошибке: {draft.message || "—"}</p>
+                  </div>
+                </section>
+              )}
+
+              <EditorWizardNav
+                step={wizardStep}
+                maxStep={3}
+                onBack={() => setWizardStep((wizardStep - 1) as WizardStep)}
+                onNext={() => setWizardStep((wizardStep + 1) as WizardStep)}
+                nextDisabled={wizardStep === 1 && !draft.number}
+              >
+                <span>{draft.number ? `Черновик №${draft.number}` : "Заполните номер"}</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleTest()}
+                >
+                  Проверить
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void handleSave()}
+                >
+                  Сохранить
+                </button>
+                {selected && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => void handleDelete()}
+                  >
+                    Удалить
+                  </button>
+                )}
+              </EditorWizardNav>
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -9,36 +9,41 @@ export type FormCellPick = {
   rowNo: string;
 };
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = 44;
 
 export function formCellKey(rowNo: string | number, columnKey: string): string {
   return `${String(rowNo).trim()}:${columnKey}`;
 }
 
 /**
- * Shared form cell grid with Excel-like sheet navigation (go to other form / return).
- * Used by Saldo and Excel editors; Checks keeps its expression-oriented CellPicker.
+ * Binding-style cell grid (checkboxes + links to other rules), with optional
+ * Excel-like navigation to another form. Used by Saldo and Excel editors.
  */
 export function FormCellGrid({
   workspaceFormId = "",
   gridFormId,
   onGridFormIdChange,
-  usedCellKeys,
   activeCellKeys,
   cellOwners,
-  pickHint = "Клик по ячейке выбирает её для текущего поля",
+  /** Label of the rule currently being edited (e.g. «№12» / «#5») — hidden from conflict links. */
+  currentOwnerId,
+  pickHint = "Чекбокс — выбрать. Чужие настройки — ссылкой. ПКМ или «⋯» — меню (другая форма, очистить).",
   onPick,
+  onClear,
   onOpenOwner,
+  allowCrossForm = true,
 }: {
   workspaceFormId?: string;
   gridFormId: string;
   onGridFormIdChange: (formId: string) => void;
-  usedCellKeys?: Set<string>;
   activeCellKeys?: Set<string>;
   cellOwners?: Map<string, string[]>;
+  currentOwnerId?: string;
   pickHint?: string;
   onPick: (pick: FormCellPick) => void;
+  onClear?: (pick: FormCellPick) => void;
   onOpenOwner?: (ownerId: string, pick: FormCellPick) => void;
+  allowCrossForm?: boolean;
 }) {
   const [formIds, setFormIds] = useState<string[]>([]);
   const [formLabels, setFormLabels] = useState<Record<string, string>>({});
@@ -46,11 +51,11 @@ export function FormCellGrid({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rowFilter, setRowFilter] = useState("");
-  const [menuKey, setMenuKey] = useState<string | null>(null);
   const [navStack, setNavStack] = useState<string[]>([]);
   const [returnAfterPick, setReturnAfterPick] = useState(true);
-  const [formPickerFor, setFormPickerFor] = useState<string | null>(null);
+  const [formPickerOpen, setFormPickerOpen] = useState(false);
   const [formPickerQuery, setFormPickerQuery] = useState("");
+  const [menuKey, setMenuKey] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pickerSearchRef = useRef<HTMLInputElement | null>(null);
 
@@ -104,22 +109,23 @@ export function FormCellGrid({
   }, [gridFormId]);
 
   useEffect(() => {
-    setMenuKey(null);
-    setFormPickerFor(null);
+    setFormPickerOpen(false);
     setFormPickerQuery("");
     setRowFilter("");
+    setMenuKey(null);
   }, [gridFormId]);
 
   useEffect(() => {
     setNavStack([]);
-    setFormPickerFor(null);
+    setFormPickerOpen(false);
+    setMenuKey(null);
   }, [workspaceFormId]);
 
   useEffect(() => {
-    if (!formPickerFor) return;
+    if (!formPickerOpen) return;
     const t = window.setTimeout(() => pickerSearchRef.current?.focus(), 0);
     return () => window.clearTimeout(t);
-  }, [formPickerFor]);
+  }, [formPickerOpen]);
 
   const columns = useMemo(
     () => schema?.columns.filter((c) => c.type === "number") ?? [],
@@ -164,7 +170,7 @@ export function FormCellGrid({
 
   const goToForm = (targetFormId: string) => {
     if (!targetFormId || targetFormId === gridFormId) {
-      setFormPickerFor(null);
+      setFormPickerOpen(false);
       setMenuKey(null);
       return;
     }
@@ -174,7 +180,7 @@ export function FormCellGrid({
       );
     }
     onGridFormIdChange(targetFormId);
-    setFormPickerFor(null);
+    setFormPickerOpen(false);
     setFormPickerQuery("");
     setMenuKey(null);
   };
@@ -194,128 +200,99 @@ export function FormCellGrid({
     if (homeFormId) onGridFormIdChange(homeFormId);
   };
 
-  const pickCell = (rowNo: string, columnKey: string) => {
+  const toggleCell = (rowNo: string, columnKey: string) => {
     if (!gridFormId) return;
-    onPick({ formId: gridFormId, columnKey, rowNo });
-    setMenuKey(null);
+    const pick: FormCellPick = { formId: gridFormId, columnKey, rowNo };
+    const key = formCellKey(rowNo, columnKey);
+    const isActive = activeCellKeys?.has(key) ?? false;
+    if (isActive) {
+      onClear?.(pick);
+      return;
+    }
+    onPick(pick);
     if (returnAfterPick && awayFromHome) returnToPreviousSheet();
   };
 
-  const openFormPicker = (anchorKey: string) => {
-    setMenuKey(anchorKey);
-    setFormPickerFor(anchorKey);
-    setFormPickerQuery("");
+  const otherOwners = (key: string, isActive: boolean): string[] => {
+    const owners = cellOwners?.get(key) ?? [];
+    return owners.filter((id) => {
+      if (currentOwnerId && id === currentOwnerId) return false;
+      if (isActive && currentOwnerId && id === currentOwnerId) return false;
+      return true;
+    });
   };
 
-  const renderFormPicker = () => (
-    <div className="checks-sheet-picker" role="dialog" aria-label="Выбор формы">
-      <div className="checks-sheet-picker-head">
-        <strong>Ячейка другой формы</strong>
-        <span className="tools-hint">Как переход на другой лист в Excel</span>
+  const openCellMenu = (key: string) => {
+    setFormPickerOpen(false);
+    setMenuKey((prev) => (prev === key ? null : key));
+  };
+
+  const renderCellMenu = (
+    key: string,
+    pick: FormCellPick,
+    checked: boolean,
+    others: string[]
+  ) => {
+    if (menuKey !== key) return null;
+    return (
+      <div className="checks-cell-menu" role="menu">
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            toggleCell(pick.rowNo, pick.columnKey);
+            setMenuKey(null);
+          }}
+        >
+          {checked ? "Снять выбор" : "Выбрать ячейку"}
+        </button>
+        {allowCrossForm ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="checks-cell-menu-accent"
+            onClick={() => {
+              setMenuKey(null);
+              setFormPickerOpen(true);
+            }}
+          >
+            Связать с другой формой…
+          </button>
+        ) : null}
+        {others.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onOpenOwner?.(id, pick);
+              setMenuKey(null);
+            }}
+          >
+            Открыть {id}
+          </button>
+        ))}
+        {checked && onClear ? (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onClear(pick);
+              setMenuKey(null);
+            }}
+          >
+            Очистить привязку
+          </button>
+        ) : null}
       </div>
-      <input
-        ref={pickerSearchRef}
-        type="search"
-        className="checks-sheet-picker-search"
-        value={formPickerQuery}
-        onChange={(e) => setFormPickerQuery(e.target.value)}
-        placeholder="Поиск формы…"
-      />
-      <div className="checks-sheet-picker-list">
-        {filteredForms.length === 0 ? (
-          <p className="tools-hint">Нет форм по запросу</p>
-        ) : (
-          filteredForms.map((id) => (
-            <button
-              key={id}
-              type="button"
-              className="checks-sheet-picker-item"
-              onClick={() => goToForm(id)}
-            >
-              {formLabels[id] ?? id}
-            </button>
-          ))
-        )}
-      </div>
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        onClick={() => {
-          setFormPickerFor(null);
-          setFormPickerQuery("");
-        }}
-      >
-        Отмена
-      </button>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="checks-cell-picker">
-      <div className="checks-cell-picker-head">
-        <strong>Таблица ячеек</strong>
-        <span className="tools-hint">{pickHint}</span>
-      </div>
-
-      {(awayFromHome || navStack.length > 0) && (
-        <div
-          className={`checks-formula-sheetbar${awayFromHome ? " is-away" : ""}`}
-        >
-          <div className="checks-formula-sheetbar-main">
-            <span className="checks-formula-sheetbar-label">Выбор ячейки</span>
-            <span>
-              Лист: <strong>{gridFormId || "—"}</strong>
-              {homeFormId && gridFormId !== homeFormId ? (
-                <>
-                  {" "}
-                  · исходный: <strong>{homeFormId}</strong>
-                </>
-              ) : null}
-            </span>
-            <span className="tools-hint">
-              Клик по ячейке выберет её
-              {returnAfterPick ? " и вернёт на исходный лист" : ""}
-            </span>
-          </div>
-          <div className="checks-formula-sheetbar-actions">
-            <label className="check-flag checks-formula-return-flag">
-              <input
-                type="checkbox"
-                checked={returnAfterPick}
-                onChange={(e) => setReturnAfterPick(e.target.checked)}
-              />
-              После выбора вернуться
-            </label>
-            {canReturn ? (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={returnToPreviousSheet}
-              >
-                ← Вернуться
-                {navStack.length
-                  ? ` к ${navStack[navStack.length - 1]}`
-                  : homeFormId
-                    ? ` к ${homeFormId}`
-                    : ""}
-              </button>
-            ) : null}
-            {awayFromHome && homeFormId && navStack.length > 1 ? (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={returnHome}
-              >
-                На исходный лист
-              </button>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      <div className="checks-cell-picker-controls">
+    <div className="rash-binding-designer form-cell-grid">
+      <div className="checks-form-grid">
         <label>
-          Текущий лист (форма)
+          Форма
           <select
             value={gridFormId}
             onChange={(e) => {
@@ -352,27 +329,103 @@ export function FormCellGrid({
             />
           </label>
         ) : null}
-        <div className="checks-cell-picker-goto">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={!gridFormId}
-            onClick={() => openFormPicker("__toolbar__")}
-          >
-            Другая форма…
-          </button>
-          {formPickerFor === "__toolbar__" ? renderFormPicker() : null}
-        </div>
+        {allowCrossForm ? (
+          <div className="checks-cell-picker-goto">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={!gridFormId}
+              onClick={() => setFormPickerOpen((v) => !v)}
+            >
+              Другая форма…
+            </button>
+            {formPickerOpen ? (
+              <div className="checks-sheet-picker" role="dialog" aria-label="Выбор формы">
+                <div className="checks-sheet-picker-head">
+                  <strong>Ячейка другой формы</strong>
+                  <span className="tools-hint">Как переход на другой лист в Excel</span>
+                </div>
+                <input
+                  ref={pickerSearchRef}
+                  type="search"
+                  className="checks-sheet-picker-search"
+                  value={formPickerQuery}
+                  onChange={(e) => setFormPickerQuery(e.target.value)}
+                  placeholder="Поиск формы…"
+                />
+                <div className="checks-sheet-picker-list">
+                  {filteredForms.length === 0 ? (
+                    <p className="tools-hint">Нет форм по запросу</p>
+                  ) : (
+                    filteredForms.map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className="checks-sheet-picker-item"
+                        onClick={() => goToForm(id)}
+                      >
+                        {formLabels[id] ?? id}
+                      </button>
+                    ))
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setFormPickerOpen(false)}
+                >
+                  Отмена
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <div className="checks-cell-picker-legend" aria-hidden>
-        <span>
-          <i className="checks-cell-swatch is-used" /> занято правилами
-        </span>
-        <span>
-          <i className="checks-cell-swatch is-active" /> в текущем правиле
-        </span>
-      </div>
+      {(awayFromHome || navStack.length > 0) && (
+        <div
+          className={`checks-formula-sheetbar${awayFromHome ? " is-away" : ""}`}
+        >
+          <div className="checks-formula-sheetbar-main">
+            <span className="checks-formula-sheetbar-label">Выбор ячейки</span>
+            <span>
+              Лист: <strong>{gridFormId || "—"}</strong>
+              {homeFormId && gridFormId !== homeFormId ? (
+                <>
+                  {" "}
+                  · исходный: <strong>{homeFormId}</strong>
+                </>
+              ) : null}
+            </span>
+          </div>
+          <div className="checks-formula-sheetbar-actions">
+            <label className="check-flag checks-formula-return-flag">
+              <input
+                type="checkbox"
+                checked={returnAfterPick}
+                onChange={(e) => setReturnAfterPick(e.target.checked)}
+              />
+              После выбора вернуться
+            </label>
+            {canReturn ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={returnToPreviousSheet}
+              >
+                ← Вернуться
+                {navStack.length
+                  ? ` к ${navStack[navStack.length - 1]}`
+                  : homeFormId
+                    ? ` к ${homeFormId}`
+                    : ""}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      <p className="tools-hint">{pickHint}</p>
 
       {error ? <p className="error-box">{error}</p> : null}
       {loading ? <p className="loading">Загрузка формы…</p> : null}
@@ -383,9 +436,9 @@ export function FormCellGrid({
         ) : (
           <div
             ref={scrollRef}
-            className="checks-cell-picker-grid-wrap rash-binding-grid-wrap"
+            className="rash-binding-grid-wrap"
           >
-            <table className="checks-table rash-binding-grid checks-cell-picker-grid">
+            <table className="checks-table rash-binding-grid">
               <thead>
                 <tr>
                   <th>Строка</th>
@@ -420,7 +473,7 @@ export function FormCellGrid({
                   return (
                     <tr
                       key={`${rowNo}-${index}`}
-                      style={{ height: ROW_HEIGHT }}
+                      style={virtual.enabled ? { height: ROW_HEIGHT } : undefined}
                     >
                       <td title={row.name}>
                         <strong>{rowNo}</strong>
@@ -428,92 +481,71 @@ export function FormCellGrid({
                       </td>
                       {columns.map((column) => {
                         const key = formCellKey(rowNo, column.key);
-                        const isActive = activeCellKeys?.has(key) ?? false;
-                        const isUsed = usedCellKeys?.has(key) ?? false;
-                        const owners = cellOwners?.get(key) ?? [];
-                        const isBound = isActive || isUsed;
+                        const checked = activeCellKeys?.has(key) ?? false;
+                        const others = otherOwners(key, checked);
+                        const foreign = others[0];
                         const pick: FormCellPick = {
                           formId: gridFormId,
                           columnKey: column.key,
                           rowNo,
                         };
-                        const cls = [
-                          "checks-cell-picker-cell",
-                          isActive ? "is-active" : "",
-                          !isActive && isUsed ? "is-used" : "",
-                          awayFromHome ? "is-foreign-sheet" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ");
                         const menuOpen = menuKey === key;
-
                         return (
-                          <td key={column.key} className="checks-cell-slot">
-                            <div className="checks-cell-slot-inner">
-                              <button
-                                type="button"
-                                className={cls}
-                                title={`${pick.formId} · ${column.key} · ${rowNo}`}
+                          <td
+                            key={column.key}
+                            className={[
+                              "checks-cell-slot",
+                              foreign && !checked
+                                ? "rash-binding-conflict"
+                                : "",
+                              checked ? "rash-binding-selected" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            title={
+                              foreign && !checked
+                                ? `Уже привязано к ${foreign}`
+                                : checked
+                                  ? "Текущая настройка"
+                                  : undefined
+                            }
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              openCellMenu(key);
+                            }}
+                          >
+                            <div className="checks-cell-slot-inner checks-cell-slot-binding">
+                              <input
+                                type="checkbox"
+                                checked={checked}
                                 aria-label={`Строка ${rowNo}, графа ${column.key}`}
-                                onClick={() => pickCell(rowNo, column.key)}
-                                onContextMenu={(e) => {
-                                  e.preventDefault();
-                                  setFormPickerFor(null);
-                                  setMenuKey(menuOpen ? null : key);
-                                }}
-                              >
-                                {isBound ? "●" : "+"}
-                              </button>
+                                onChange={() => toggleCell(rowNo, column.key)}
+                              />
+                              {foreign && !checked ? (
+                                <button
+                                  type="button"
+                                  className="rash-binding-conflict-link"
+                                  onClick={() => onOpenOwner?.(foreign, pick)}
+                                >
+                                  {foreign}
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="checks-cell-act checks-cell-act-menu"
-                                title="Меню"
+                                title="Меню ячейки"
                                 aria-label="Меню ячейки"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setFormPickerFor(null);
-                                  setMenuKey(menuOpen ? null : key);
+                                  openCellMenu(key);
                                 }}
                               >
                                 ⋯
                               </button>
                             </div>
-                            {menuOpen ? (
-                              formPickerFor === key ? (
-                                renderFormPicker()
-                              ) : (
-                                <div className="checks-cell-menu" role="menu">
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => pickCell(rowNo, column.key)}
-                                  >
-                                    Выбрать ячейку
-                                  </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    className="checks-cell-menu-accent"
-                                    onClick={() => openFormPicker(key)}
-                                  >
-                                    Ячейка другой формы…
-                                  </button>
-                                  {owners.map((id) => (
-                                    <button
-                                      key={id}
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => {
-                                        onOpenOwner?.(id, pick);
-                                        setMenuKey(null);
-                                      }}
-                                    >
-                                      Открыть {id}
-                                    </button>
-                                  ))}
-                                </div>
-                              )
-                            ) : null}
+                            {menuOpen
+                              ? renderCellMenu(key, pick, checked, others)
+                              : null}
                           </td>
                         );
                       })}

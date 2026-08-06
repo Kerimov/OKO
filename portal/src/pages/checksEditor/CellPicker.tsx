@@ -107,6 +107,7 @@ export function CellPicker({
   usedCellKeys,
   activeCellKeys,
   cellOwners,
+  currentRuleNumber,
   onRemoveActive,
   onOpenOwner,
   onRemoveOwner,
@@ -123,6 +124,7 @@ export function CellPicker({
   usedCellKeys?: Set<string>;
   activeCellKeys?: Set<string>;
   cellOwners?: Map<string, number[]>;
+  currentRuleNumber?: number;
   onRemoveActive?: (pick: PickedCell) => void;
   onOpenOwner?: (ruleNumber: number, pick: PickedCell) => void;
   onRemoveOwner?: (ruleNumber: number, pick: PickedCell) => void;
@@ -308,6 +310,29 @@ export function CellPicker({
     if (returnAfterPick && awayFromHome) returnToPreviousSheet();
   };
 
+  const toggleCell = (rowNo: string, columnKey: string) => {
+    if (!gridFormId) return;
+    const pick: PickedCell = { formId: gridFormId, columnKey, rowNo };
+    const key = cellKey(rowNo, columnKey);
+    if (replaceFrom) {
+      pickCell(rowNo, columnKey);
+      return;
+    }
+    const isActive = activeCellKeys?.has(key) ?? false;
+    if (isActive) {
+      onRemoveActive?.(pick);
+      setMenuKey(null);
+      return;
+    }
+    pickCell(rowNo, columnKey);
+  };
+
+  const foreignOwners = (key: string): number[] => {
+    const owners = cellOwners?.get(key) ?? [];
+    if (currentRuleNumber == null) return owners;
+    return owners.filter((n) => n !== currentRuleNumber);
+  };
+
   const openFormPicker = (anchorKey: string) => {
     setMenuKey(anchorKey);
     setFormPickerFor(anchorKey);
@@ -455,11 +480,12 @@ export function CellPicker({
   };
 
   return (
-    <div className="checks-cell-picker">
+    <div className="checks-cell-picker rash-binding-designer">
       <div className="checks-cell-picker-head">
         <strong>Таблица ячеек</strong>
         <span className="tools-hint">
-          «+» — вставить. ПКМ или «⋯» — меню, в т.ч. связь с другой формой.
+          Чекбокс — в текущем выражении. Чужие увязки — ссылкой №…. ПКМ или «⋯» — меню
+          (другая форма, заменить, удалить).
         </span>
       </div>
 
@@ -620,10 +646,10 @@ export function CellPicker({
 
       <div className="checks-cell-picker-legend" aria-hidden>
         <span>
-          <i className="checks-cell-swatch is-used" /> в увязках формы
+          <i className="checks-cell-swatch is-active" /> в текущем выражении
         </span>
         <span>
-          <i className="checks-cell-swatch is-active" /> в текущем выражении
+          <span className="rash-binding-conflict-link">№…</span> другая увязка
         </span>
       </div>
 
@@ -684,59 +710,63 @@ export function CellPicker({
                         const isActive = activeCellKeys?.has(key) ?? false;
                         const isUsed = usedCellKeys?.has(key) ?? false;
                         const owners = cellOwners?.get(key) ?? [];
-                        const isBound = isActive || isUsed;
+                        const foreign = foreignOwners(key);
+                        const foreignNum = foreign[0];
                         const isReplaceSource = replaceKey === key;
                         const pick: PickedCell = {
                           formId: gridFormId,
                           columnKey: column.key,
                           rowNo,
                         };
-                        const cls = [
-                          "checks-cell-picker-cell",
-                          isActive ? "is-active" : "",
-                          !isActive && isUsed ? "is-used" : "",
-                          isReplaceSource ? "is-replace-from" : "",
-                          replaceFrom && !isReplaceSource
-                            ? "is-replace-target"
-                            : "",
-                          awayFromHome ? "is-foreign-sheet" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ");
+                        const menuOpen = menuKey === key;
 
                         return (
-                          <td key={column.key} className="checks-cell-slot">
-                            <div className="checks-cell-slot-inner">
-                              <button
-                                type="button"
-                                className={cls}
-                                title={
-                                  awayFromHome
-                                    ? `Ссылка с листа ${gridFormId}: Cell("${gridFormId}","${column.key}",${rowNo})`
-                                    : isBound
-                                      ? `Привязка: ${
-                                          owners.length
-                                            ? `увязки ${owners.join(", ")}`
-                                            : "текущее выражение"
-                                        }`
-                                      : `Вставить Cell("${gridFormId}","${column.key}",${rowNo})`
-                                }
+                          <td
+                            key={column.key}
+                            className={[
+                              "checks-cell-slot",
+                              foreignNum != null && !isActive
+                                ? "rash-binding-conflict"
+                                : "",
+                              isActive ? "rash-binding-selected" : "",
+                              isReplaceSource ? "is-replace-from" : "",
+                              replaceFrom && !isReplaceSource
+                                ? "is-replace-target"
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            title={
+                              foreignNum != null && !isActive
+                                ? `Уже в увязке №${foreignNum}`
+                                : isActive
+                                  ? "В текущем выражении"
+                                  : undefined
+                            }
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setFormPickerFor(null);
+                              setMenuKey(menuOpen ? null : key);
+                            }}
+                          >
+                            <div className="checks-cell-slot-inner checks-cell-slot-binding">
+                              <input
+                                type="checkbox"
+                                checked={isActive}
                                 aria-label={`Строка ${rowNo}, графа ${column.key}`}
-                                onClick={() => {
-                                  if (replaceFrom || awayFromHome) {
-                                    pickCell(rowNo, column.key);
-                                    return;
+                                onChange={() => toggleCell(rowNo, column.key)}
+                              />
+                              {foreignNum != null && !isActive ? (
+                                <button
+                                  type="button"
+                                  className="rash-binding-conflict-link"
+                                  onClick={() =>
+                                    onOpenOwner?.(foreignNum, pick)
                                   }
-                                  pickCell(rowNo, column.key);
-                                }}
-                                onContextMenu={(e) => {
-                                  e.preventDefault();
-                                  setFormPickerFor(null);
-                                  setMenuKey(menuKey === key ? null : key);
-                                }}
-                              >
-                                {isBound ? "●" : "+"}
-                              </button>
+                                >
+                                  №{foreignNum}
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="checks-cell-act checks-cell-act-menu"
@@ -745,61 +775,18 @@ export function CellPicker({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setFormPickerFor(null);
-                                  setMenuKey(menuKey === key ? null : key);
+                                  setMenuKey(menuOpen ? null : key);
                                 }}
                               >
                                 ⋯
                               </button>
-                              {isBound && !replaceFrom && !awayFromHome ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="checks-cell-act checks-cell-act-edit"
-                                    title="Заменить"
-                                    aria-label="Заменить привязку"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setMenuKey(null);
-                                      if (isActive) {
-                                        onReplaceFromChange(pick);
-                                        return;
-                                      }
-                                      if (owners[0] != null) {
-                                        onOpenOwner?.(owners[0], pick);
-                                        onReplaceFromChange(pick);
-                                      }
-                                    }}
-                                  >
-                                    ✎
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="checks-cell-act checks-cell-act-del"
-                                    title="Удалить"
-                                    aria-label="Удалить привязку"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setMenuKey(null);
-                                      if (isActive) {
-                                        onRemoveActive?.(pick);
-                                        return;
-                                      }
-                                      if (owners[0] != null) {
-                                        onRemoveOwner?.(owners[0], pick);
-                                      }
-                                    }}
-                                  >
-                                    ×
-                                  </button>
-                                </>
-                              ) : null}
                             </div>
                             {renderCellMenu(
                               key,
                               pick,
                               isActive,
                               isUsed,
-                              owners,
+                              foreign.length ? foreign : owners,
                               rowNo,
                               column.key
                             )}

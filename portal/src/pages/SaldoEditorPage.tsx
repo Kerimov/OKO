@@ -19,12 +19,16 @@ import {
   formCellKey,
   type FormCellPick,
 } from "../components/FormCellGrid";
+import { EditorWizardNav, EditorWizardSteps } from "../components/EditorWizard";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 type Tab = "rules" | "correspondence";
 type PickSlot = "target" | "source" | "end";
+type WizardStep = 1 | 2 | 3 | 4;
+
+const WIZARD_STEPS = ["Основное", "Цель", "Источник", "Проверка"];
 
 const EMPTY_RULE: SaldoRule = {
   number: 0,
@@ -105,12 +109,85 @@ function collectKeysForForm(rule: SaldoRule, formId: string, into: Set<string>) 
   }
 }
 
+function collectSlotKey(
+  rule: SaldoRule,
+  formId: string,
+  slot: PickSlot,
+  into: Set<string>
+) {
+  if (slot === "target") {
+    if (rule.targetForm === formId && rule.targetColumn) {
+      into.add(formCellKey(rule.targetRow ?? "", rule.targetColumn));
+    }
+    return;
+  }
+  if (slot === "source") {
+    if (rule.sourceForm === formId && rule.sourceColumn) {
+      into.add(formCellKey(rule.sourceRow ?? "", rule.sourceColumn));
+    }
+    return;
+  }
+  if (rule.endForm === formId && rule.endColumn) {
+    into.add(formCellKey(rule.endRow ?? "", rule.endColumn));
+  }
+}
+
+function clearSlot(rule: SaldoRule, slot: PickSlot): SaldoRule {
+  if (slot === "target") {
+    return { ...rule, targetForm: "", targetColumn: "", targetRow: null };
+  }
+  if (slot === "source") {
+    return {
+      ...rule,
+      sourceForm: null,
+      sourceColumn: null,
+      sourceRow: null,
+    };
+  }
+  return { ...rule, endForm: null, endColumn: null, endRow: null };
+}
+
+/** Owners map for all rules on a form; active keys for one slot of the draft. */
+function useCellMaps(
+  items: SaldoRule[],
+  formId: string,
+  draft: SaldoRule,
+  editing: boolean,
+  activeSlot: PickSlot
+) {
+  const owners = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (!formId) return map;
+    for (const rule of items) {
+      const keys = new Set<string>();
+      collectKeysForForm(rule, formId, keys);
+      for (const key of keys) {
+        const label = `№${rule.number}`;
+        const list = map.get(key) ?? [];
+        if (!list.includes(label)) list.push(label);
+        map.set(key, list);
+      }
+    }
+    return map;
+  }, [items, formId]);
+
+  const active = useMemo(() => {
+    const keys = new Set<string>();
+    if (!formId || !editing) return keys;
+    collectSlotKey(draft, formId, activeSlot, keys);
+    return keys;
+  }, [draft, formId, editing, activeSlot]);
+
+  return { active, owners };
+}
+
 export function SaldoEditorPage() {
   const backend = isBackendMode();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<Tab>(() =>
     searchParams.get("tab") === "correspondence" ? "correspondence" : "rules"
   );
+
   const [stats, setStats] = useState<{
     total: number;
     typeT: number;
@@ -120,26 +197,30 @@ export function SaldoEditorPage() {
   const [items, setItems] = useState<SaldoRule[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
-  const [workspaceFormId, setWorkspaceFormId] = useState(
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("q") ?? "");
+  const [search, setSearch] = useState(searchInput);
+  const [formFilter, setFormFilter] = useState(
     () => searchParams.get("form") ?? searchParams.get("formId") ?? ""
   );
-  const [gridFormId, setGridFormId] = useState(
-    () => searchParams.get("form") ?? searchParams.get("formId") ?? ""
-  );
+  const [saldoType, setSaldoType] = useState<"" | "t" | "s" | "g">("");
   const [formOptions, setFormOptions] = useState<Array<{ id: string; label: string }>>(
     []
   );
-  const [saldoType, setSaldoType] = useState<"" | "t" | "s" | "g">("");
+
   const [selected, setSelected] = useState<SaldoRule | null>(null);
   const [draft, setDraft] = useState<SaldoRule>(EMPTY_RULE);
   const [creating, setCreating] = useState(false);
-  const [pickSlot, setPickSlot] = useState<PickSlot>("target");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+  const [targetGridFormId, setTargetGridFormId] = useState("");
+  const [sourceGridFormId, setSourceGridFormId] = useState("");
+  const [sourceSlot, setSourceSlot] = useState<"source" | "end">("source");
+
   const [corrItems, setCorrItems] = useState<FormCorrespondenceItem[]>([]);
   const [corrSelected, setCorrSelected] = useState<FormCorrespondenceItem | null>(
     null
   );
   const [corrDraft, setCorrDraft] = useState<FormCorrespondenceItem>(EMPTY_CORR);
+
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -147,35 +228,14 @@ export function SaldoEditorPage() {
 
   const editing = creating || selected != null;
 
-  const usedCellKeys = useMemo(() => {
-    const keys = new Set<string>();
-    if (!gridFormId) return keys;
-    for (const rule of items) collectKeysForForm(rule, gridFormId, keys);
-    return keys;
-  }, [items, gridFormId]);
-
-  const activeCellKeys = useMemo(() => {
-    const keys = new Set<string>();
-    if (!gridFormId || !editing) return keys;
-    collectKeysForForm(draft, gridFormId, keys);
-    return keys;
-  }, [draft, gridFormId, editing]);
-
-  const cellOwners = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!gridFormId) return map;
-    for (const rule of items) {
-      const keys = new Set<string>();
-      collectKeysForForm(rule, gridFormId, keys);
-      for (const key of keys) {
-        const label = `№${rule.number}`;
-        const list = map.get(key) ?? [];
-        if (!list.includes(label)) list.push(label);
-        map.set(key, list);
-      }
-    }
-    return map;
-  }, [items, gridFormId]);
+  const targetMaps = useCellMaps(items, targetGridFormId, draft, editing, "target");
+  const sourceMaps = useCellMaps(
+    items,
+    sourceGridFormId,
+    draft,
+    editing,
+    sourceSlot
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -183,10 +243,12 @@ export function SaldoEditorPage() {
       .then((catalog) => {
         if (cancelled) return;
         setFormOptions(
-          catalog.forms.map((f) => ({
-            id: f.id,
-            label: f.title ? `${f.id} — ${f.title}` : f.id,
-          }))
+          catalog.forms
+            .map((f) => ({
+              id: f.id,
+              label: f.title ? `${f.id} — ${f.title}` : f.id,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id))
         );
       })
       .catch(() => undefined);
@@ -197,19 +259,13 @@ export function SaldoEditorPage() {
 
   const loadRulesPage = useCallback(async () => {
     if (!backend) return;
-    if (!workspaceFormId) {
-      setItems([]);
-      setTotal(0);
-      setStats(null);
-      return;
-    }
     setLoading(true);
     setError("");
     try {
       const [page, st] = await Promise.all([
         fetchSaldoPage({
           q: search || undefined,
-          formId: workspaceFormId,
+          formId: formFilter || undefined,
           saldoType: saldoType || undefined,
           limit,
           offset,
@@ -224,7 +280,7 @@ export function SaldoEditorPage() {
     } finally {
       setLoading(false);
     }
-  }, [backend, search, workspaceFormId, saldoType, offset]);
+  }, [backend, search, formFilter, saldoType, offset]);
 
   const loadCorrespondence = useCallback(async () => {
     if (!backend) return;
@@ -233,8 +289,7 @@ export function SaldoEditorPage() {
     try {
       const data = await loadFormCorrespondence();
       setCorrItems(data.forms);
-      const wantId =
-        searchParams.get("formId") || workspaceFormId || undefined;
+      const wantId = searchParams.get("formId") || formFilter || undefined;
       const pick =
         (wantId ? data.forms.find((f) => f.formId === wantId) : undefined) ??
         data.forms[0] ??
@@ -242,19 +297,27 @@ export function SaldoEditorPage() {
       if (pick) {
         setCorrSelected(pick);
         setCorrDraft({ ...pick });
-        if (!workspaceFormId) setWorkspaceFormId(pick.formId);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
-  }, [backend, searchParams, workspaceFormId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backend, searchParams]);
 
   useEffect(() => {
     if (tab === "rules") void loadRulesPage();
     else void loadCorrespondence();
   }, [tab, loadRulesPage, loadCorrespondence]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput);
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     if (tab !== "correspondence") return;
@@ -270,62 +333,38 @@ export function SaldoEditorPage() {
     }
   }, [tab, searchParams, corrDraft.formId]);
 
-  const selectWorkspaceForm = (formId: string) => {
-    setWorkspaceFormId(formId);
-    setGridFormId(formId);
-    setOffset(0);
-    setSelected(null);
-    setDraft(EMPTY_RULE);
-    setCreating(false);
-    setPickSlot("target");
-    setStatus("");
-  };
-
   const selectRule = (rule: SaldoRule) => {
     setSelected(rule);
     setDraft({ ...rule });
     setCreating(false);
-    setPickSlot("target");
-    if (rule.targetForm) setGridFormId(rule.targetForm);
+    setWizardStep(1);
+    setTargetGridFormId(rule.targetForm || formFilter || "");
+    setSourceGridFormId(rule.sourceForm || rule.targetForm || formFilter || "");
+    setSourceSlot("source");
   };
 
   const handleNew = () => {
-    if (!workspaceFormId) return;
-    const nextNumber =
-      items.reduce((max, r) => Math.max(max, r.number), 0) + 1 || 1;
+    const nextNumber = items.reduce((max, r) => Math.max(max, r.number), 0) + 1 || 1;
     setSelected(null);
     setDraft({
       ...EMPTY_RULE,
       number: nextNumber,
-      targetForm: workspaceFormId,
+      targetForm: formFilter || "",
       saldoS: true,
     });
     setCreating(true);
-    setPickSlot("target");
-    setGridFormId(workspaceFormId);
+    setWizardStep(1);
+    setTargetGridFormId(formFilter || "");
+    setSourceGridFormId(formFilter || "");
+    setSourceSlot("source");
   };
 
-  const handlePick = (pick: FormCellPick) => {
-    if (!editing) {
-      const nextNumber =
-        items.reduce((max, r) => Math.max(max, r.number), 0) + 1 || 1;
-      setCreating(true);
-      setSelected(null);
-      setDraft(
-        applyPickToRule(
-          {
-            ...EMPTY_RULE,
-            number: nextNumber,
-            targetForm: workspaceFormId || pick.formId,
-            saldoS: true,
-          },
-          pickSlot === "source" || pickSlot === "end" ? pickSlot : "target",
-          pick
-        )
-      );
-      return;
+  const handleDiscard = () => {
+    if (selected) selectRule(selected);
+    else {
+      setCreating(false);
+      setDraft(EMPTY_RULE);
     }
-    setDraft((prev) => applyPickToRule(prev, pickSlot, pick));
   };
 
   const handleSaveRule = async () => {
@@ -334,14 +373,12 @@ export function SaldoEditorPage() {
       return;
     }
     try {
-      if (selected) {
-        await saveSaldoRule(draft);
-      } else {
-        await createSaldoRule(draft);
-      }
-      setStatus(`Правило ${draft.number} сохранено`);
-      setSelected(draft);
+      const saved = selected ? await saveSaldoRule(draft) : await createSaldoRule(draft);
+      setStatus(`Правило ${saved.number} сохранено`);
+      setSelected(saved);
+      setDraft({ ...saved });
       setCreating(false);
+      setError("");
       await loadRulesPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -377,7 +414,6 @@ export function SaldoEditorPage() {
   const selectCorr = (item: FormCorrespondenceItem) => {
     setCorrSelected(item);
     setCorrDraft({ ...item });
-    setWorkspaceFormId(item.formId);
   };
 
   const handleSaveCorr = async () => {
@@ -406,36 +442,44 @@ export function SaldoEditorPage() {
   };
 
   const access = useAdminAccess();
+
+  const stepBlocked = useMemo(() => {
+    if (wizardStep === 1) return !draft.number;
+    if (wizardStep === 2) return !draft.targetForm || !draft.targetColumn;
+    return false;
+  }, [wizardStep, draft]);
+
+  const canSave = !!draft.number && !!draft.targetForm.trim();
+
   if (!access.ok) {
     return <AdminAccessGate title="Сальдо" />;
   }
 
-  const pickHint =
-    pickSlot === "target"
-      ? "Выбор цели: куда записывается остаток"
-      : pickSlot === "source"
-        ? "Выбор источника: откуда берётся значение (можно с другой формы)"
-        : "Выбор конечной ячейки (год / закрытие)";
+  const sourcePickHint =
+    sourceSlot === "source"
+      ? "Выбор источника: откуда берётся значение (можно с другой формы)"
+      : "Выбор конечной ячейки (год / закрытие)";
 
   return (
-    <div className="admin-page checks-editor saldo-editor">
-      <header className="admin-header">
-        <div>
-          <h1>Сальдо</h1>
-          <p className="admin-desc">
-            Выберите форму — правила переноса и таблица ячеек. Источник можно взять с
-            другой формы (как переход между листами в Excel).
-          </p>
-        </div>
-        {stats && tab === "rules" && (
-          <div className="admin-stats">
-            <span>Всего: {stats.total}</span>
-            <span>Т: {stats.typeT}</span>
-            <span>С: {stats.typeS}</span>
-            <span>Г: {stats.typeG}</span>
-          </div>
-        )}
-      </header>
+    <div className="admin-editor-page rash-constructor-page">
+      <h1>Конструктор сальдо</h1>
+      <p className="tools-intro">
+        Правила переноса остатков между графами форм: цель, источник (в т.ч. с другой
+        формы) и необязательная конечная ячейка (год / закрытие).
+      </p>
+
+      {!backend && (
+        <div className="status-bar">Режим только чтения. Подключите API для редактирования.</div>
+      )}
+      {status && <div className="status-bar">{status}</div>}
+      {error && <div className="error-box">{error}</div>}
+
+      {stats && tab === "rules" && (
+        <p className="tools-hint">
+          Правил: <strong>{stats.total}</strong>, Т: <strong>{stats.typeT}</strong>, С:{" "}
+          <strong>{stats.typeS}</strong>, Г: <strong>{stats.typeG}</strong>
+        </p>
+      )}
 
       <div className="forms-tabs">
         <button
@@ -454,323 +498,398 @@ export function SaldoEditorPage() {
         </button>
       </div>
 
-      {status && <div className="status-bar">{status}</div>}
-      {error && <div className="error-box">{error}</div>}
-
       {tab === "rules" ? (
         <>
-          <section className="checks-workspace-formbar">
-            <label className="checks-workspace-form-select">
-              Форма
+          <div className="editor-list-toolbar">
+            <CollapsibleFilters
+              activeCount={countActiveFilters(
+                searchInput.trim().length > 0,
+                formFilter !== "",
+                saldoType !== ""
+              )}
+              bodyClassName="checks-filters"
+            >
+              <input
+                placeholder="№ или название…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="search-input"
+              />
               <select
-                value={workspaceFormId}
-                onChange={(e) => selectWorkspaceForm(e.target.value)}
+                value={formFilter}
+                onChange={(e) => {
+                  setFormFilter(e.target.value);
+                  setOffset(0);
+                }}
+                className="category-select"
               >
-                <option value="">— выберите форму —</option>
+                <option value="">Все формы</option>
                 {formOptions.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.label}
                   </option>
                 ))}
               </select>
-            </label>
-            <select
-              value={saldoType}
-              onChange={(e) => {
-                setSaldoType(e.target.value as "" | "t" | "s" | "g");
-                setOffset(0);
-              }}
-              className="category-select"
-              disabled={!workspaceFormId}
-            >
-              <option value="">Все типы</option>
-              <option value="t">Текущий</option>
-              <option value="s">Сальдо</option>
-              <option value="g">Год</option>
-            </select>
-            <div className="checks-filters-actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleReimportRules}
+              <select
+                value={saldoType}
+                onChange={(e) => {
+                  setSaldoType(e.target.value as "" | "t" | "s" | "g");
+                  setOffset(0);
+                }}
+                className="category-select"
               >
-                Импорт из файла
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={!workspaceFormId}
-                onClick={handleNew}
-              >
-                + Новое правило
-              </button>
-            </div>
-          </section>
+                <option value="">Все типы</option>
+                <option value="t">Текущий</option>
+                <option value="s">Сальдо</option>
+                <option value="g">Год</option>
+              </select>
+            </CollapsibleFilters>
+            {backend && (
+              <div className="checks-filters-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleReimportRules()}
+                >
+                  Импорт
+                </button>
+                <button type="button" className="btn btn-primary" onClick={handleNew}>
+                  + Новое
+                </button>
+              </div>
+            )}
+          </div>
 
-          {!workspaceFormId ? (
-            <section className="tools-section checks-workspace-empty">
-              <h2>Выберите форму</h2>
-              <p className="tools-hint">
-                После выбора отобразятся правила сальдо по форме и таблица ячеек для
-                назначения цели и источника.
-              </p>
-            </section>
-          ) : (
-            <div className="checks-layout checks-layout-workspace">
-              <section className="checks-list-panel">
-                <div className="checks-list-toolbar">
-                  <h2 className="checks-panel-title">
-                    Правила · <code>{workspaceFormId}</code>
-                    {total > 0 ? ` · ${total}` : ""}
-                  </h2>
-                  <CollapsibleFilters
-                    activeCount={countActiveFilters(search.trim().length > 0)}
-                    bodyClassName="checks-filters"
-                  >
-                    <input
-                      type="search"
-                      placeholder="Поиск по №, имени…"
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value);
-                        setOffset(0);
-                      }}
-                      className="search-input"
-                    />
-                  </CollapsibleFilters>
-                </div>
-
-                {loading ? (
-                  <p className="loading">Загрузка…</p>
-                ) : items.length === 0 ? (
-                  <p className="tools-hint">Нет правил для формы.</p>
-                ) : (
-                  <>
-                    <table className="checks-table">
-                      <thead>
-                        <tr>
-                          <th>№</th>
-                          <th>Цель</th>
-                          <th>Источник</th>
-                          <th>T/S/G</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((r) => {
-                          const cross =
-                            (r.sourceForm && r.sourceForm !== workspaceFormId) ||
-                            (r.endForm && r.endForm !== workspaceFormId);
-                          return (
-                            <tr
-                              key={r.number}
-                              className={
-                                selected?.number === r.number ? "selected" : ""
-                              }
-                              onClick={() => selectRule(r)}
+          <div className="checks-layout rash-constructor-layout">
+            <div className="checks-list-panel">
+              {loading ? (
+                <div className="loading">Загрузка…</div>
+              ) : items.length === 0 ? (
+                <p className="tools-hint">Нет правил по фильтру.</p>
+              ) : (
+                <div className="rash-rule-catalog">
+                  {items.map((r) => {
+                    const cross =
+                      (r.sourceForm && r.sourceForm !== r.targetForm) ||
+                      (r.endForm && r.endForm !== r.targetForm);
+                    return (
+                      <button
+                        type="button"
+                        key={r.number}
+                        className={`rash-rule-card${selected?.number === r.number ? " selected" : ""}`}
+                        onClick={() => selectRule(r)}
+                      >
+                        <span className="rash-rule-card-title">
+                          <strong>№{r.number}</strong> {r.name || "без названия"}
+                          {cross ? (
+                            <span
+                              className="checks-cross-badge"
+                              title="Есть ячейки другой формы"
                             >
-                              <td>
-                                {r.number}
-                                {cross ? (
-                                  <span
-                                    className="checks-cross-badge"
-                                    title="Есть ячейки другой формы"
-                                  >
-                                    ↔
-                                  </span>
-                                ) : null}
-                              </td>
-                              <td className="expr-cell">
-                                {r.targetForm} {r.targetColumn}
-                                {r.targetRow != null ? ` R${r.targetRow}` : ""}
-                              </td>
-                              <td>
-                                {r.sourceForm ?? "—"} {r.sourceColumn ?? ""}
-                                {r.sourceRow != null ? ` R${r.sourceRow}` : ""}
-                              </td>
-                              <td>
-                                {[r.saldoT && "T", r.saldoS && "S", r.saldoG && "G"]
-                                  .filter(Boolean)
-                                  .join("/") || "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    <div className="checks-pager">
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={offset === 0}
-                        onClick={() => setOffset(Math.max(0, offset - limit))}
-                      >
-                        ← Назад
+                              ↔
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="rash-rule-card-meta">
+                          <span>Цель: {cellLabel(r.targetForm, r.targetColumn, r.targetRow)}</span>
+                          <span>
+                            Источник: {cellLabel(r.sourceForm, r.sourceColumn, r.sourceRow)}
+                          </span>
+                          <span>
+                            {[r.saldoT && "T", r.saldoS && "S", r.saldoG && "G"]
+                              .filter(Boolean)
+                              .join("/") || "—"}
+                          </span>
+                        </span>
                       </button>
-                      <span>
-                        {offset + 1}–{Math.min(offset + limit, total)} из {total}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={offset + limit >= total}
-                        onClick={() => setOffset(offset + limit)}
-                      >
-                        Вперёд →
-                      </button>
-                    </div>
-                  </>
-                )}
-              </section>
-
-              <section className="checks-edit-panel">
-                <h2>
-                  {selected
-                    ? `Правило №${selected.number}`
-                    : creating
-                      ? "Новое правило"
-                      : "Таблица и настройка"}
-                </h2>
-
-                <div className="saldo-pick-slots" role="group" aria-label="Что выбираем">
-                  {(
-                    [
-                      ["target", "Цель", cellLabel(draft.targetForm, draft.targetColumn, draft.targetRow)],
-                      ["source", "Источник", cellLabel(draft.sourceForm, draft.sourceColumn, draft.sourceRow)],
-                      ["end", "Конец (год)", cellLabel(draft.endForm, draft.endColumn, draft.endRow)],
-                    ] as Array<[PickSlot, string, string]>
-                  ).map(([slot, label, value]) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      className={`saldo-pick-slot${pickSlot === slot ? " is-active" : ""}`}
-                      onClick={() => {
-                        setPickSlot(slot);
-                        if (slot === "target" && draft.targetForm) {
-                          setGridFormId(draft.targetForm);
-                        } else if (slot === "source" && draft.sourceForm) {
-                          setGridFormId(draft.sourceForm);
-                        } else if (slot === "end" && draft.endForm) {
-                          setGridFormId(draft.endForm);
-                        } else if (workspaceFormId) {
-                          setGridFormId(workspaceFormId);
-                        }
-                      }}
-                    >
-                      <span className="saldo-pick-slot-label">{label}</span>
-                      <span className="saldo-pick-slot-value">{value}</span>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
+              )}
+              <div className="toolbar-actions" style={{ marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - limit))}
+                >
+                  ←
+                </button>
+                <span className="muted">
+                  {total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} / {total}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={offset + limit >= total}
+                  onClick={() => setOffset(offset + limit)}
+                >
+                  →
+                </button>
+              </div>
+            </div>
 
-                <FormCellGrid
-                  workspaceFormId={workspaceFormId}
-                  gridFormId={gridFormId}
-                  onGridFormIdChange={setGridFormId}
-                  usedCellKeys={usedCellKeys}
-                  activeCellKeys={activeCellKeys}
-                  cellOwners={cellOwners}
-                  pickHint={pickHint}
-                  onPick={handlePick}
-                  onOpenOwner={(ownerId) => {
-                    const num = Number(String(ownerId).replace(/^№/, ""));
-                    const rule = items.find((r) => r.number === num);
-                    if (rule) selectRule(rule);
-                  }}
-                />
-
-                {editing ? (
-                  <div className="checks-form-grid" style={{ marginTop: 12 }}>
-                    <label>
-                      № правила
-                      <input
-                        type="number"
-                        value={draft.number || ""}
-                        disabled={!!selected}
-                        onChange={(e) =>
-                          setDraft({ ...draft, number: Number(e.target.value) })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Наименование
-                      <input
-                        value={draft.name ?? ""}
-                        onChange={(e) =>
-                          setDraft({ ...draft, name: e.target.value || null })
-                        }
-                        placeholder="Нематериальные активы"
-                      />
-                    </label>
-                    <div className="checks-flags">
-                      <label className="check-flag">
-                        <input
-                          type="checkbox"
-                          checked={draft.saldoT}
-                          onChange={(e) =>
-                            setDraft({ ...draft, saldoT: e.target.checked })
-                          }
-                        />
-                        Текущий
-                      </label>
-                      <label className="check-flag">
-                        <input
-                          type="checkbox"
-                          checked={draft.saldoS}
-                          onChange={(e) =>
-                            setDraft({ ...draft, saldoS: e.target.checked })
-                          }
-                        />
-                        Сальдо
-                      </label>
-                      <label className="check-flag">
-                        <input
-                          type="checkbox"
-                          checked={draft.saldoG}
-                          onChange={(e) =>
-                            setDraft({ ...draft, saldoG: e.target.checked })
-                          }
-                        />
-                        Год
-                      </label>
-                      <label className="check-flag">
-                        <input
-                          type="checkbox"
-                          checked={!!draft.conditional}
-                          onChange={(e) =>
-                            setDraft({ ...draft, conditional: e.target.checked })
-                          }
-                        />
-                        Условное
-                      </label>
+            <div className="checks-detail-panel">
+              {editing ? (
+                <>
+                  <header className="rash-constructor-header">
+                    <div>
+                      <h2>
+                        {selected
+                          ? `Правило №${draft.number}: ${draft.name || "без названия"}`
+                          : "Новое правило"}
+                      </h2>
+                      <span className="status-badge accepted">
+                        {[draft.saldoT && "T", draft.saldoS && "S", draft.saldoG && "G"]
+                          .filter(Boolean)
+                          .join("/") || "—"}
+                      </span>
                     </div>
-                    <div className="checks-actions">
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={handleSaveRule}
-                      >
-                        Сохранить
-                      </button>
-                      {selected && (
+                  </header>
+
+                  <EditorWizardSteps
+                    steps={WIZARD_STEPS}
+                    value={wizardStep}
+                    onChange={(step) => setWizardStep(step as WizardStep)}
+                  />
+
+                  {wizardStep === 1 && (
+                    <section className="tools-section">
+                      <h2>1. Основное</h2>
+                      <div className="checks-form-grid">
+                        <label>
+                          № правила
+                          <input
+                            type="number"
+                            value={draft.number || ""}
+                            disabled={!!selected}
+                            onChange={(e) =>
+                              setDraft({ ...draft, number: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Наименование
+                          <input
+                            value={draft.name ?? ""}
+                            onChange={(e) =>
+                              setDraft({ ...draft, name: e.target.value || null })
+                            }
+                            placeholder="Нематериальные активы"
+                          />
+                        </label>
+                        <div className="checks-flags full-width">
+                          <label className="check-flag">
+                            <input
+                              type="checkbox"
+                              checked={draft.saldoT}
+                              onChange={(e) =>
+                                setDraft({ ...draft, saldoT: e.target.checked })
+                              }
+                            />
+                            Текущий
+                          </label>
+                          <label className="check-flag">
+                            <input
+                              type="checkbox"
+                              checked={draft.saldoS}
+                              onChange={(e) =>
+                                setDraft({ ...draft, saldoS: e.target.checked })
+                              }
+                            />
+                            Сальдо
+                          </label>
+                          <label className="check-flag">
+                            <input
+                              type="checkbox"
+                              checked={draft.saldoG}
+                              onChange={(e) =>
+                                setDraft({ ...draft, saldoG: e.target.checked })
+                              }
+                            />
+                            Год
+                          </label>
+                          <label className="check-flag">
+                            <input
+                              type="checkbox"
+                              checked={!!draft.conditional}
+                              onChange={(e) =>
+                                setDraft({ ...draft, conditional: e.target.checked })
+                              }
+                            />
+                            Условное
+                          </label>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {wizardStep === 2 && (
+                    <section className="tools-section">
+                      <h2>2. Цель</h2>
+                      <p className="tools-hint">
+                        Текущая цель: <strong>{cellLabel(draft.targetForm, draft.targetColumn, draft.targetRow)}</strong>
+                      </p>
+                      <FormCellGrid
+                        workspaceFormId={draft.targetForm}
+                        gridFormId={targetGridFormId}
+                        onGridFormIdChange={setTargetGridFormId}
+                        activeCellKeys={targetMaps.active}
+                        cellOwners={targetMaps.owners}
+                        currentOwnerId={
+                          draft.number ? `№${draft.number}` : undefined
+                        }
+                        pickHint="Отметьте целевую ячейку. Чужие настройки — ссылкой №…"
+                        onPick={(pick) =>
+                          setDraft((prev) => applyPickToRule(prev, "target", pick))
+                        }
+                        onClear={() =>
+                          setDraft((prev) => clearSlot(prev, "target"))
+                        }
+                        onOpenOwner={(ownerId) => {
+                          const num = Number(String(ownerId).replace(/^№/, ""));
+                          const rule = items.find((r) => r.number === num);
+                          if (rule) selectRule(rule);
+                        }}
+                      />
+                    </section>
+                  )}
+
+                  {wizardStep === 3 && (
+                    <section className="tools-section">
+                      <h2>3. Источник</h2>
+                      <div className="rash-mode-cards">
+                        {(["source", "end"] as const).map((slot) => (
+                          <label
+                            key={slot}
+                            className={`rash-mode-card${sourceSlot === slot ? " selected" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="saldo-source-slot"
+                              checked={sourceSlot === slot}
+                              onChange={() => {
+                                setSourceSlot(slot);
+                                const formId =
+                                  slot === "source" ? draft.sourceForm : draft.endForm;
+                                setSourceGridFormId(
+                                  formId || draft.targetForm || formFilter || ""
+                                );
+                              }}
+                            />
+                            <strong>{slot === "source" ? "Источник" : "Конец (год)"}</strong>
+                            <span>
+                              {slot === "source"
+                                ? cellLabel(draft.sourceForm, draft.sourceColumn, draft.sourceRow)
+                                : cellLabel(draft.endForm, draft.endColumn, draft.endRow)}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <FormCellGrid
+                        workspaceFormId={draft.targetForm}
+                        gridFormId={sourceGridFormId}
+                        onGridFormIdChange={setSourceGridFormId}
+                        activeCellKeys={sourceMaps.active}
+                        cellOwners={sourceMaps.owners}
+                        currentOwnerId={
+                          draft.number ? `№${draft.number}` : undefined
+                        }
+                        pickHint={sourcePickHint}
+                        onPick={(pick) =>
+                          setDraft((prev) => applyPickToRule(prev, sourceSlot, pick))
+                        }
+                        onClear={() =>
+                          setDraft((prev) => clearSlot(prev, sourceSlot))
+                        }
+                        onOpenOwner={(ownerId) => {
+                          const num = Number(String(ownerId).replace(/^№/, ""));
+                          const rule = items.find((r) => r.number === num);
+                          if (rule) selectRule(rule);
+                        }}
+                      />
+                    </section>
+                  )}
+
+                  {wizardStep === 4 && (
+                    <section className="tools-section">
+                      <h2>4. Проверка перед сохранением</h2>
+                      {canSave ? (
+                        <p className="status-ok">Правило заполнено корректно и готово к сохранению.</p>
+                      ) : (
+                        <ul className="rash-validation">
+                          <li className="err">Укажите номер и целевую ячейку (форму, графу).</li>
+                        </ul>
+                      )}
+                      <div className="rash-rule-summary">
+                        <p>
+                          Цель: <strong>{cellLabel(draft.targetForm, draft.targetColumn, draft.targetRow)}</strong>
+                        </p>
+                        <p>
+                          Источник: <strong>{cellLabel(draft.sourceForm, draft.sourceColumn, draft.sourceRow)}</strong>
+                        </p>
+                        <p>
+                          Конец (год): <strong>{cellLabel(draft.endForm, draft.endColumn, draft.endRow)}</strong>
+                        </p>
+                        <p>
+                          Типы:{" "}
+                          <strong>
+                            {[draft.saldoT && "T", draft.saldoS && "S", draft.saldoG && "G"]
+                              .filter(Boolean)
+                              .join("/") || "—"}
+                          </strong>
+                          {draft.conditional ? ", условное" : ""}
+                        </p>
+                      </div>
+                    </section>
+                  )}
+
+                  <EditorWizardNav
+                    step={wizardStep}
+                    maxStep={4}
+                    onBack={() => setWizardStep((wizardStep - 1) as WizardStep)}
+                    onNext={() => setWizardStep((wizardStep + 1) as WizardStep)}
+                    nextDisabled={stepBlocked}
+                  >
+                    {backend && (
+                      <>
+                        <span>{selected ? "Изменения" : "Новое правило"}</span>
                         <button
                           type="button"
-                          className="btn btn-danger-outline"
-                          onClick={handleDeleteRule}
+                          className="btn btn-primary"
+                          disabled={!canSave}
+                          onClick={() => void handleSaveRule()}
                         >
-                          Удалить
+                          Сохранить
                         </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="tools-hint">
-                    Выберите правило слева или «+ Новое». Переключайте Цель / Источник,
-                    для источника — «Другая форма…».
-                  </p>
-                )}
-              </section>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleDiscard}
+                        >
+                          Отменить
+                        </button>
+                        {selected && (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => void handleDeleteRule()}
+                          >
+                            Удалить
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </EditorWizardNav>
+                </>
+              ) : (
+                <p className="tools-hint">
+                  Выберите правило слева или «+ Новое», чтобы задать цель, источник и
+                  (опционально) конечную ячейку переноса остатка.
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </>
       ) : (
         <div className="checks-layout">
@@ -780,7 +899,7 @@ export function SaldoEditorPage() {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={handleReimportCorr}
+                onClick={() => void handleReimportCorr()}
               >
                 Импорт из файла
               </button>
@@ -949,7 +1068,7 @@ export function SaldoEditorPage() {
               </label>
             </div>
             <div className="checks-actions">
-              <button type="button" className="btn btn-primary" onClick={handleSaveCorr}>
+              <button type="button" className="btn btn-primary" onClick={() => void handleSaveCorr()}>
                 Сохранить
               </button>
             </div>

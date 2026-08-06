@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { loadRashRules } from "../api";
 import { canMutateData } from "../auth";
@@ -39,6 +39,7 @@ import type { KontrAgent, RashRule } from "../types";
 import { useAuth } from "../useAuth";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import { RefRecordCardModal } from "../components/RefRecordCardModal";
 
 type KontrDraft = {
   id: number | null;
@@ -96,6 +97,8 @@ export function RefsAdminPage() {
   const [kontrDraft, setKontrDraft] = useState<KontrDraft[]>([]);
   const [dirty, setDirty] = useState(false);
   const [dirFilter, setDirFilter] = useState<DirFilter>("used");
+  const [cardRowIndex, setCardRowIndex] = useState<number | null>(null);
+  const [cardCreating, setCardCreating] = useState(false);
   const [q, setQ] = useState("");
   const [itemQ, setItemQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -148,14 +151,13 @@ export function RefsAdminPage() {
     [directories]
   );
 
-  const quickPicks = useMemo(() => {
+  const usedDirs = useMemo(() => {
     return [...directories]
       .filter((d) => d.ruleCount > 0 || d.isKontr)
       .sort((a, b) => {
         if (a.isKontr !== b.isKontr) return a.isKontr ? -1 : 1;
         return b.ruleCount - a.ruleCount;
-      })
-      .slice(0, 4);
+      });
   }, [directories]);
 
   const load = useCallback(async () => {
@@ -293,43 +295,134 @@ export function RefsAdminPage() {
     if (dirty && !confirm("Есть несохранённые изменения. Продолжить?")) return;
     setDirty(false);
     setSelectedKind(d.kind);
+    setCardRowIndex(null);
+    setCardCreating(false);
     setSearchParams(d.kind === "Контрагент" ? { kind: "Контрагент" } : { kind: d.kind });
     setStatus("");
     setError("");
   };
 
-  const updateItem = (idx: number, patch: Partial<RashRefItem>) => {
-    setDraftItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
-    setDirty(true);
+  const closeCard = () => {
+    setCardRowIndex(null);
+    setCardCreating(false);
   };
 
-  const updateKontr = (idx: number, patch: Partial<KontrDraft>) => {
-    setKontrDraft((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, ...patch, dirty: true } : it))
-    );
-    setDirty(true);
+  const emptyClassifier = (): RashRefItem => ({ kod: "", value: "", note: null });
+  const emptyKontr = (): KontrDraft => ({
+    id: null,
+    name: "",
+    oldName: "",
+    inn: "",
+    kpp: "",
+    orgType: "3",
+    idObdnsi: "",
+    isNew: true,
+    dirty: true,
+  });
+
+  const persistClassifierGroup = async (items: RashRefItem[]) => {
+    if (!selectedKind) return;
+    if (baseLoadWarning) throw new Error(baseLoadWarning);
+    const cleaned = items
+      .map((it) => ({
+        kod: String(it.kod ?? "").trim(),
+        value: String(it.value ?? "").trim(),
+        note: it.note?.trim() ? it.note.trim() : null,
+        newkod: it.newkod?.trim() ? it.newkod.trim() : null,
+      }))
+      .filter((it) => it.kod || it.value);
+    const meta = directories.find((d) => d.kind === selectedKind);
+    const validation = validateClassifierItems(cleaned, {
+      ruleCount: meta?.ruleCount ?? 0,
+    });
+    if (validation.length) {
+      throw new Error(validation.join(". "));
+    }
+    const next: RefsOverlayPackage = {
+      ...overlay,
+      byName: { ...overlay.byName, [selectedKind]: cleaned },
+    };
+    await saveRefsOverlay(next);
+    setOverlay(next);
+    clearRashRefsCache();
+    setDraftItems(cleaned.map((it) => ({ ...it })));
+    setDirty(false);
+    setStatus(`Сохранено: «${selectedKind}» (${cleaned.length} записей)`);
+  };
+
+  const saveCardClassifier = async (item: RashRefItem) => {
+    if (!admin || !selectedKind || isLoanGroup) return;
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      const nextItems = cardCreating
+        ? [...draftItems, item]
+        : draftItems.map((it, i) => (i === cardRowIndex ? item : it));
+      await persistClassifierGroup(nextItems);
+      closeCard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveCardKontr = async (row: KontrDraft) => {
+    if (!admin || !backend) return;
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      const errs = validateKontrDraftRow(row);
+      if (errs.length) throw new Error(errs.join("; "));
+      if (!row.name.trim()) throw new Error("Укажите наименование");
+      const result = await bulkUpsertKontrAgents([
+        {
+          id: row.id == null || row.isNew || cardCreating ? null : row.id,
+          name: row.name.trim(),
+          oldName: row.oldName.trim() || null,
+          inn: row.inn.trim() || null,
+          kpp: row.kpp.trim() || null,
+          orgType: row.orgType.trim() === "" ? null : Number(row.orgType),
+          idObdnsi: row.idObdnsi.trim() || null,
+        },
+      ]);
+      const list = await loadKontrAgents();
+      setAgents(list);
+      setKontrDraft(list.map(agentToDraft));
+      setDirty(false);
+      setStatus(`Сохранено: создано ${result.created}, обновлено ${result.updated}`);
+      closeCard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteCardClassifier = async () => {
+    if (!admin || !selectedKind || cardCreating || cardRowIndex == null) {
+      closeCard();
+      return;
+    }
+    if (!confirm("Удалить запись из справочника?")) return;
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      await persistClassifierGroup(draftItems.filter((_, i) => i !== cardRowIndex));
+      closeCard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка удаления");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const addItem = () => {
-    if (isKontr) {
-      setKontrDraft((prev) => [
-        ...prev,
-        {
-          id: null,
-          name: "",
-          oldName: "",
-          inn: "",
-          kpp: "",
-          orgType: "3",
-          idObdnsi: "",
-          isNew: true,
-          dirty: true,
-        },
-      ]);
-    } else {
-      setDraftItems((prev) => [...prev, { kod: "", value: "", note: null }]);
-    }
-    setDirty(true);
+    setCardCreating(true);
+    setCardRowIndex(null);
   };
 
   const removeItem = (idx: number) => {
@@ -337,95 +430,25 @@ export function RefsAdminPage() {
       const row = kontrDraft[idx];
       if (row?.id != null) {
         setStatus(
-          "Удаление существующих контрагентов не поддерживается — очистите поля или выполните реимпорт из kontr.json."
+          "Удаление существующих контрагентов не поддерживается — используйте архивацию в карточке версий."
         );
         return;
       }
       setKontrDraft((prev) => prev.filter((_, i) => i !== idx));
-    } else {
-      setDraftItems((prev) => prev.filter((_, i) => i !== idx));
-    }
-    setDirty(true);
-  };
-
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!admin || !selectedKind) return;
-    if (isLoanGroup) {
-      setError("Группы KZS/НЗС редактируются через «Обмен и операции → Справочники»");
       return;
     }
-    setBusy(true);
-    setError("");
-    setStatus("");
-    try {
-      if (isKontr) {
-        if (!backend) throw new Error("Контрагенты доступны только в режиме API");
-        const dirtyRows = kontrDraft.filter((row) => row.dirty || row.isNew || row.id == null);
-        const toSave = dirtyRows.filter((row) => row.name.trim());
-        for (const row of toSave) {
-          const errs = validateKontrDraftRow(row);
-          if (errs.length) {
-            throw new Error(`«${row.name || "без имени"}»: ${errs.join("; ")}`);
-          }
-        }
-        if (toSave.length === 0) {
-          setStatus("Нет изменённых строк для сохранения");
-          setDirty(false);
-          return;
-        }
-        const result = await bulkUpsertKontrAgents(
-          toSave.map((row) => ({
-            id: row.id == null || row.isNew ? null : row.id,
-            name: row.name.trim(),
-            oldName: row.oldName.trim() || null,
-            inn: row.inn.trim() || null,
-            kpp: row.kpp.trim() || null,
-            orgType: row.orgType.trim() === "" ? null : Number(row.orgType),
-            idObdnsi: row.idObdnsi.trim() || null,
-          }))
-        );
-        const list = await loadKontrAgents();
-        setAgents(list);
-        setKontrDraft(list.map(agentToDraft));
-        setDirty(false);
-        setStatus(
-          `Сохранено: создано ${result.created}, обновлено ${result.updated}`
-        );
-      } else {
-        if (baseLoadWarning) {
-          throw new Error(baseLoadWarning);
-        }
-        const cleaned = draftItems
-          .map((it) => ({
-            kod: String(it.kod ?? "").trim(),
-            value: String(it.value ?? "").trim(),
-            note: it.note?.trim() ? it.note.trim() : null,
-            newkod: it.newkod?.trim() ? it.newkod.trim() : null,
-          }))
-          .filter((it) => it.kod || it.value);
-        const meta = directories.find((d) => d.kind === selectedKind);
-        const validation = validateClassifierItems(cleaned, {
-          ruleCount: meta?.ruleCount ?? 0,
-        });
-        if (validation.length) {
-          throw new Error(validation.join(". "));
-        }
-        const next: RefsOverlayPackage = {
-          ...overlay,
-          byName: { ...overlay.byName, [selectedKind]: cleaned },
-        };
-        await saveRefsOverlay(next);
-        setOverlay(next);
-        clearRashRefsCache();
-        setDirty(false);
-        setStatus(`Сохранено: «${selectedKind}» (${cleaned.length} записей)`);
+    void (async () => {
+      if (!confirm("Удалить запись из справочника?")) return;
+      setBusy(true);
+      setError("");
+      try {
+        await persistClassifierGroup(draftItems.filter((_, i) => i !== idx));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Ошибка удаления");
+      } finally {
+        setBusy(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка сохранения");
-    } finally {
-      setBusy(false);
-    }
+    })();
   };
 
   const handleResetGroup = async () => {
@@ -735,36 +758,42 @@ export function RefsAdminPage() {
             {!selectedKind && (
               <div className="refs-empty-state">
                 <h2>Выберите справочник</h2>
-                <p>Слева — классификаторы расшифровок и контрагенты. Начните с часто используемых:</p>
-                <div className="refs-quick-picks">
-                  {quickPicks.map((d) => (
-                    <button
-                      key={d.kind}
-                      type="button"
-                      className="refs-quick-pick"
-                      onClick={() => selectDir(d)}
-                    >
-                      <span className="refs-quick-pick-title">
-                        {refListTitle(d.kind).title}
-                      </span>
-                      <span className="refs-quick-pick-meta">
-                        {d.isKontr
-                          ? `${d.itemCount} записей`
-                          : `${d.ruleCount} правил · ${d.itemCount} записей`}
-                      </span>
-                    </button>
-                  ))}
+                <p>
+                  Слева — классификаторы расшифровок и контрагенты. В списке записей
+                  откройте карточку двойным щелчком.
+                </p>
+                <div className="refs-dir-cards">
+                  {usedDirs.map((d) => {
+                    const { title, full } = refListTitle(d.kind);
+                    return (
+                      <button
+                        key={d.kind}
+                        type="button"
+                        className={`refs-dir-card${d.isKontr ? " is-kontr" : ""}`}
+                        title={full}
+                        onClick={() => selectDir(d)}
+                      >
+                        <span className="refs-dir-card-title">{title}</span>
+                        <span className="refs-dir-card-meta">
+                          {d.isKontr
+                            ? `${d.itemCount} записей`
+                            : `${d.ruleCount} правил · ${d.itemCount} записей`}
+                        </span>
+                        {d.overridden && (
+                          <span className="refs-badge refs-badge-edit">правки</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {usedDirs.length === 0 && (
+                    <p className="muted">Пока нет справочников, связанных с правилами.</p>
+                  )}
                 </div>
               </div>
             )}
 
             {selectedKind && (
-              <form className="refs-detail-form" onSubmit={(e) => void handleSave(e)}>
-                {dirty && (
-                  <div className="refs-dirty-bar" role="status">
-                    Есть несохранённые изменения
-                  </div>
-                )}
+              <div className="refs-detail-form">
                 <header className="refs-detail-header">
                   <div className="refs-detail-title">
                     <h2 title={selectedKind}>{refListTitle(selectedKind).title}</h2>
@@ -785,6 +814,9 @@ export function RefsAdminPage() {
                         <span className="refs-badge">bundled</span>
                       )}
                     </div>
+                    <p className="tools-hint">
+                      Двойной щелчок по строке — карточка; сохранение только в карточке
+                    </p>
                   </div>
                   <div className="refs-detail-actions">
                     <label className="refs-sr-only" htmlFor="refs-item-search">
@@ -848,13 +880,6 @@ export function RefsAdminPage() {
                             Сбросить
                           </button>
                         )}
-                        <button
-                          type="submit"
-                          className="btn btn-primary btn-sm"
-                          disabled={!dirty || busy || Boolean(baseLoadWarning && !isKontr)}
-                        >
-                          {busy ? "Сохранение…" : "Сохранить"}
-                        </button>
                       </>
                     )}
                   </div>
@@ -878,242 +903,163 @@ export function RefsAdminPage() {
                 <div className="table-wrap refs-table-wrap">
                   {isKontr ? (
                     <>
-                    <table className="data-table refs-data-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: "5rem" }} scope="col">
-                            ID
-                          </th>
-                          <th scope="col">Наименование</th>
-                          <th scope="col">Другое наим.</th>
-                          <th style={{ width: "8rem" }} scope="col">
-                            ИНН
-                          </th>
-                          <th style={{ width: "7rem" }} scope="col">
-                            КПП
-                          </th>
-                          <th style={{ width: "6rem" }} scope="col" title="1 ВГ / 2 assoc / 3 внешн.">
-                            Тип
-                          </th>
-                          <th scope="col">idOBDNSI</th>
-                          {canEditKontr && <th className="actions-col" scope="col" />}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pagedKontrIndexes.map((realIdx) => {
-                          const it = kontrDraft[realIdx];
-                          const selected = it.id != null && it.id === selectedKontrId;
-                          return (
-                            <tr
-                              key={it.id ?? `new-${realIdx}`}
-                              className={selected ? "is-selected" : undefined}
-                              style={it.id != null ? { cursor: "pointer" } : undefined}
-                              onClick={() => {
-                                if (it.id != null) selectKontrRow(it.id);
-                              }}
-                            >
-                              <td className="muted">{it.id ?? "новый"}</td>
-                              <td>
-                                {canEditKontr ? (
-                                  <input
-                                    aria-label={`Наименование ${it.id ?? "новый"}`}
-                                    value={it.name}
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { name: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  it.name
-                                )}
-                              </td>
-                              <td>
-                                {canEditKontr ? (
-                                  <input
-                                    aria-label={`Другое наименование ${it.id ?? "новый"}`}
-                                    value={it.oldName}
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { oldName: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  it.oldName
-                                )}
-                              </td>
-                              <td>
-                                {canEditKontr ? (
-                                  <input
-                                    aria-label={`ИНН ${it.id ?? "новый"}`}
-                                    value={it.inn}
-                                    inputMode="numeric"
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { inn: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  it.inn
-                                )}
-                              </td>
-                              <td>
-                                {canEditKontr ? (
-                                  <input
-                                    aria-label={`КПП ${it.id ?? "новый"}`}
-                                    value={it.kpp}
-                                    inputMode="numeric"
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { kpp: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  it.kpp
-                                )}
-                              </td>
-                              <td>
-                                {canEditKontr ? (
-                                  <select
-                                    aria-label={`Тип ${it.id ?? "новый"}`}
-                                    value={it.orgType}
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { orgType: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <option value="">—</option>
-                                    <option value="1">1 ВГ</option>
-                                    <option value="2">2 assoc</option>
-                                    <option value="3">3 внешн.</option>
-                                  </select>
-                                ) : (
-                                  it.orgType
-                                )}
-                              </td>
-                              <td>
-                                {canEditKontr ? (
-                                  <input
-                                    aria-label={`idOBDNSI ${it.id ?? "новый"}`}
-                                    value={it.idObdnsi}
-                                    onChange={(e) =>
-                                      updateKontr(realIdx, { idObdnsi: e.target.value })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  it.idObdnsi
-                                )}
-                              </td>
-                              {canEditKontr && (
-                                <td className="actions-col">
-                                  {(it.id == null || it.isNew) && (
-                                    <button
-                                      type="button"
-                                      className="btn-icon"
-                                      title="Удалить строку"
-                                      aria-label="Удалить строку"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeItem(realIdx);
-                                      }}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                        {filteredKontrIndexes.length === 0 && (
+                      <table className="data-table refs-data-table">
+                        <thead>
                           <tr>
-                            <td colSpan={canEditKontr ? 8 : 7} className="muted">
-                              Нет записей
-                            </td>
+                            <th style={{ width: "5rem" }} scope="col">
+                              ID
+                            </th>
+                            <th scope="col">Наименование</th>
+                            <th scope="col">Другое наим.</th>
+                            <th style={{ width: "8rem" }} scope="col">
+                              ИНН
+                            </th>
+                            <th style={{ width: "7rem" }} scope="col">
+                              КПП
+                            </th>
+                            <th style={{ width: "6rem" }} scope="col" title="1 ВГ / 2 assoc / 3 внешн.">
+                              Тип
+                            </th>
+                            <th scope="col">idOBDNSI</th>
+                            {canEditKontr && <th className="actions-col" scope="col" />}
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                    {backend && isKontr && (
-                      <div className="tools-section" style={{ marginTop: "1rem" }}>
-                        <h3>Версии</h3>
-                        {!selectedKontrId && (
-                          <p className="tools-hint">Выберите контрагента в таблице</p>
-                        )}
-                        {selectedKontrId != null && (
-                          <>
-                            <p className="tools-hint">
-                              Контрагент #{selectedKontrId}
-                              {versionsBusy ? " · загрузка…" : ""}
-                            </p>
-                            <div className="toolbar-actions" style={{ marginBottom: 8 }}>
-                              {canMutate && (
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  disabled={versionsBusy}
-                                  onClick={() => void handleCreateKontrVersion()}
-                                >
-                                  Создать версию из текущей записи
-                                </button>
-                              )}
-                              {canMutate && (
-                                <button
-                                  type="button"
-                                  className="btn btn-danger-outline btn-sm"
-                                  disabled={versionsBusy}
-                                  onClick={() => void handleArchiveKontr()}
-                                >
-                                  Архивировать
-                                </button>
-                              )}
-                            </div>
-                            {kontrUsages.length > 0 && (
-                              <p className="tools-hint">
-                                Использований перед архивом: {kontrUsages.length} (
-                                {kontrUsages
-                                  .slice(0, 5)
-                                  .map((u) => `${u.formId}/${u.source}`)
-                                  .join(", ")}
-                                {kontrUsages.length > 5 ? "…" : ""})
-                              </p>
-                            )}
-                            <table className="data-table">
-                              <thead>
-                                <tr>
-                                  <th>№</th>
-                                  <th>Наименование</th>
-                                  <th>ИНН</th>
-                                  <th>С</th>
-                                  <th>По</th>
-                                  <th>Создано</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {kontrVersions.map((v) => (
-                                  <tr key={v.id}>
-                                    <td>{v.versionNo}</td>
-                                    <td>{v.name}</td>
-                                    <td>{v.inn ?? "—"}</td>
-                                    <td>{v.validFrom ?? "—"}</td>
-                                    <td>{v.validTo ?? "—"}</td>
-                                    <td>
-                                      {v.createdAt}
-                                      {v.createdBy ? ` (${v.createdBy})` : ""}
-                                    </td>
-                                  </tr>
-                                ))}
-                                {!kontrVersions.length && !versionsBusy && (
-                                  <tr>
-                                    <td colSpan={6}>Версий пока нет</td>
-                                  </tr>
+                        </thead>
+                        <tbody>
+                          {pagedKontrIndexes.map((realIdx) => {
+                            const it = kontrDraft[realIdx];
+                            const selected = it.id != null && it.id === selectedKontrId;
+                            return (
+                              <tr
+                                key={it.id ?? `new-${realIdx}`}
+                                className={selected ? "is-selected" : undefined}
+                                style={{ cursor: "pointer" }}
+                                title="Двойной щелчок — карточка"
+                                onClick={() => {
+                                  if (it.id != null) selectKontrRow(it.id);
+                                }}
+                                onDoubleClick={(e) => {
+                                  e.preventDefault();
+                                  setCardRowIndex(realIdx);
+                                  if (it.id != null) selectKontrRow(it.id);
+                                }}
+                              >
+                                <td className="muted">{it.id ?? "новый"}</td>
+                                <td>{it.name}</td>
+                                <td>{it.oldName}</td>
+                                <td>{it.inn}</td>
+                                <td>{it.kpp}</td>
+                                <td>{it.orgType}</td>
+                                <td>{it.idObdnsi}</td>
+                                {canEditKontr && (
+                                  <td className="actions-col">
+                                    {(it.id == null || it.isNew) && (
+                                      <button
+                                        type="button"
+                                        className="btn-icon"
+                                        title="Удалить строку"
+                                        aria-label="Удалить строку"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeItem(realIdx);
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </td>
                                 )}
-                              </tbody>
-                            </table>
-                          </>
-                        )}
-                      </div>
-                    )}
+                              </tr>
+                            );
+                          })}
+                          {filteredKontrIndexes.length === 0 && (
+                            <tr>
+                              <td colSpan={canEditKontr ? 8 : 7} className="muted">
+                                Нет записей
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      {backend && isKontr && (
+                        <div className="tools-section" style={{ marginTop: "1rem" }}>
+                          <h3>Версии</h3>
+                          {!selectedKontrId && (
+                            <p className="tools-hint">Выберите контрагента в таблице</p>
+                          )}
+                          {selectedKontrId != null && (
+                            <>
+                              <p className="tools-hint">
+                                Контрагент #{selectedKontrId}
+                                {versionsBusy ? " · загрузка…" : ""}
+                              </p>
+                              <div className="toolbar-actions" style={{ marginBottom: 8 }}>
+                                {canMutate && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    disabled={versionsBusy}
+                                    onClick={() => void handleCreateKontrVersion()}
+                                  >
+                                    Создать версию из текущей записи
+                                  </button>
+                                )}
+                                {canMutate && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger-outline btn-sm"
+                                    disabled={versionsBusy}
+                                    onClick={() => void handleArchiveKontr()}
+                                  >
+                                    Архивировать
+                                  </button>
+                                )}
+                              </div>
+                              {kontrUsages.length > 0 && (
+                                <p className="tools-hint">
+                                  Использований перед архивом: {kontrUsages.length} (
+                                  {kontrUsages
+                                    .slice(0, 5)
+                                    .map((u) => `${u.formId}/${u.source}`)
+                                    .join(", ")}
+                                  {kontrUsages.length > 5 ? "…" : ""})
+                                </p>
+                              )}
+                              <table className="data-table">
+                                <thead>
+                                  <tr>
+                                    <th>№</th>
+                                    <th>Наименование</th>
+                                    <th>ИНН</th>
+                                    <th>С</th>
+                                    <th>По</th>
+                                    <th>Создано</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {kontrVersions.map((v) => (
+                                    <tr key={v.id}>
+                                      <td>{v.versionNo}</td>
+                                      <td>{v.name}</td>
+                                      <td>{v.inn ?? "—"}</td>
+                                      <td>{v.validFrom ?? "—"}</td>
+                                      <td>{v.validTo ?? "—"}</td>
+                                      <td>
+                                        {v.createdAt}
+                                        {v.createdBy ? ` (${v.createdBy})` : ""}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {!kontrVersions.length && !versionsBusy && (
+                                    <tr>
+                                      <td colSpan={6}>Версий пока нет</td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <table className="data-table refs-data-table">
@@ -1137,65 +1083,19 @@ export function RefsAdminPage() {
                           const it = draftItems[realIdx];
                           const rowKey = `${it.kod}|${it.newkod ?? ""}|${realIdx}`;
                           return (
-                            <tr key={rowKey}>
-                              <td>
-                                {canEditItems ? (
-                                  <input
-                                    aria-label={`Код строки ${realIdx + 1}`}
-                                    value={it.kod}
-                                    onChange={(e) =>
-                                      updateItem(realIdx, { kod: e.target.value })
-                                    }
-                                  />
-                                ) : (
-                                  it.kod
-                                )}
-                              </td>
-                              <td>
-                                {canEditItems ? (
-                                  <input
-                                    aria-label={`Значение строки ${realIdx + 1}`}
-                                    value={it.value}
-                                    onChange={(e) =>
-                                      updateItem(realIdx, { value: e.target.value })
-                                    }
-                                  />
-                                ) : (
-                                  it.value
-                                )}
-                              </td>
-                              <td>
-                                {canEditItems ? (
-                                  <input
-                                    aria-label={`Примечание строки ${realIdx + 1}`}
-                                    value={it.note ?? ""}
-                                    onChange={(e) =>
-                                      updateItem(realIdx, {
-                                        note: e.target.value || null,
-                                      })
-                                    }
-                                  />
-                                ) : (
-                                  it.note ?? ""
-                                )}
-                              </td>
-                              {showNewkodCol && (
-                                <td>
-                                  {canEditItems ? (
-                                    <input
-                                      aria-label={`newkod строки ${realIdx + 1}`}
-                                      value={it.newkod ?? ""}
-                                      onChange={(e) =>
-                                        updateItem(realIdx, {
-                                          newkod: e.target.value || null,
-                                        })
-                                      }
-                                    />
-                                  ) : (
-                                    it.newkod ?? ""
-                                  )}
-                                </td>
-                              )}
+                            <tr
+                              key={rowKey}
+                              style={{ cursor: "pointer" }}
+                              title="Двойной щелчок — карточка"
+                              onDoubleClick={(e) => {
+                                e.preventDefault();
+                                setCardRowIndex(realIdx);
+                              }}
+                            >
+                              <td>{it.kod}</td>
+                              <td>{it.value}</td>
+                              <td>{it.note ?? ""}</td>
+                              {showNewkodCol && <td>{it.newkod ?? ""}</td>}
                               {canEditItems && (
                                 <td className="actions-col">
                                   <button
@@ -1203,7 +1103,10 @@ export function RefsAdminPage() {
                                     className="btn-icon"
                                     title="Удалить"
                                     aria-label="Удалить запись"
-                                    onClick={() => removeItem(realIdx)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeItem(realIdx);
+                                    }}
                                   >
                                     ×
                                   </button>
@@ -1253,7 +1156,55 @@ export function RefsAdminPage() {
                     </button>
                   </div>
                 )}
-              </form>
+
+                {(cardCreating || cardRowIndex != null) && isKontr && (
+                  <RefRecordCardModal
+                    kind="kontr"
+                    item={
+                      cardCreating
+                        ? emptyKontr()
+                        : kontrDraft[cardRowIndex!]
+                    }
+                    canEdit={canEditKontr}
+                    busy={busy}
+                    onSave={(row) => void saveCardKontr(row)}
+                    onClose={closeCard}
+                    onDelete={
+                      canEditKontr &&
+                      !cardCreating &&
+                      cardRowIndex != null &&
+                      (kontrDraft[cardRowIndex]?.id == null ||
+                        kontrDraft[cardRowIndex]?.isNew)
+                        ? () => {
+                            removeItem(cardRowIndex);
+                            closeCard();
+                          }
+                        : undefined
+                    }
+                  />
+                )}
+                {(cardCreating || cardRowIndex != null) && !isKontr && (
+                  <RefRecordCardModal
+                    kind="classifier"
+                    directoryTitle={refListTitle(selectedKind).title}
+                    item={
+                      cardCreating
+                        ? emptyClassifier()
+                        : draftItems[cardRowIndex!]
+                    }
+                    canEdit={canEditItems}
+                    showNewkod={showNewkodCol || cardCreating}
+                    busy={busy}
+                    onSave={(item) => void saveCardClassifier(item)}
+                    onClose={closeCard}
+                    onDelete={
+                      canEditItems && !cardCreating && cardRowIndex != null
+                        ? () => void deleteCardClassifier()
+                        : undefined
+                    }
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
