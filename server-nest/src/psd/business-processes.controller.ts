@@ -16,16 +16,22 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { getDb } from "../../../server/src/db.js";
 import {
+  assertBpOrgAccess,
   assignBpCurator,
   ensureBusinessProcess,
+  getBusinessProcess,
   listBpEvents,
   listBusinessProcesses,
   transitionBusinessProcess,
   type BpAction,
 } from "../../../server/src/businessProcess.js";
+import { normalizePackageKind } from "../../../server/src/businessProcessTypes.js";
+import {
+  DtoValidationError,
+  parseBpEnsureBody,
+} from "../../../server/src/psdDto.js";
 import { resolvePsdRole, type PsdRole } from "../../../server/src/psdRoles.js";
 import { getApprovalBlockers } from "../../../server/src/checkJournal.js";
-import { normalizePackageKind } from "../../../server/src/businessProcessTypes.js";
 import {
   ApiRoleParam,
   ReqUser,
@@ -79,40 +85,92 @@ export class BusinessProcessesController {
   @RequirePsdPermissions("bp.view")
   async ensure(
     @Body()
-    body: { zid: number; eid: number; packageKind?: string }
+    body: { zid: number; eid: number; packageKind?: string },
+    @ReqUser() user?: SessionUser
   ) {
-    if (!body?.zid || !body?.eid) {
-      throw new BadRequestException({ error: "zid and eid required" });
+    let parsed: { zid: number; eid: number; packageKind?: string };
+    try {
+      parsed = parseBpEnsureBody(body);
+    } catch (e) {
+      if (e instanceof DtoValidationError) {
+        throw new BadRequestException({ error: e.message, issues: e.issues });
+      }
+      throw e;
+    }
+    const { zid, eid } = parsed;
+    try {
+      assertBpOrgAccess(
+        {
+          id: "",
+          eid,
+          zid,
+          packageKind: "OKO",
+          status: "not_started",
+          curatorUserId: null,
+          deadlineAt: null,
+          iteration: 0,
+          note: null,
+          lastChangedAt: null,
+          lastChangedBy: null,
+          createdAt: "",
+        },
+        user
+      );
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 403) throw new ForbiddenException({ error: err.message });
+      throw e;
     }
     return ensureBusinessProcess(
       await getDb(),
-      Number(body.zid),
-      Number(body.eid),
-      normalizePackageKind(body.packageKind)
+      zid,
+      eid,
+      normalizePackageKind(parsed.packageKind)
     );
   }
 
   @Get(":id")
   @RequirePsdPermissions("bp.view")
-  async get(@Param("id") id: string) {
-    const list = await listBusinessProcesses(await getDb(), {});
-    const bp = list.find((b) => b.id === id);
+  async get(@Param("id") id: string, @ReqUser() user?: SessionUser) {
+    const bp = await getBusinessProcess(await getDb(), id);
     if (!bp) throw new NotFoundException({ error: "Not found" });
+    try {
+      assertBpOrgAccess(bp, user);
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 403) throw new ForbiddenException({ error: err.message });
+      throw e;
+    }
     return bp;
   }
 
   @Get(":id/events")
   @RequirePsdPermissions("bp.view")
-  async events(@Param("id") id: string) {
+  async events(@Param("id") id: string, @ReqUser() user?: SessionUser) {
+    const bp = await getBusinessProcess(await getDb(), id);
+    if (!bp) throw new NotFoundException({ error: "Not found" });
+    try {
+      assertBpOrgAccess(bp, user);
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 403) throw new ForbiddenException({ error: err.message });
+      throw e;
+    }
     return listBpEvents(await getDb(), id);
   }
 
   @Get(":id/approval-blockers")
   @RequirePsdPermissions("bp.view")
-  async blockers(@Param("id") id: string) {
-    const list = await listBusinessProcesses(await getDb(), {});
-    const bp = list.find((b) => b.id === id);
+  async blockers(@Param("id") id: string, @ReqUser() user?: SessionUser) {
+    const bp = await getBusinessProcess(await getDb(), id);
     if (!bp) throw new NotFoundException({ error: "Not found" });
+    try {
+      assertBpOrgAccess(bp, user);
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 403) throw new ForbiddenException({ error: err.message });
+      throw e;
+    }
     return getApprovalBlockers(await getDb(), bp.zid, bp.eid, bp.packageKind);
   }
 
@@ -128,6 +186,9 @@ export class BusinessProcessesController {
     if (!body?.action) throw new BadRequestException({ error: "action required" });
     const psd = roleOf(user, apiRole);
     try {
+      const bp = await getBusinessProcess(await getDb(), id);
+      if (!bp) throw Object.assign(new Error("Not found"), { status: 404 });
+      assertBpOrgAccess(bp, user);
       return await transitionBusinessProcess(await getDb(), {
         id,
         action: body.action,
@@ -161,6 +222,9 @@ export class BusinessProcessesController {
     @ApiRoleParam() apiRole?: ApiRole
   ) {
     try {
+      const bp = await getBusinessProcess(await getDb(), id);
+      if (!bp) throw Object.assign(new Error("Not found"), { status: 404 });
+      assertBpOrgAccess(bp, user);
       return await assignBpCurator(await getDb(), {
         id,
         curatorUserId: body.curatorUserId ?? null,

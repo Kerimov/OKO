@@ -462,5 +462,109 @@ CREATE TABLE IF NOT EXISTS package_inbox (
 CREATE INDEX IF NOT EXISTS idx_package_inbox_status ON package_inbox(status, received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_package_inbox_sha ON package_inbox(sha256);
 
--- PSD extensions are applied by migration 005_psd_foundation (roles, BP, NSI versions, etc.).
--- See docs/PSD-ROLES.md and docs/PSD-INTEGRATIONS.md.
+-- =============================================================================
+-- PSD extensions (also applied by numbered migrations 005–010; keep in sync)
+-- Bootstrap MUST run migration runner — this DDL is for restore/docs parity.
+-- =============================================================================
+
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS unit_kind TEXT DEFAULT 'organization';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS head_zid INTEGER;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS branch_code TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS unit_code TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS composite_code TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS guid TEXT;
+
+ALTER TABLE periods ADD COLUMN IF NOT EXISTS package_kind TEXT DEFAULT 'OKO';
+ALTER TABLE periods ADD COLUMN IF NOT EXISTS collection_unit_zid INTEGER;
+ALTER TABLE periods ADD COLUMN IF NOT EXISTS package_id TEXT;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS psd_role TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT 'ru';
+
+ALTER TABLE kontragents ADD COLUMN IF NOT EXISTS guid TEXT;
+ALTER TABLE kontragents ADD COLUMN IF NOT EXISTS archived INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS business_processes (
+    id TEXT PRIMARY KEY,
+    eid INTEGER NOT NULL,
+    zid INTEGER NOT NULL,
+    package_kind TEXT NOT NULL DEFAULT 'OKO',
+    status TEXT NOT NULL DEFAULT 'not_started',
+    curator_user_id INTEGER,
+    deadline_at TEXT,
+    iteration INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    last_changed_at TEXT,
+    last_changed_by TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (eid, zid, package_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_bp_status ON business_processes(status);
+CREATE INDEX IF NOT EXISTS idx_bp_curator ON business_processes(curator_user_id);
+
+CREATE TABLE IF NOT EXISTS business_process_events (
+    id SERIAL PRIMARY KEY,
+    bp_id TEXT NOT NULL REFERENCES business_processes(id) ON DELETE CASCADE,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    actor TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS kontragent_versions (
+    id SERIAL PRIMARY KEY,
+    kontr_id INTEGER NOT NULL,
+    guid TEXT,
+    version_no INTEGER NOT NULL DEFAULT 1,
+    valid_from TEXT,
+    valid_to TEXT,
+    name TEXT NOT NULL,
+    old_name TEXT,
+    inn TEXT,
+    kpp TEXT,
+    ogrn TEXT,
+    org_form TEXT,
+    org_type INTEGER,
+    mandatory_rash INTEGER DEFAULT 0,
+    country TEXT,
+    city TEXT,
+    id_obdnsi TEXT,
+    card_json TEXT NOT NULL DEFAULT '{}',
+    section_basic_json TEXT NOT NULL DEFAULT '{}',
+    section_requisites_json TEXT NOT NULL DEFAULT '{}',
+    section_perimeter_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS check_run_journal (
+    id SERIAL PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    zid INTEGER NOT NULL,
+    eid INTEGER NOT NULL,
+    package_kind TEXT NOT NULL DEFAULT 'OKO',
+    form_id TEXT,
+    rule_number TEXT,
+    rule_code TEXT,
+    check_type TEXT,
+    message TEXT,
+    passed INTEGER NOT NULL DEFAULT 0,
+    requires_explanation INTEGER NOT NULL DEFAULT 0,
+    run_kind TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS support_report_presets (
+    id SERIAL PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name_ru TEXT NOT NULL,
+    name_en TEXT,
+    description TEXT,
+    query_kind TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+);
+
+-- Remaining PSD tables (transfers, svods, import batches, appendix-12 rules, etc.)
+-- are created by migrations 005–010. Do not restore production from this file alone
+-- without running the migration runner.

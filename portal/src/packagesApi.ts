@@ -8,8 +8,6 @@ import type {
   Organization,
   PackageCompleteness,
   PackageDashboardRow,
-  PackageWorkflow,
-  PackageWorkflowStatus,
   ReportingPeriod,
   WorkContext,
 } from "./types";
@@ -258,19 +256,6 @@ export async function fetchPackageCompleteness(
 
 export async function fetchPackagesDashboard(): Promise<PackageDashboardRow[]> {
   return apiFetch<PackageDashboardRow[]>("/api/packages/dashboard");
-}
-
-export async function setPackageWorkflowStatus(
-  zid: number,
-  eid: number,
-  status: PackageWorkflowStatus,
-  comment?: string | null,
-  force?: boolean
-): Promise<PackageWorkflow> {
-  return apiFetch<PackageWorkflow>("/api/packages/workflow", {
-    method: "POST",
-    body: JSON.stringify({ zid, eid, status, comment: comment ?? null, force: force === true }),
-  });
 }
 
 export async function createReportPackage(

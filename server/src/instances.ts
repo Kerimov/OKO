@@ -447,13 +447,40 @@ export async function patchInstanceCells(
 
   const header = (await db
     .prepare(
-      `SELECT revision, status FROM form_instances WHERE instance_id = ?`
+      `SELECT revision, status, zid, eid FROM form_instances WHERE instance_id = ?`
     )
-    .get(instanceId)) as { revision: number | null; status: string | null } | undefined;
+    .get(instanceId)) as {
+    revision: number | null;
+    status: string | null;
+    zid: number | null;
+    eid: number | null;
+  } | undefined;
   if (!header) {
     const err = new Error("Not found");
     (err as Error & { status: number }).status = 404;
     throw err;
+  }
+
+  // Domain-level BP + period locks (not only Nest controllers).
+  if (header.zid != null && header.eid != null) {
+    const { assertPeriodWritableForInstance } = await import("./periodLifecycle.js");
+    await assertPeriodWritableForInstance(db, header.zid, header.eid);
+    try {
+      const { assertFormsWritableForBp } = await import("./businessProcess.js");
+      const kindRow = (await db
+        .prepare(`SELECT package_kind FROM periods WHERE eid = ? AND zid = ?`)
+        .get(header.eid, header.zid)) as { package_kind: string | null } | undefined;
+      const kind = kindRow?.package_kind === "BALANCE" ? "BALANCE" : "OKO";
+      await assertFormsWritableForBp(db, header.zid, header.eid, kind);
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 409) throw e;
+      if (String(err.message || "").includes("business_processes")) {
+        // table may be missing in very early boot
+      } else {
+        throw e;
+      }
+    }
   }
 
   const currentRev = Number(header.revision ?? 1);

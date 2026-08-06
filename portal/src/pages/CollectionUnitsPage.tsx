@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { canMutateData } from "../auth";
 import {
   listCollectionUnits,
@@ -154,6 +155,12 @@ export function CollectionUnitsPage() {
                 </td>
                 <td>{u.parentZid ?? "—"}</td>
                 <td>
+                  <Link
+                    to={`/package?zid=${u.zid}`}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Выбрать комплект
+                  </Link>{" "}
                   {canMutate && (
                     <button
                       type="button"

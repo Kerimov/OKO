@@ -106,10 +106,10 @@ export async function bulkUpsertTransferMaps(
     `INSERT INTO transfer_maps (
        kind, source_form, source_column, source_row, target_form, target_column, target_row,
        condition_json, aggregation, exclude_rows, active, sort_order
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`
   );
   for (const it of items) {
-    await ins.run(
+    const r = await ins.run(
       it.kind,
       it.sourceForm,
       it.sourceColumn ?? null,
@@ -123,7 +123,7 @@ export async function bulkUpsertTransferMaps(
       it.active === false ? 0 : 1,
       it.sortOrder ?? 0
     );
-    inserted += 1;
+    inserted += Number(r.changes ?? 0);
   }
   return { inserted };
 }
@@ -189,10 +189,10 @@ export async function bulkUpsertMinfinMappings(
     `INSERT INTO minfin_mappings (
        template_name, sheet_name, excel_row, excel_column, form_id, form_column, form_row,
        sign_factor, is_header, period_token, active
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`
   );
   for (const it of items) {
-    await ins.run(
+    const r = await ins.run(
       it.templateName,
       it.sheetName ?? null,
       it.excelRow ?? null,
@@ -205,7 +205,7 @@ export async function bulkUpsertMinfinMappings(
       it.periodToken ?? null,
       it.active === false ? 0 : 1
     );
-    inserted += 1;
+    inserted += Number(r.changes ?? 0);
   }
   return { inserted };
 }

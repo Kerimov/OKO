@@ -42,7 +42,14 @@ test.describe("OKO portal critical shell", () => {
   });
 
   test("psd routes resolve when auth is open", async ({ page }) => {
-    for (const path of ["/bp", "/check-explanations", "/collection-units", "/psd-reports"]) {
+    for (const path of [
+      "/bp",
+      "/check-explanations",
+      "/collection-units",
+      "/psd-reports",
+      "/perimeter",
+      "/package",
+    ]) {
       await page.goto(path);
       await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
       if (new URL(page.url()).pathname === "/") {

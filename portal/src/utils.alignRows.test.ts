@@ -6,6 +6,7 @@ const schema = {
   id: "N01_1",
   title: "Test",
   category: "N01",
+  pages: [],
   columns: [
     { key: "num", label: "№", type: "text" },
     { key: "name", label: "Наименование", type: "text" },
@@ -23,7 +24,7 @@ const schema = {
     unit: "тыс.руб.",
   },
   signatures: [],
-} as FormSchema;
+} as unknown as FormSchema;
 
 describe("alignInstanceRowsToSchema", () => {
   it("adds missing template rows without dropping existing values", () => {

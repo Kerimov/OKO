@@ -66,8 +66,25 @@ export async function upsertCellComment(
     freeText?: string | null;
     author?: string | null;
   }
-): Promise<CellCommentDto> {
+): Promise<CellCommentDto & { amountMismatch?: boolean; cellAmount?: number | null }> {
   const now = new Date().toISOString();
+  let cellAmount: number | null = null;
+  let amountMismatch = false;
+  if (input.amount != null) {
+    const cell = (await db
+      .prepare(
+        `SELECT value_num FROM form_cell_values
+         WHERE instance_id = ? AND row_no = ? AND column_key = ?`
+      )
+      .get(input.instanceId, input.rowNo, input.columnKey)) as
+      | { value_num: number | null }
+      | undefined;
+    cellAmount = cell?.value_num ?? null;
+    if (cellAmount != null && Number(cellAmount) !== Number(input.amount)) {
+      amountMismatch = true;
+    }
+  }
+
   const existing = (await db
     .prepare(
       `SELECT id FROM cell_comments
@@ -117,10 +134,11 @@ export async function upsertCellComment(
   }
 
   const list = await listCellComments(db, input.instanceId);
-  return list.find(
+  const dto = list.find(
     (c) =>
       c.formId === input.formId &&
       c.rowNo === input.rowNo &&
       c.columnKey === input.columnKey
   )!;
+  return { ...dto, amountMismatch, cellAmount };
 }

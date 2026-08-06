@@ -122,3 +122,30 @@ export async function loadEffectiveRashRefsByName(
   base = applyRefsOverlay(base, overlay);
   return base.byName ?? {};
 }
+
+/** Recommend F4/rash articles by optional group + query substring. */
+export async function recommendRashArticles(
+  db: OkoDb,
+  input: { q?: string; group?: string; limit?: number }
+): Promise<Array<RashRefItem & { group: string }>> {
+  const byName = await loadEffectiveRashRefsByName(db);
+  const q = String(input.q ?? "").trim().toLowerCase();
+  const groupFilter = String(input.group ?? "").trim();
+  const limit = Math.min(Math.max(input.limit ?? 30, 1), 100);
+  const out: Array<RashRefItem & { group: string }> = [];
+  for (const [group, items] of Object.entries(byName)) {
+    if (groupFilter && group !== groupFilter) continue;
+    for (const it of items ?? []) {
+      if (
+        q &&
+        !String(it.kod ?? "").toLowerCase().includes(q) &&
+        !String(it.value ?? "").toLowerCase().includes(q)
+      ) {
+        continue;
+      }
+      out.push({ ...it, group });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}

@@ -193,3 +193,73 @@ export async function svodDetailDrilldown(
     })),
   };
 }
+
+/** Copies a definition's membership into another reporting period, idempotently by code. */
+export async function copySvodFromPreviousPeriod(
+  db: OkoDb, input: { sourceSvodId: string; targetEid: number; createdBy?: string | null }
+): Promise<SvodDefinitionDto> {
+  const source = (await listSvodDefinitions(db)).find((s) => s.id === input.sourceSvodId);
+  if (!source) throw new Error("Source svod not found");
+  const existing = (await listSvodDefinitions(db, input.targetEid))
+    .find((s) => s.code === source.code && s.packageKind === source.packageKind);
+  if (existing) return existing;
+  return createSvodDefinition(db, {
+    eid: input.targetEid, packageKind: source.packageKind, code: source.code, name: source.name,
+    createdBy: input.createdBy,
+    members: source.members.map((m) => ({
+      organizationGuid: m.organizationGuid, zid: m.zid, included: m.included, headCompany: m.headCompany,
+      flagRsbu: m.flagRsbu, flagMgk: m.flagMgk, flagNkdo: m.flagNkdo,
+    })),
+  });
+}
+
+/** Materialize the sum of every numeric source cell for included members. */
+export async function calculateSvod(
+  db: OkoDb, input: { svodId: string; eid: number; packageKind?: PackageKind }
+): Promise<{ cells: number; members: number }> {
+  const def = (await listSvodDefinitions(db)).find((s) => s.id === input.svodId);
+  if (!def) throw new Error("Svod not found");
+  const kind = normalizePackageKind(input.packageKind ?? def.packageKind);
+  const zids = def.members.filter((m) => m.included && m.zid != null).map((m) => m.zid!);
+  await db.prepare(`DELETE FROM svod_results WHERE svod_id = ? AND eid = ? AND package_kind = ?`).run(def.id, input.eid, kind);
+  if (!zids.length) return { cells: 0, members: 0 };
+  const placeholders = zids.map(() => "?").join(",");
+  const rows = await db.prepare(
+    `SELECT fi.template_id AS form_id, fc.row_no, fc.column_key, SUM(fc.value_num) AS value_num
+     FROM form_instances fi JOIN form_cell_values fc ON fc.instance_id = fi.instance_id
+     WHERE fi.eid = ? AND fi.zid IN (${placeholders}) AND fc.value_num IS NOT NULL
+     GROUP BY fi.template_id, fc.row_no, fc.column_key`
+  ).all(input.eid, ...zids) as Array<{ form_id: string; row_no: number; column_key: string; value_num: number }>;
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT INTO svod_results (svod_id, eid, package_kind, form_id, row_no, column_key, value_num, calculated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const row of rows) await insert.run(def.id, input.eid, kind, row.form_id, row.row_no, row.column_key, row.value_num, now);
+  return { cells: rows.length, members: zids.length };
+}
+
+/** App 17 navigation: 058 companies, 059 contextual comments, 060 raw rash entries. */
+export async function svodDrilldown(
+  db: OkoDb, input: { svodId: string; eid: number; formId: string; rowNo: number; columnKey: string; level: "058" | "059" | "060" }
+): Promise<unknown> {
+  const def = (await listSvodDefinitions(db)).find((s) => s.id === input.svodId);
+  if (!def) throw new Error("Svod not found");
+  const zids = def.members.filter((m) => m.included && m.zid != null).map((m) => m.zid!);
+  if (!zids.length) return [];
+  const q = zids.map(() => "?").join(",");
+  if (input.level === "058") return db.prepare(
+    `SELECT fi.zid, o.name, fc.value_num AS amount FROM form_instances fi
+     JOIN form_cell_values fc ON fc.instance_id = fi.instance_id LEFT JOIN organizations o ON o.zid = fi.zid
+     WHERE fi.eid = ? AND fi.zid IN (${q}) AND fi.template_id = ? AND fc.row_no = ? AND fc.column_key = ?`
+  ).all(input.eid, ...zids, input.formId, input.rowNo, input.columnKey);
+  if (input.level === "059") return db.prepare(
+    `SELECT fi.zid, cc.kontr_id, cc.article_code, cc.free_text, cc.amount FROM cell_comments cc
+     JOIN form_instances fi ON fi.instance_id = cc.instance_id
+     WHERE fi.eid = ? AND fi.zid IN (${q}) AND cc.form_id = ? AND cc.row_no = ? AND cc.column_key = ?`
+  ).all(input.eid, ...zids, input.formId, input.rowNo, input.columnKey);
+  return db.prepare(
+    `SELECT fi.zid, re.* FROM form_rash_entries re JOIN form_instances fi ON fi.instance_id = re.instance_id
+     WHERE fi.eid = ? AND fi.zid IN (${q}) AND re.form_id = ? AND re.parent_row_no = ?`
+  ).all(input.eid, ...zids, input.formId, input.rowNo);
+}

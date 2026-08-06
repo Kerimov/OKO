@@ -116,6 +116,96 @@ export function canMutateData(): boolean {
   return !isAuditorReadonly();
 }
 
+export type PortalPsdPermission =
+  | "bp.view"
+  | "bp.start"
+  | "bp.assign_curator"
+  | "bp.submit_for_approval"
+  | "bp.curator_approve"
+  | "bp.curator_return"
+  | "bp.complete"
+  | "bp.reopen"
+  | "forms.read"
+  | "forms.write"
+  | "nsi.read"
+  | "nsi.write"
+  | "approval.explain"
+  | "tech.configure"
+  | "reports.build"
+  | "audit.read_only";
+
+const ROLE_PERMS: Record<PsdRole, readonly PortalPsdPermission[]> = {
+  business_process_manager: [
+    "bp.view",
+    "bp.start",
+    "bp.assign_curator",
+    "bp.complete",
+    "bp.reopen",
+    "forms.read",
+    "nsi.read",
+    "tech.configure",
+    "reports.build",
+  ],
+  department_curator: [
+    "bp.view",
+    "bp.curator_approve",
+    "bp.curator_return",
+    "forms.read",
+    "nsi.read",
+    "approval.explain",
+  ],
+  subsidiary_specialist: [
+    "bp.view",
+    "bp.submit_for_approval",
+    "forms.read",
+    "forms.write",
+    "nsi.read",
+    "nsi.write",
+    "approval.explain",
+  ],
+  support_specialist: [
+    "bp.view",
+    "bp.start",
+    "bp.assign_curator",
+    "bp.submit_for_approval",
+    "bp.curator_approve",
+    "bp.curator_return",
+    "bp.complete",
+    "bp.reopen",
+    "forms.read",
+    "forms.write",
+    "nsi.read",
+    "nsi.write",
+    "approval.explain",
+    "tech.configure",
+    "reports.build",
+  ],
+  auditor_readonly: ["bp.view", "forms.read", "nsi.read", "audit.read_only"],
+};
+
+export function resolveUiPsdRole(user: UserProfile | null | undefined): PsdRole {
+  if (user?.psdRole) return user.psdRole;
+  if (user?.role === "admin") return "support_specialist";
+  return "subsidiary_specialist";
+}
+
+export function hasPsdPermission(permission: PortalPsdPermission): boolean {
+  if (!authRequired) return true;
+  const role = resolveUiPsdRole(currentUser);
+  return ROLE_PERMS[role].includes(permission);
+}
+
+export function psdRoleLabelRu(role: PsdRole): string {
+  const labels: Record<PsdRole, string> = {
+    business_process_manager: "Руководитель БП",
+    department_curator: "Куратор",
+    subsidiary_specialist: "Специалист ДО",
+    support_specialist: "Сопровождение",
+    auditor_readonly: "Аудитор",
+  };
+  return labels[role];
+}
+
 export async function initAuth(): Promise<void> {
   try {
     const health = await apiFetch<{

@@ -123,17 +123,9 @@ function resolveLegacyRole(token: string | null): ApiRole | null {
 function applySessionUser(req: Request, user: SessionUser, token: string): void {
   req.apiUser = user;
   req.sessionToken = token;
-  // Preserve legacy admin elevation; PSD support/BPM also get admin API role for tools.
-  const psd = user.psdRole;
-  if (
-    user.role === "admin" ||
-    psd === "support_specialist" ||
-    psd === "business_process_manager"
-  ) {
-    req.apiRole = "admin";
-  } else {
-    req.apiRole = "user";
-  }
+  // Legacy admin only. PSD permissions are enforced by Nest PsdPermissionGuard —
+  // do not elevate support/BPM to full platform admin.
+  req.apiRole = user.role === "admin" ? "admin" : "user";
 }
 
 export async function resolveAuth(req: Request, token: string | null): Promise<boolean> {
@@ -207,6 +199,26 @@ export async function authMiddleware(
   }
 }
 
+/**
+ * Paths where Nest PSD/domain guards are the source of truth.
+ * Express must not block org users here — otherwise PSD RBAC never runs.
+ */
+const PSD_WRITE_DELEGATE = [
+  /^\/api\/business-processes(\/|$)/,
+  /^\/api\/psd-checks(\/|$)/,
+  /^\/api\/cell-comments(\/|$)/,
+  /^\/api\/collection-units(\/|$)/,
+  /^\/api\/kontr(\/|$)/,
+  /^\/api\/kontr-versions(\/|$)/,
+  /^\/api\/transfers(\/|$)/,
+  /^\/api\/minfin(\/|$)/,
+  /^\/api\/svods(\/|$)/,
+  /^\/api\/support-reports(\/|$)/,
+  /^\/api\/integrations(\/|$)/,
+  /^\/api\/packages\/workflow$/,
+  /^\/api\/packages\/create$/,
+];
+
 const USER_WRITE_ALLOWED = [
   /^\/api\/instances(\/|$)/,
   /^\/api\/instances\/[^/]+\/status$/,
@@ -216,6 +228,7 @@ const USER_WRITE_ALLOWED = [
   /^\/api\/packages\/create$/,
   /^\/api\/aggregation\/run$/,
   /^\/api\/auth\/logout$/,
+  ...PSD_WRITE_DELEGATE,
 ];
 
 const USER_WRITE_BLOCKED = ["/api/instances/normalize"];
@@ -226,6 +239,11 @@ export function userWriteGuard(req: Request, res: Response, next: NextFunction):
     return;
   }
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
+  }
+  // PSD surface: Nest PsdPermissionGuard + RejectReadOnlyGuard enforce rights.
+  if (PSD_WRITE_DELEGATE.some((p) => p.test(req.path))) {
     next();
     return;
   }

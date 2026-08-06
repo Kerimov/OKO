@@ -178,6 +178,7 @@ export interface Organization {
 export interface ReportingPeriod {
   eid: number;
   zid: number;
+  packageId?: string | null;
   name: string;
   periodStart: string | null;
   periodEnd: string | null;

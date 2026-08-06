@@ -43,11 +43,12 @@ export async function getPeriodRow(
   period_status: string | null;
   methodology_release_id: string | null;
   package_status: string | null;
+  package_kind?: string | null;
 } | null> {
   if (zid != null) {
     const row = (await db
       .prepare(
-        `SELECT eid, zid, period_status, methodology_release_id, package_status
+        `SELECT eid, zid, period_status, methodology_release_id, package_status, package_kind
          FROM periods WHERE eid = ? AND zid = ?`
       )
       .get(eid, zid)) as
@@ -57,13 +58,14 @@ export async function getPeriodRow(
           period_status: string | null;
           methodology_release_id: string | null;
           package_status: string | null;
+          package_kind: string | null;
         }
       | undefined;
     return row ?? null;
   }
   const row = (await db
     .prepare(
-      `SELECT eid, zid, period_status, methodology_release_id, package_status
+      `SELECT eid, zid, period_status, methodology_release_id, package_status, package_kind
        FROM periods WHERE eid = ?`
     )
     .get(eid)) as
@@ -73,6 +75,7 @@ export async function getPeriodRow(
         period_status: string | null;
         methodology_release_id: string | null;
         package_status: string | null;
+        package_kind: string | null;
       }
     | undefined;
   return row ?? null;
@@ -180,8 +183,18 @@ export async function closePeriod(
   if (normalizePeriodStatus(row.period_status) === "closed") {
     throw new Error("Period is already closed");
   }
-  if (opts?.requireAccepted !== false && row.package_status !== "accepted") {
-    throw new Error("Period can only be closed when package status is accepted");
+  if (opts?.requireAccepted !== false) {
+    const bp = (await db
+      .prepare(
+        `SELECT status FROM business_processes
+         WHERE eid = ? AND zid = ? AND package_kind = ?`
+      )
+      .get(eid, zid, row.package_kind === "BALANCE" ? "BALANCE" : "OKO")) as
+      | { status: string }
+      | undefined;
+    if (bp?.status !== "completed") {
+      throw new Error("Period can only be closed when its business process is completed");
+    }
   }
   const now = new Date().toISOString();
   await db

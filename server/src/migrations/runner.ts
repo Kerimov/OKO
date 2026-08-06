@@ -5,6 +5,10 @@ import { rashConstructorLayoutMigration } from "./003_rash_constructor_layout.js
 import { rashAddsumRequiredMigration } from "./004_rash_addsum_required.js";
 import { psdFoundationMigration } from "./005_psd_foundation.js";
 import { psdChecksReportsMigration } from "./006_psd_checks_reports.js";
+import { psdAppendix12ChecksMigration } from "./008_psd_appendix12_checks.js";
+import { packageContextMigration } from "./007_package_context.js";
+import { psdNsiCardMigration } from "./009_psd_nsi_card.js";
+import { psdImportTransferSvodMigration } from "./010_psd_import_transfer_svod.js";
 import type { Migration } from "./types.js";
 
 export const NUMBERED_MIGRATIONS: Migration[] = [
@@ -14,6 +18,10 @@ export const NUMBERED_MIGRATIONS: Migration[] = [
   rashAddsumRequiredMigration,
   psdFoundationMigration,
   psdChecksReportsMigration,
+  packageContextMigration,
+  psdAppendix12ChecksMigration,
+  psdNsiCardMigration,
+  psdImportTransferSvodMigration,
 ];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {

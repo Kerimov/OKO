@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   NotFoundException,
@@ -33,10 +35,14 @@ import {
   upsertCheckExplanation,
 } from "../../../server/src/checkJournal.js";
 import { parseCheckDsl } from "../../../server/src/checkDsl.js";
+import { runPackageChecks } from "../../../server/src/packageCheckRun.js";
 import {
   createSvodDefinition,
   listSvodDefinitions,
   svodDetailDrilldown,
+  calculateSvod,
+  copySvodFromPreviousPeriod,
+  svodDrilldown,
 } from "../../../server/src/svodRegistry.js";
 import {
   bulkUpsertMinfinMappings,
@@ -45,8 +51,16 @@ import {
   listTransferMaps,
   type TransferMapKind,
 } from "../../../server/src/transferMaps.js";
-import { applyTransferMaps } from "../../../server/src/transferApply.js";
+import { applyTransferMaps, rollbackTransferBatch } from "../../../server/src/transferApply.js";
 import { listCellComments, upsertCellComment } from "../../../server/src/cellComments.js";
+import {
+  findKontrByGuid,
+  getKontrCardSections,
+  listPerimeterKontragents,
+  listPerimeterOrganizations,
+  updateKontrCardSection,
+} from "../../../server/src/nsiPerimeter.js";
+import { recommendRashArticles } from "../../../server/src/rashRefs.js";
 import { StubDoXmlTransport, listDoInbox } from "../../../server/src/integrations/doXmlAdapter.js";
 import {
   MappingTableMinFinExport,
@@ -54,14 +68,44 @@ import {
   StubSapConsolidationAdapter,
 } from "../../../server/src/integrations/adapters.js";
 import { normalizePackageKind } from "../../../server/src/businessProcessTypes.js";
+import {
+  DtoValidationError,
+  parseTransferApplyBody,
+} from "../../../server/src/psdDto.js";
 import { AdminGuard } from "../auth/admin.guard.js";
-import { ReqUser } from "../auth/decorators/oko-request.decorator.js";
+import {
+  ApiRoleParam,
+  ReqUser,
+} from "../auth/decorators/oko-request.decorator.js";
 import type { SessionUser } from "../../../server/src/users.js";
+import type { ApiRole } from "../../../server/src/auth.js";
+import { resolvePsdRole } from "../../../server/src/psdRoles.js";
+import { loadInstance } from "../../../server/src/instances.js";
+import type { OkoDb } from "../../../server/src/oko-db.js";
 import {
   PsdPermissionGuard,
   RejectReadOnlyGuard,
   RequirePsdPermissions,
 } from "./psd-permission.guard.js";
+
+async function assertCellCommentAccess(
+  db: OkoDb,
+  instanceId: string,
+  user: SessionUser | undefined,
+  apiRole: ApiRole | undefined
+): Promise<void> {
+  const inst = await loadInstance(db, instanceId);
+  if (!inst) throw new NotFoundException({ error: "Instance not found" });
+  const psd = resolvePsdRole({
+    legacyRole: user?.role ?? (apiRole === "admin" ? "admin" : "org"),
+    psdRole: user?.psdRole,
+  });
+  if (psd === "subsidiary_specialist" && user?.zid != null) {
+    if (inst.zid == null || Number(inst.zid) !== Number(user.zid)) {
+      throw new ForbiddenException({ error: "Access denied for this organization" });
+    }
+  }
+}
 
 @ApiTags("psd-collection-units")
 @ApiBearerAuth()
@@ -165,6 +209,87 @@ export class KontrVersionsController {
   async archive(@Param("id") idRaw: string, @Body() body: { force?: boolean }) {
     return archiveKontragent(await getDb(), Number(idRaw), !!body?.force);
   }
+
+  @Get(":id/card")
+  @RequirePsdPermissions("nsi.read")
+  async card(@Param("id") idRaw: string, @Query("asOf") asOf?: string) {
+    return getKontrCardSections(await getDb(), Number(idRaw), asOf);
+  }
+
+  @Put(":id/card/:section")
+  @RequirePsdPermissions("nsi.write")
+  async updateCard(
+    @Param("id") idRaw: string,
+    @Param("section") section: string,
+    @Body() body: { data: Record<string, unknown> },
+    @ReqUser() user?: SessionUser
+  ) {
+    if (!["basic", "requisites", "perimeter"].includes(section)) {
+      throw new BadRequestException({ error: "section must be basic|requisites|perimeter" });
+    }
+    return updateKontrCardSection(await getDb(), {
+      kontrId: Number(idRaw),
+      section: section as "basic" | "requisites" | "perimeter",
+      data: body?.data ?? {},
+      actor: user?.username ?? null,
+    });
+  }
+}
+
+@ApiTags("psd-perimeter")
+@ApiBearerAuth()
+@UseGuards(PsdPermissionGuard, RejectReadOnlyGuard)
+@Controller("perimeter")
+export class PerimeterController {
+  @Get("organizations")
+  @RequirePsdPermissions("nsi.read", "forms.read")
+  async orgs(
+    @Query("q") q?: string,
+    @Query("zid") zid?: string,
+    @ReqUser() user?: SessionUser,
+    @ApiRoleParam() apiRole?: ApiRole
+  ) {
+    const psd = resolvePsdRole({
+      legacyRole: user?.role ?? (apiRole === "admin" ? "admin" : "org"),
+      psdRole: user?.psdRole,
+    });
+    const scopedZid =
+      psd === "subsidiary_specialist" && user?.zid != null
+        ? user.zid
+        : zid
+          ? Number(zid)
+          : undefined;
+    return listPerimeterOrganizations(await getDb(), {
+      q,
+      zid: scopedZid,
+    });
+  }
+
+  @Get("kontragents")
+  @RequirePsdPermissions("nsi.read")
+  async kontragents(
+    @Query("q") q?: string,
+    @Query("includeArchived") includeArchived?: string
+  ) {
+    return listPerimeterKontragents(await getDb(), {
+      q,
+      includeArchived: includeArchived === "1" || includeArchived === "true",
+    });
+  }
+
+  @Get("kontr-by-guid/:guid")
+  @RequirePsdPermissions("nsi.read")
+  async byGuid(@Param("guid") guid: string) {
+    const row = await findKontrByGuid(await getDb(), guid);
+    if (!row) throw new NotFoundException({ error: "Not found" });
+    return row;
+  }
+
+  @Get("recommended-articles")
+  @RequirePsdPermissions("forms.read")
+  async articles(@Query("q") q?: string, @Query("group") group?: string) {
+    return recommendRashArticles(await getDb(), { q, group, limit: 30 });
+  }
 }
 
 @ApiTags("psd-checks")
@@ -172,6 +297,24 @@ export class KontrVersionsController {
 @UseGuards(PsdPermissionGuard, RejectReadOnlyGuard)
 @Controller("psd-checks")
 export class PsdChecksController {
+  @Post("package-run")
+  @HttpCode(200)
+  @RequirePsdPermissions("forms.read")
+  async runPackage(
+    @Body() body: { zid: number; eid: number; packageKind?: string },
+    @ReqUser() user?: SessionUser
+  ) {
+    if (!Number.isFinite(Number(body?.zid)) || !Number.isFinite(Number(body?.eid))) {
+      throw new BadRequestException({ error: "zid and eid required" });
+    }
+    return runPackageChecks(await getDb(), {
+      zid: Number(body.zid),
+      eid: Number(body.eid),
+      packageKind: normalizePackageKind(body.packageKind),
+      actor: user?.username ?? null,
+    });
+  }
+
   @Post("dsl/parse")
   @HttpCode(200)
   @RequirePsdPermissions("forms.read")
@@ -401,6 +544,24 @@ export class SvodsController {
       formId,
     });
   }
+
+  @Post(":id/copy-previous")
+  @RequirePsdPermissions("tech.configure")
+  async copyPrevious(@Param("id") sourceSvodId: string, @Body() body: { targetEid: number }, @ReqUser() user?: SessionUser) {
+    return copySvodFromPreviousPeriod(await getDb(), { sourceSvodId, targetEid: Number(body.targetEid), createdBy: user?.username ?? null });
+  }
+
+  @Post(":id/calculate")
+  @RequirePsdPermissions("reports.build", "forms.read")
+  async calculate(@Param("id") svodId: string, @Body() body: { eid: number; packageKind?: string }) {
+    return calculateSvod(await getDb(), { svodId, eid: Number(body.eid), packageKind: normalizePackageKind(body.packageKind) });
+  }
+
+  @Get(":id/drill-down")
+  @RequirePsdPermissions("forms.read")
+  async drillDown(@Param("id") svodId: string, @Query() q: { eid: string; formId: string; rowNo: string; columnKey: string; level?: "058" | "059" | "060" }) {
+    return svodDrilldown(await getDb(), { svodId, eid: Number(q.eid), formId: q.formId, rowNo: Number(q.rowNo), columnKey: q.columnKey, level: q.level ?? "058" });
+  }
 }
 
 @ApiTags("psd-transfers")
@@ -428,28 +589,34 @@ export class TransfersController {
   @ApiOperation({ summary: "Применить transfer_maps: копирование числовых ячеек между пакетами" })
   async apply(
     @Body()
-    body: {
-      kind: TransferMapKind;
-      sourceZid: number;
-      sourceEid: number;
-      targetZid: number;
-      targetEid: number;
-    },
+    body: Record<string, unknown>,
     @ReqUser() user?: SessionUser
   ) {
-    if (!body?.kind || body.sourceZid == null || body.sourceEid == null || body.targetZid == null || body.targetEid == null) {
-      throw new BadRequestException({
-        error: "kind, sourceZid, sourceEid, targetZid, targetEid required",
-      });
+    let parsed: ReturnType<typeof parseTransferApplyBody>;
+    try {
+      parsed = parseTransferApplyBody(body);
+    } catch (e) {
+      if (e instanceof DtoValidationError) {
+        throw new BadRequestException({ error: e.message, issues: e.issues });
+      }
+      throw e;
     }
-    return applyTransferMaps(await getDb(), {
-      kind: body.kind,
-      sourceZid: Number(body.sourceZid),
-      sourceEid: Number(body.sourceEid),
-      targetZid: Number(body.targetZid),
-      targetEid: Number(body.targetEid),
-      actor: user?.username ?? null,
-    });
+    try {
+      return await applyTransferMaps(await getDb(), {
+        ...parsed,
+        actor: user?.username ?? null,
+      });
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 409) throw new ConflictException({ error: err.message });
+      throw e;
+    }
+  }
+
+  @Post(":batchId/rollback")
+  @RequirePsdPermissions("tech.configure", "forms.write")
+  async rollback(@Param("batchId") batchId: string, @ReqUser() user?: SessionUser) {
+    return rollbackTransferBatch(await getDb(), batchId, user?.username ?? null);
   }
 }
 
@@ -497,9 +664,15 @@ export class MinfinController {
 export class CellCommentsController {
   @Get()
   @RequirePsdPermissions("forms.read")
-  async list(@Query("instanceId") instanceId: string) {
+  async list(
+    @Query("instanceId") instanceId: string,
+    @ReqUser() user?: SessionUser,
+    @ApiRoleParam() apiRole?: ApiRole
+  ) {
     if (!instanceId) throw new BadRequestException({ error: "instanceId required" });
-    return listCellComments(await getDb(), instanceId);
+    const db = await getDb();
+    await assertCellCommentAccess(db, instanceId, user, apiRole);
+    return listCellComments(db, instanceId);
   }
 
   @Post()
@@ -517,9 +690,17 @@ export class CellCommentsController {
       kontrId?: number | null;
       freeText?: string | null;
     },
-    @ReqUser() user?: SessionUser
+    @ReqUser() user?: SessionUser,
+    @ApiRoleParam() apiRole?: ApiRole
   ) {
-    return upsertCellComment(await getDb(), {
+    if (!body?.instanceId || !body?.formId || body.rowNo == null || !body.columnKey) {
+      throw new BadRequestException({
+        error: "instanceId, formId, rowNo, columnKey required",
+      });
+    }
+    const db = await getDb();
+    await assertCellCommentAccess(db, body.instanceId, user, apiRole);
+    return upsertCellComment(db, {
       ...body,
       author: user?.username ?? null,
     });

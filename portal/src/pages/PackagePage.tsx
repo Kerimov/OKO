@@ -14,11 +14,11 @@ import {
   listPeriods,
   loadWorkContext,
   saveWorkContext,
-  setPackageWorkflowStatus,
 } from "../packagesApi";
 import {
   ensureBusinessProcess,
   getBpApprovalBlockers,
+  runPackageChecks,
   transitionBusinessProcess,
   type ApprovalBlockers,
   type BpAction,
@@ -30,7 +30,6 @@ import { isBackendMode } from "../storage";
 import type {
   Organization,
   PackageCompleteness,
-  PackageWorkflowStatus,
   ReportingPeriod,
 } from "../types";
 import { formatPeriod, formStatusLabel, packageWorkflowLabel } from "../utils";
@@ -126,10 +125,10 @@ export function PackagePage() {
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
   const [newPackageKind, setNewPackageKind] = useState<PackageKind>("OKO");
-  const [workflowComment, setWorkflowComment] = useState("");
   const [bp, setBp] = useState<BusinessProcessDto | null>(null);
   const [bpBlockers, setBpBlockers] = useState<ApprovalBlockers | null>(null);
   const [bpBusy, setBpBusy] = useState(false);
+  const [packageChecksBusy, setPackageChecksBusy] = useState(false);
 
   const selectedOrg = useMemo(
     () => orgs.find((o) => o.zid === zid),
@@ -311,6 +310,7 @@ export function PackagePage() {
     try {
       const updated = await transitionBusinessProcess(bp.id, action);
       setBp(updated);
+      await refreshCompleteness(updated.zid, updated.eid);
       try {
         setBpBlockers(await getBpApprovalBlockers(updated.id));
       } catch {
@@ -382,44 +382,6 @@ export function PackagePage() {
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка удаления комплекта");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleWorkflow = async (next: PackageWorkflowStatus, force = false) => {
-    if (zid === "" || eid === "") return;
-    setBusy(true);
-    setStatus("");
-    try {
-      const wf = await setPackageWorkflowStatus(
-        zid,
-        eid,
-        next,
-        workflowComment.trim() || null,
-        force
-      );
-      setWorkflowComment("");
-      await refreshCompleteness(zid, eid);
-      setStatus(
-        `Статус комплекта: ${packageWorkflowLabel(wf.status)}${
-          force ? " (без проверки полноты)" : ""
-        }`
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Ошибка смены статуса";
-      if (
-        admin &&
-        !force &&
-        (next === "submitted" || next === "accepted") &&
-        /неполон|не все формы/i.test(msg) &&
-        confirm(`${msg}\n\nВсё равно сменить статус (force)?`)
-      ) {
-        setBusy(false);
-        await handleWorkflow(next, true);
-        return;
-      }
-      setStatus(msg);
     } finally {
       setBusy(false);
     }
@@ -502,28 +464,28 @@ export function PackagePage() {
   };
 
   const periodClosed = selectedPeriod?.periodStatus === "closed";
-  const wf = completeness?.workflow?.status ?? "draft";
-  const workflowActions = useMemo(() => {
-    if (periodClosed) return [];
-    const all: Array<{ status: PackageWorkflowStatus; label: string; adminOnly?: boolean }> = [
-      { status: "submitted", label: "Сдать на проверку" },
-      { status: "returned", label: "Вернуть", adminOnly: true },
-      { status: "corrected", label: "Исправлен" },
-      { status: "accepted", label: "Принять", adminOnly: true },
-      { status: "draft", label: "В черновик" },
-    ];
-    const allowed: Record<string, PackageWorkflowStatus[]> = {
-      draft: ["submitted"],
-      submitted: ["returned", "accepted"],
-      returned: ["corrected", "draft"],
-      corrected: ["submitted"],
-      accepted: ["returned"],
-    };
-    return all.filter(
-      (a) =>
-        (allowed[wf] ?? []).includes(a.status) && (admin || !a.adminOnly)
-    );
-  }, [wf, admin, periodClosed]);
+  const checkExplanationsLink =
+    typeof zid === "number" && typeof eid === "number"
+      ? `/check-explanations?zid=${zid}&eid=${eid}&packageKind=${selectedPeriod?.packageKind ?? "OKO"}`
+      : "/check-explanations";
+  const handleRunPackageChecks = async () => {
+    if (typeof zid !== "number" || typeof eid !== "number") return;
+    setPackageChecksBusy(true);
+    try {
+      const result = await runPackageChecks({
+        zid,
+        eid,
+        packageKind: selectedPeriod?.packageKind === "BALANCE" ? "BALANCE" : "OKO",
+      });
+      setStatus(`Проверки выполнены: ${result.passed} успешно, ${result.failed} с ошибками.`);
+      if (bp) setBpBlockers(await getBpApprovalBlockers(bp.id));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось выполнить проверки");
+    } finally {
+      setPackageChecksBusy(false);
+    }
+  };
+  const bpCompleted = bp?.status === "completed";
 
   const missing = completeness?.items.filter((i) => !i.filled) ?? [];
 
@@ -633,7 +595,7 @@ export function PackagePage() {
                     .map((m) => `#${m.ruleNumber}`)
                     .join(", ")}
                   .{" "}
-                  <Link to="/check-explanations">Объяснения проверок</Link>
+                  <Link to={checkExplanationsLink}>Объяснения проверок</Link>
                 </p>
               )}
               <div className="toolbar-actions" style={{ marginBottom: "0.75rem" }}>
@@ -651,6 +613,14 @@ export function PackagePage() {
                 <Link to="/bp" className="btn btn-secondary">
                   Мониторинг БП
                 </Link>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={packageChecksBusy || !canMutate}
+                  onClick={() => void handleRunPackageChecks()}
+                >
+                  {packageChecksBusy ? "Выполняются…" : "Запустить проверки комплекта"}
+                </button>
               </div>
             </>
           ) : (
@@ -778,41 +748,10 @@ export function PackagePage() {
             Черновики форм: <strong>{completeness.draft}</strong> · Сдано форм:{" "}
             <strong>{completeness.submitted}</strong>
             {" · "}
-            Статус комплекта:{" "}
+            Устаревший статус комплекта (только чтение):{" "}
             <strong>{packageWorkflowLabel(completeness.workflow?.status)}</strong>
             {completeness.workflow?.comment ? ` — ${completeness.workflow.comment}` : ""}
           </p>
-          {completeness.draft > 0 && completeness.workflow?.status === "draft" && (
-            <p className="tools-hint">
-              «Сдать на проверку» отправит комплект ЦО. Принять комплект можно будет после
-              того, как все формы будут сданы отдельно («Сдать форму» в карточке формы).
-            </p>
-          )}
-          <div className="tools-grid" style={{ marginBottom: "0.75rem" }}>
-            <label>
-              Комментарий к статусу
-              <input
-                value={workflowComment}
-                onChange={(e) => setWorkflowComment(e.target.value)}
-                placeholder="Необязательно"
-              />
-            </label>
-          </div>
-          {workflowActions.length > 0 && (
-            <div className="toolbar-actions" style={{ marginBottom: "0.75rem" }}>
-              {workflowActions.map((a) => (
-                <button
-                  key={a.status}
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={busy || !canMutate}
-                  onClick={() => void handleWorkflow(a.status)}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="completeness-bar">
             <div
               className="completeness-fill"
@@ -846,7 +785,7 @@ export function PackagePage() {
                 {childOrgs.length > 0 ? ` (${childOrgs.length})` : ""}
               </button>
             )}
-            {admin && canMutate && !periodClosed && wf === "accepted" && (
+            {admin && canMutate && !periodClosed && bpCompleted && (
               <button
                 type="button"
                 className="btn btn-secondary"

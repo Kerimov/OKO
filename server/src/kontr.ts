@@ -95,14 +95,29 @@ export async function importKontrPayload(
 ): Promise<number> {
   const items = payload.items ?? [];
   await db.transaction(async (tx) => {
-    await tx.exec("DELETE FROM kontragents");
-    const insert = tx.prepare(
+    // Non-destructive: upsert by id/guid; archive rows absent from payload.
+    const seen = new Set<number>();
+    const upsert = tx.prepare(
       `INSERT INTO kontragents (
-         id, name, org_form, inn, kpp, org_type, mandatory_rash, country, city, ogrn, old_name, id_obdnsi
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         id, name, org_form, inn, kpp, org_type, mandatory_rash, country, city, ogrn, old_name, id_obdnsi, archived
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         org_form = excluded.org_form,
+         inn = excluded.inn,
+         kpp = excluded.kpp,
+         org_type = excluded.org_type,
+         mandatory_rash = excluded.mandatory_rash,
+         country = excluded.country,
+         city = excluded.city,
+         ogrn = excluded.ogrn,
+         old_name = excluded.old_name,
+         id_obdnsi = excluded.id_obdnsi,
+         archived = 0`
     );
     for (const k of items) {
-      await insert.run(
+      seen.add(k.id);
+      await upsert.run(
         k.id,
         k.name,
         k.orgForm ?? null,
@@ -116,6 +131,15 @@ export async function importKontrPayload(
         k.oldName ?? null,
         k.idObdnsi ?? null
       );
+    }
+    const existing = (await tx
+      .prepare(`SELECT id FROM kontragents`)
+      .all()) as Array<{ id: number }>;
+    const archive = tx.prepare(`UPDATE kontragents SET archived = 1 WHERE id = ?`);
+    for (const row of existing) {
+      if (!seen.has(Number(row.id))) {
+        await archive.run(row.id);
+      }
     }
   });
   return items.length;

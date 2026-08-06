@@ -125,11 +125,10 @@ export function isReadOnlyPsdRole(role: PsdRole): boolean {
   return role === "auditor_readonly";
 }
 
-/** API role (admin|user) derived from legacy + PSD for existing guards. */
-export function apiRoleFromAccounts(legacyRole: LegacyUserRole, psdRole: PsdRole): "admin" | "user" {
-  if (legacyRole === "admin" || psdRole === "support_specialist" || psdRole === "business_process_manager") {
-    return "admin";
-  }
+/** API role (admin|user) derived from legacy only — PSD rights are Nest-guarded. */
+export function apiRoleFromAccounts(legacyRole: LegacyUserRole, _psdRole: PsdRole): "admin" | "user" {
+  void _psdRole;
+  if (legacyRole === "admin") return "admin";
   return "user";
 }
 

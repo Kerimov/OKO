@@ -32,6 +32,7 @@ export interface OrganizationDto {
 export interface PeriodDto {
   eid: number;
   zid: number;
+  packageId?: string | null;
   name: string;
   periodStart: string | null;
   periodEnd: string | null;
@@ -46,6 +47,14 @@ export interface PeriodDto {
   formSetCount?: number;
   packageKind?: "OKO" | "BALANCE";
   collectionUnitZid?: number | null;
+}
+
+export interface PackageContext {
+  packageId: string;
+  zid: number;
+  eid: number;
+  packageKind: "OKO" | "BALANCE";
+  collectionUnitZid: number;
 }
 
 export interface WorkContextDto {
@@ -304,6 +313,7 @@ function rowToOrg(row: {
 function rowToPeriod(row: {
   eid: number;
   zid: number;
+  package_id?: string | null;
   name: string;
   period_start: string | null;
   period_end: string | null;
@@ -322,6 +332,7 @@ function rowToPeriod(row: {
   return {
     eid: row.eid,
     zid: row.zid,
+    packageId: row.package_id ?? packageIdFor(row.zid, row.eid, row.package_kind),
     name: row.name,
     periodStart: dateOrNull(row.period_start),
     periodEnd: dateOrNull(row.period_end),
@@ -337,6 +348,46 @@ function rowToPeriod(row: {
     packageKind: row.package_kind === "BALANCE" ? "BALANCE" : "OKO",
     collectionUnitZid:
       row.collection_unit_zid == null ? row.zid : Number(row.collection_unit_zid),
+  };
+}
+
+export function packageIdFor(
+  zid: number,
+  eid: number,
+  packageKind: string | null | undefined
+): string {
+  return `pkg-${zid}-${eid}-${packageKind === "BALANCE" ? "BALANCE" : "OKO"}`;
+}
+
+/** Resolve one package's complete context from its reporting-period record. */
+export async function resolvePackageContext(
+  db: OkoDb,
+  input: { zid: number; eid: number; packageKind?: "OKO" | "BALANCE" }
+): Promise<PackageContext | null> {
+  const row = (await db
+    .prepare(
+      `SELECT zid, eid, package_kind, collection_unit_zid, package_id
+       FROM periods WHERE zid = ? AND eid = ?`
+    )
+    .get(input.zid, input.eid)) as
+    | {
+        zid: number;
+        eid: number;
+        package_kind: string | null;
+        collection_unit_zid: number | null;
+        package_id: string | null;
+      }
+    | undefined;
+  if (!row) return null;
+  const packageKind = row.package_kind === "BALANCE" ? "BALANCE" : "OKO";
+  if (input.packageKind && input.packageKind !== packageKind) return null;
+  return {
+    zid: Number(row.zid),
+    eid: Number(row.eid),
+    packageKind,
+    collectionUnitZid:
+      row.collection_unit_zid == null ? Number(row.zid) : Number(row.collection_unit_zid),
+    packageId: row.package_id ?? packageIdFor(row.zid, row.eid, packageKind),
   };
 }
 
@@ -379,6 +430,13 @@ export async function setPackageWorkflow(
     force?: boolean;
   }
 ): Promise<PackageWorkflowDto> {
+  const err = new Error(
+    "Package status is derived from the business process; use a business-process transition"
+  );
+  (err as Error & { status: number }).status = 409;
+  throw err;
+
+  /* Legacy implementation retained below for migration history only. */
   await assertPeriodWritable(db, eid, zid, { force: input.force === true });
   const current = await loadPackageWorkflow(db, zid, eid);
   if (
@@ -481,7 +539,7 @@ export async function createOrganization(
 }
 
 export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]> {
-  const select = `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end, p.quarter, p.year,
+  const select = `SELECT p.eid, p.zid, p.package_id, p.name, p.period_start, p.period_end, p.quarter, p.year,
               p.package_status, p.package_comment,
               p.period_status, p.closed_at, p.closed_by, p.methodology_release_id,
               p.package_kind, p.collection_unit_zid,
@@ -493,6 +551,7 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
       .all(zid)) as Array<{
       eid: number;
       zid: number;
+      package_id: string | null;
       name: string;
       period_start: string | null;
       period_end: string | null;
@@ -513,6 +572,7 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
     .all()) as Array<{
     eid: number;
     zid: number;
+    package_id: string | null;
     name: string;
     period_start: string | null;
     period_end: string | null;
@@ -556,13 +616,18 @@ export async function createPeriod(
       : await resolveActiveMethodologyId(db);
   const packageKind = input.packageKind === "BALANCE" ? "BALANCE" : "OKO";
   const collectionUnitZid = input.collectionUnitZid ?? input.zid;
+  const collectionUnit = await db
+    .prepare("SELECT 1 FROM organizations WHERE zid = ?")
+    .get(collectionUnitZid);
+  if (!collectionUnit) throw new Error("Collection unit not found");
+  const packageId = packageIdFor(input.zid, eid, packageKind);
 
   await db
     .prepare(
       `INSERT INTO periods (
          eid, zid, name, period_start, period_end, quarter, year,
-         period_status, methodology_release_id, package_kind, collection_unit_zid
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`
+         period_status, methodology_release_id, package_kind, collection_unit_zid, package_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`
     )
     .run(
       eid,
@@ -574,7 +639,8 @@ export async function createPeriod(
       input.year ?? null,
       methodologyId,
       packageKind,
-      collectionUnitZid
+      collectionUnitZid,
+      packageId
     );
 
   const formSetCount = await snapshotPeriodFormSet(db, eid);
@@ -590,6 +656,7 @@ export async function createPeriod(
   return {
     eid,
     zid: input.zid,
+    packageId,
     name: input.name.trim(),
     periodStart: dateOrNull(input.periodStart),
     periodEnd: dateOrNull(input.periodEnd),

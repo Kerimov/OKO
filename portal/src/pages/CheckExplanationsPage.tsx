@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { canMutateData } from "../auth";
 import {
   getCheckApprovalBlockers,
@@ -15,6 +16,7 @@ import { isBackendMode } from "../storage";
 import { loadWorkContext } from "../packagesApi";
 
 export function CheckExplanationsPage() {
+  const [searchParams] = useSearchParams();
   const backend = isBackendMode();
   const canMutate = canMutateData();
   const [zid, setZid] = useState("");
@@ -35,13 +37,14 @@ export function CheckExplanationsPage() {
     void (async () => {
       try {
         const ctx = await loadWorkContext();
-        if (ctx.zid != null) setZid(String(ctx.zid));
-        if (ctx.eid != null) setEid(String(ctx.eid));
+        setZid(searchParams.get("zid") ?? (ctx.zid != null ? String(ctx.zid) : ""));
+        setEid(searchParams.get("eid") ?? (ctx.eid != null ? String(ctx.eid) : ""));
+        if (searchParams.get("packageKind") === "BALANCE") setPackageKind("BALANCE");
       } catch {
         /* ignore */
       }
     })();
-  }, [backend]);
+  }, [backend, searchParams]);
 
   const load = useCallback(async () => {
     const z = Number(zid);

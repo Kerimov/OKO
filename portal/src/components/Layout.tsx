@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { isAuditorReadonly, logout } from "../auth";
+import {
+  hasPsdPermission,
+  isAuditorReadonly,
+  logout,
+  psdRoleLabelRu,
+  resolveUiPsdRole,
+} from "../auth";
+import { t } from "../i18n";
 import { breadcrumbsForPath } from "../breadcrumbs";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
@@ -105,10 +112,13 @@ function SidebarSection({
 export function Layout() {
   const auth = useAuth();
   const { pathname } = useLocation();
-  const adminNav =
-    isBackendMode() && (!auth.authRequired || auth.role === "admin");
+  const techNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("tech.configure"));
+  const nsiNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("nsi.read"));
+  const reportsNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("reports.build"));
+  const auditNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("audit.read_only") || hasPsdPermission("tech.configure"));
   const orgUser = auth.user?.role === "org";
   const user = auth.user;
+  const psdRole = resolveUiPsdRole(user);
   const formsNavLabel = formsListNavLabel(auth);
   const auditorRo = isAuditorReadonly();
 
@@ -161,7 +171,7 @@ export function Layout() {
             ? [
                 {
                   to: "/bp",
-                  label: "Мониторинг БП",
+                  label: t("nav.bpMonitor"),
                   isActive: (p: string) => p === "/bp",
                 },
               ]
@@ -170,7 +180,7 @@ export function Layout() {
       },
     ];
 
-    if (!orgUser) {
+    if (!orgUser || techNav) {
       list.push({
         id: "ops",
         title: "Операции",
@@ -180,7 +190,7 @@ export function Layout() {
       });
     }
 
-    if (adminNav) {
+    if (techNav) {
       list.push({
         id: "editors",
         title: "Редакторы",
@@ -194,7 +204,6 @@ export function Layout() {
           { to: "/admin/saldo", label: "Сальдо", isActive: (p) => p === "/admin/saldo" },
           { to: "/admin/excel", label: "Маппинг Excel", isActive: (p) => p === "/admin/excel" },
           { to: "/admin/rash", label: "Расшифровки", isActive: (p) => p === "/admin/rash" },
-          { to: "/admin/refs", label: "Справочники", isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr" },
           {
             to: "/admin/aggregation",
             label: "Агрегация",
@@ -202,38 +211,69 @@ export function Layout() {
           },
         ],
       });
-      list.push({
-        id: "admin",
-        title: "Администрирование",
-        items: [
+    }
+
+    if (nsiNav || techNav || reportsNav || auditNav) {
+      const adminItems: NavItem[] = [];
+      if (techNav) {
+        adminItems.push(
           {
             to: "/admin/packages",
             label: "Комплекты",
             isActive: (p) => p === "/admin/packages",
           },
-          { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" },
-          { to: "/admin/audit", label: "Аудит", isActive: (p) => p === "/admin/audit" },
+          { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" }
+        );
+      }
+      if (auditNav) {
+        adminItems.push({
+          to: "/admin/audit",
+          label: "Аудит",
+          isActive: (p) => p === "/admin/audit",
+        });
+      }
+      if (nsiNav) {
+        adminItems.push(
           {
-            to: "/integrations",
-            label: "Интеграции / своды",
-            isActive: (p) => p === "/integrations",
+            to: "/admin/refs",
+            label: "Справочники",
+            isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr",
+          },
+          {
+            to: "/perimeter",
+            label: t("nav.perimeter"),
+            isActive: (p) => p === "/perimeter",
           },
           {
             to: "/collection-units",
             label: "Единицы сбора",
             isActive: (p) => p === "/collection-units",
-          },
-          {
-            to: "/psd-reports",
-            label: "Отчёты ПСД",
-            isActive: (p) => p === "/psd-reports",
-          },
-          {
-            to: "/check-explanations",
-            label: "Объяснения проверок",
-            isActive: (p) => p === "/check-explanations",
-          },
-        ],
+          }
+        );
+      }
+      if (techNav) {
+        adminItems.push({
+          to: "/integrations",
+          label: t("nav.integrations"),
+          isActive: (p) => p === "/integrations",
+        });
+      }
+      if (reportsNav) {
+        adminItems.push({
+          to: "/psd-reports",
+          label: t("nav.psdReports"),
+          isActive: (p) => p === "/psd-reports",
+        });
+      }
+      adminItems.push({
+        to: "/check-explanations",
+        label: "Объяснения проверок",
+        isActive: (p) => p === "/check-explanations",
+      });
+      list.push({
+        id: "admin",
+        title: "Администрирование",
+        items: adminItems,
       });
     } else if (!isBackendMode()) {
       list.push({
@@ -258,7 +298,7 @@ export function Layout() {
     });
 
     return list;
-  }, [adminNav, formsNavLabel, orgUser]);
+  }, [techNav, nsiNav, reportsNav, auditNav, formsNavLabel, orgUser]);
 
   const commandItems: CommandItem[] = useMemo(() => {
     const items: CommandItem[] = [];
@@ -397,13 +437,22 @@ export function Layout() {
                 <span className="app-header-user-meta">
                   <span className="app-header-user-name">
                     {user.displayName || user.username}
+                    {isBackendMode() && (
+                      <span
+                        className="status-badge"
+                        style={{ marginLeft: 6, fontSize: "0.75em" }}
+                        title="PSD role"
+                      >
+                        {psdRoleLabelRu(psdRole)}
+                      </span>
+                    )}
                     {auditorRo && (
                       <span
                         className="status-badge"
                         style={{ marginLeft: 6, fontSize: "0.75em" }}
                         title="Аудитор: мутации недоступны"
                       >
-                        только чтение
+                        {t("badge.readonly")}
                       </span>
                     )}
                   </span>

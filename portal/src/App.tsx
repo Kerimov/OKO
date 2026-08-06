@@ -24,6 +24,7 @@ import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { CollectionUnitsPage } from "./pages/CollectionUnitsPage";
 import { PsdReportsPage } from "./pages/PsdReportsPage";
 import { CheckExplanationsPage } from "./pages/CheckExplanationsPage";
+import { PerimeterPage } from "./pages/PerimeterPage";
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="bp" element={<BpMonitorPage />} />
             <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="collection-units" element={<CollectionUnitsPage />} />
+            <Route path="perimeter" element={<PerimeterPage />} />
             <Route path="psd-reports" element={<PsdReportsPage />} />
             <Route path="check-explanations" element={<CheckExplanationsPage />} />
             <Route path="admin/checks" element={<ChecksEditorPage />} />

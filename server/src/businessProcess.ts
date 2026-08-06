@@ -20,6 +20,8 @@ import {
   formatApprovalBlockersMessage,
   getApprovalBlockers,
 } from "./checkJournal.js";
+import type { PackageWorkflowStatus } from "./packages.js";
+import { getUserById } from "./users.js";
 
 type BpRow = {
   id: string;
@@ -215,6 +217,41 @@ const ACTION_TARGET: Record<BpAction, BpStatus> = {
   reopen: "collecting",
 };
 
+/**
+ * Compatibility-only legacy status. It is derived from the BP and is never a
+ * workflow authority. The historical schema has no distinct collecting/closed
+ * states, so draft and accepted are the closest stable values.
+ */
+export function packageStatusForBp(status: BpStatus): PackageWorkflowStatus {
+  switch (status) {
+    case "pending_curator_approval":
+      return "submitted";
+    case "curator_approved":
+    case "completed":
+      return "accepted";
+    case "not_started":
+    case "collecting":
+    default:
+      return "draft";
+  }
+}
+
+async function syncDerivedPackageStatus(
+  db: OkoDb,
+  bp: BusinessProcessDto,
+  status: BpStatus,
+  actor: string,
+  at: string
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE periods
+       SET package_status = ?, status_updated_at = ?, status_updated_by = ?
+       WHERE zid = ? AND eid = ?`
+    )
+    .run(packageStatusForBp(status), at, actor, bp.zid, bp.eid);
+}
+
 const ACTION_PERMISSION = {
   start: "bp.start",
   submit_for_approval: "bp.submit_for_approval",
@@ -285,16 +322,18 @@ export async function transitionBusinessProcess(
       ? current.iteration + (input.action === "submit_for_approval" ? 1 : 0)
       : current.iteration;
 
-  await db
-    .prepare(
-      `UPDATE business_processes
-       SET status = ?, iteration = ?, note = COALESCE(?, note),
-           last_changed_at = ?, last_changed_by = ?
-       WHERE id = ?`
-    )
-    .run(to, iteration, input.note ?? null, now, input.actor, input.id);
-
-  await appendEvent(db, input.id, current.status, to, input.actor, input.note ?? null);
+  await db.transaction(async (tx) => {
+    await tx
+      .prepare(
+        `UPDATE business_processes
+         SET status = ?, iteration = ?, note = COALESCE(?, note),
+             last_changed_at = ?, last_changed_by = ?
+         WHERE id = ?`
+      )
+      .run(to, iteration, input.note ?? null, now, input.actor, input.id);
+    await syncDerivedPackageStatus(tx, current, to, input.actor, now);
+    await appendEvent(tx, input.id, current.status, to, input.actor, input.note ?? null);
+  });
   return (await getBusinessProcess(db, input.id))!;
 }
 
@@ -319,6 +358,17 @@ export async function assignBpCurator(
     const err = new Error("Business process is completed and locked");
     (err as Error & { status: number }).status = 409;
     throw err;
+  }
+  if (input.curatorUserId != null) {
+    const curator = await getUserById(db, input.curatorUserId);
+    if (
+      !curator ||
+      (curator.psdRole !== "department_curator" && curator.psdRole !== "support_specialist")
+    ) {
+      const err = new Error("Assigned curator must have department_curator or support_specialist role");
+      (err as Error & { status: number }).status = 400;
+      throw err;
+    }
   }
   const now = new Date().toISOString();
   await db
@@ -361,6 +411,29 @@ export async function assertFormsWritableForBp(
   if (bp.status === "not_started") {
     const err = new Error("start BP first");
     (err as Error & { status: number }).status = 409;
+    throw err;
+  }
+  if (bp.status === "pending_curator_approval") {
+    const err = new Error("Package data is locked: awaiting curator approval");
+    (err as Error & { status: number }).status = 409;
+    throw err;
+  }
+}
+
+/** Throw 403 if subsidiary user tries to access another org's BP. */
+export function assertBpOrgAccess(
+  bp: BusinessProcessDto,
+  user: { zid?: number | null; role?: string | null; psdRole?: string | null } | null | undefined
+): void {
+  const psd = resolvePsdRole({
+    legacyRole: user?.role,
+    psdRole: user?.psdRole,
+  });
+  if (psd !== "subsidiary_specialist") return;
+  if (user?.zid == null) return;
+  if (Number(user.zid) !== Number(bp.zid)) {
+    const err = new Error("Access denied for this organization");
+    (err as Error & { status: number }).status = 403;
     throw err;
   }
 }

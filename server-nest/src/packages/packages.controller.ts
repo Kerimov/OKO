@@ -3,7 +3,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpException,
@@ -21,18 +20,15 @@ import {
   getPackageCompleteness,
   getPackagesDashboard,
   importReportPackage,
-  setPackageWorkflow,
-  type PackageWorkflowStatus,
 } from "../../../server/src/packages.js";
 import {
   assertOrgZidParam,
 } from "../../../server/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
-import { PackageImportDto, PackageWorkflowPutDto, PackageZidEidDto } from "./dto/packages.dto.js";
+import { PackageImportDto, PackageZidEidDto } from "./dto/packages.dto.js";
 import { assertPackageSubmittedChecks } from "../../../server/src/instance-submit.js";
 import type { OkoFormInstance } from "../../../server/src/types.js";
-import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 
 @ApiTags("packages")
 @ApiBearerAuth()
@@ -54,43 +50,6 @@ export class PackagesController {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       rethrowAsHttp(e, "failed");
-    }
-  }
-
-  @Post("workflow")
-  @HttpCode(200)
-  @ApiOperation({
-    summary:
-      "Сменить статус комплекта (draft→submitted→returned/accepted; corrected→submitted)",
-  })
-  async setWorkflow(@Req() req: OkoRequest, @Body() body: PackageWorkflowPutDto) {
-    if (!body.zid || !body.eid || !body.status) {
-      throw new BadRequestException("zid, eid and status required");
-    }
-    try {
-      assertOrgZidParam(req, body.zid);
-      return await setPackageWorkflow(await getDb(), body.zid, body.eid, {
-        status: body.status as PackageWorkflowStatus,
-        comment: body.comment ?? null,
-        actor: req.apiUser?.username ?? req.apiRole ?? null,
-        isAdmin: req.apiRole === "admin",
-        force: body.force === true && req.apiRole === "admin",
-      });
-    } catch (e) {
-      if (e instanceof HttpException) throw e;
-      const msg = e instanceof Error ? e.message : "workflow update failed";
-      const status = (e as Error & { status?: number }).status;
-      if (status === 403) {
-        throw new ForbiddenException(msg);
-      }
-      if (
-        status === 400 ||
-        /неполон|не все|недопустимый|закрыт|нельзя принять|period is closed/i.test(msg)
-      ) {
-        throw new BadRequestException(msg);
-      }
-      console.error("[packages/workflow]", msg, e);
-      rethrowAsHttp(e, "workflow update failed");
     }
   }
 

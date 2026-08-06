@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:selftest": "tsx src/sessionPolicy.selftest.ts && tsx src/aggregationSafety.selftest.ts && tsx src/spreadsheetModel.selftest.ts && tsx src/psdFoundation.selftest.ts",
+    "test:selftest": "tsx src/sessionPolicy.selftest.ts && tsx src/aggregationSafety.selftest.ts && tsx src/spreadsheetModel.selftest.ts && tsx src/psdFoundation.selftest.ts && tsx src/businessProcess.workflow.selftest.ts && tsx src/tzImport.selftest.ts && tsx src/auth.psdWriteGuard.selftest.ts && tsx src/checkNotation12.selftest.ts && tsx src/nsiPerimeter.selftest.ts",
     "import:tz": "tsx src/scripts/importTzAppendices.ts",
     "migrate:dry-run": "tsx src/migrateDryRun.ts"
   },

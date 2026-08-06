@@ -122,6 +122,7 @@ export interface CheckJournalEntryDto {
   eid: number;
   packageKind: PackageKind;
   ruleNumber: number | null;
+  ruleCode: string | null;
   checkType: string | null;
   passed: boolean;
   leftValue: number | null;
@@ -388,6 +389,7 @@ export async function appendCheckJournal(body: {
   packageKind?: PackageKind;
   results: Array<{
     ruleNumber?: number | null;
+    ruleCode?: string | null;
     checkType?: string | null;
     passed: boolean;
     leftValue?: number | null;
@@ -400,6 +402,23 @@ export async function appendCheckJournal(body: {
   return apiFetch("/api/psd-checks/journal", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export async function runPackageChecks(input: {
+  zid: number;
+  eid: number;
+  packageKind?: PackageKind;
+}): Promise<{
+  runId: string;
+  packageKind: PackageKind;
+  passed: number;
+  failed: number;
+  results: Array<{ code: string; passed: boolean; message: string }>;
+}> {
+  return apiFetch("/api/psd-checks/package-run", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
@@ -491,9 +510,10 @@ export async function applyTransfers(body: {
   sourceEid: number;
   targetZid: number;
   targetEid: number;
+  kind: TransferMapKind;
   packageKind?: PackageKind;
-  kind?: TransferMapKind;
-}): Promise<{ applied: number; message?: string }> {
+  dryRun?: boolean;
+}): Promise<{ copied: number; skipped: number; errors: string[] }> {
   return apiFetch("/api/transfers/apply", {
     method: "POST",
     body: JSON.stringify(body),
@@ -568,11 +588,95 @@ export async function upsertCellComment(body: {
   articleCode?: string | null;
   kontrId?: number | null;
   freeText?: string | null;
-}): Promise<CellCommentDto> {
-  return apiFetch<CellCommentDto>("/api/cell-comments", {
+}): Promise<CellCommentDto & { amountMismatch?: boolean; cellAmount?: number | null }> {
+  return apiFetch("/api/cell-comments", {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+/* ── Perimeter / NSI card ── */
+
+export interface PerimeterOrgRow {
+  zid: number;
+  name: string;
+  code: string | null;
+  unitKind: string | null;
+  headZid: number | null;
+  compositeCode: string | null;
+  guid: string | null;
+}
+
+export interface PerimeterKontrRow {
+  id: number;
+  guid: string | null;
+  name: string;
+  inn: string | null;
+  kpp: string | null;
+  orgType: number | null;
+  country: string | null;
+  city: string | null;
+  archived: boolean;
+}
+
+export async function listPerimeterOrganizations(filter?: {
+  q?: string;
+  zid?: number;
+}): Promise<PerimeterOrgRow[]> {
+  const q = new URLSearchParams();
+  if (filter?.q) q.set("q", filter.q);
+  if (filter?.zid != null) q.set("zid", String(filter.zid));
+  const qs = q.toString();
+  return apiFetch(`/api/perimeter/organizations${qs ? `?${qs}` : ""}`);
+}
+
+export async function listPerimeterKontragents(filter?: {
+  q?: string;
+  includeArchived?: boolean;
+}): Promise<PerimeterKontrRow[]> {
+  const q = new URLSearchParams();
+  if (filter?.q) q.set("q", filter.q);
+  if (filter?.includeArchived) q.set("includeArchived", "1");
+  const qs = q.toString();
+  return apiFetch(`/api/perimeter/kontragents${qs ? `?${qs}` : ""}`);
+}
+
+export async function findPerimeterKontrByGuid(
+  guid: string
+): Promise<PerimeterKontrRow | null> {
+  try {
+    return await apiFetch<PerimeterKontrRow>(
+      `/api/perimeter/kontr-by-guid/${encodeURIComponent(guid)}`
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function getKontrCard(kontrId: number, asOf?: string) {
+  const q = asOf ? `?asOf=${encodeURIComponent(asOf)}` : "";
+  return apiFetch(`/api/kontr-versions/${kontrId}/card${q}`);
+}
+
+export async function updateKontrCardSection(
+  kontrId: number,
+  section: "basic" | "requisites" | "perimeter",
+  data: Record<string, unknown>
+) {
+  return apiFetch(`/api/kontr-versions/${kontrId}/card/${section}`, {
+    method: "PUT",
+    body: JSON.stringify({ data }),
+  });
+}
+
+export async function recommendArticles(input?: { q?: string; group?: string }) {
+  const q = new URLSearchParams();
+  if (input?.q) q.set("q", input.q);
+  if (input?.group) q.set("group", input.group);
+  const qs = q.toString();
+  return apiFetch<Array<{ kod: string; value: string; group: string }>>(
+    `/api/perimeter/recommended-articles${qs ? `?${qs}` : ""}`
+  );
 }
 
 /* ── Integrations (read-only status) ── */

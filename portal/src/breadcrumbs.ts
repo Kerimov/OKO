@@ -49,6 +49,10 @@ export function breadcrumbsForPath(
     return [home, { label: "Единицы сбора" }];
   }
 
+  if (parts[0] === "perimeter") {
+    return [home, { label: "Периметр сбора" }];
+  }
+
   if (parts[0] === "psd-reports") {
     return [home, { label: "Отчёты ПСД" }];
   }

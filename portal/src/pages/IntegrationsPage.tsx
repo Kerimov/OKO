@@ -10,9 +10,9 @@ import {
   listSvods,
   listTransferMaps,
   type IntegrationStatus,
-  type PackageKind,
   type SvodDefinitionDto,
   type TransferMapDto,
+  type TransferMapKind,
 } from "../psdApi";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
@@ -43,7 +43,7 @@ export function IntegrationsPage() {
   const [srcEid, setSrcEid] = useState("");
   const [tgtZid, setTgtZid] = useState("");
   const [tgtEid, setTgtEid] = useState("");
-  const [xferKind, setXferKind] = useState<PackageKind>("OKO");
+  const [xferKind, setXferKind] = useState<TransferMapKind>("period_to_period");
 
   const [exportZid, setExportZid] = useState("");
   const [exportEid, setExportEid] = useState("");
@@ -134,9 +134,12 @@ export function IntegrationsPage() {
         sourceEid,
         targetZid,
         targetEid,
-        packageKind: xferKind,
+        kind: xferKind,
       });
-      setStatusMsg(res.message ?? `Применено: ${res.applied}`);
+      setStatusMsg(
+        `Скопировано: ${res.copied}, пропущено: ${res.skipped}` +
+          (res.errors.length ? `; ошибок: ${res.errors.length}` : "")
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка применения переноса");
     } finally {
@@ -356,13 +359,14 @@ export function IntegrationsPage() {
                   <input value={tgtEid} onChange={(e) => setTgtEid(e.target.value)} />
                 </label>
                 <label>
-                  Тип
+                  Тип переноса
                   <select
                     value={xferKind}
-                    onChange={(e) => setXferKind(e.target.value as PackageKind)}
+                    onChange={(e) => setXferKind(e.target.value as TransferMapKind)}
                   >
-                    <option value="OKO">OKO</option>
-                    <option value="BALANCE">BALANCE</option>
+                    <option value="period_to_period">Период → период</option>
+                    <option value="balance_to_oko">BALANCE → OKO</option>
+                    <option value="oko_to_balance">OKO → BALANCE</option>
                   </select>
                 </label>
               </div>

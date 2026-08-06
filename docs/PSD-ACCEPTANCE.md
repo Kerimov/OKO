@@ -1,40 +1,40 @@
-# ПСД: готовность без XML/SAP/ЭЦП
+# ПСД: приёмочный статус (черновик)
 
-## Что считается готовым
+> **DRAFT.** Не считать функционал production-готовым, пока не зелёные integration/E2E
+> и не загружены/валидированы приложения ТЗ. XML/SAP/ЭЦП остаются вне scope.
 
-Функционал портала сбора данных **без** внешних интеграций DO XML, SAP-консолидации и ЭЦП:
+## Восстановленный контур (этапы 0–5)
 
 | Область | Статус |
 |---------|--------|
-| Роли PSD + legacy mapping | Готово |
-| Мониторинг БП и переходы | Готово (`/bp`, панель на `/package`) |
-| Блокировка форм после `completed` / до `start` | Готово |
-| OKO / BALANCE при создании периода | Готово |
-| Единицы сбора (иерархия) | Готово (`/collection-units`) |
-| Версии контрагентов | Готово (API + UI + автоверсия при save) |
-| Журнал проверок + объяснения + блокировка согласования | Готово |
-| DSL приложения 12 (парсер/реестр/прогон) | Готово (нужно загрузить правила) |
-| Комментарии к ячейкам | Готово (панель на форме) |
-| Реестр сводов / переносы / apply / МинФин mappings | Готово (UI `/integrations`) |
-| Отчёты сопровождения (безопасные пресеты) | Готово (`/psd-reports`) |
-| Auditor read-only | Готово (server APP_GUARD + UI) |
-| Локаль пользователя ru/en | Поля + отчёты; полная i18n UI — частично |
-| XML DO / SAP / ЭЦП | **Не входит** — порты/stub |
+| Express `userWriteGuard` vs Nest PSD RBAC | Исправлено: PSD-маршруты делегируются Nest |
+| Org scope / IDOR на БП и cell comments | Исправлено |
+| Domain BP/period locks в `patchInstanceCells` / transfers | Исправлено |
+| БП — единственный workflow; legacy status — derived | Исправлено |
+| Package context / `collection_unit_zid` | Миграция 007 |
+| Appendix 12 notation + package check run | `checkNotation12` + `packageCheckRun` + mig 008 |
+| НСИ карточка 3.1 / периметр / non-destructive import | mig 009 + `/perimeter` |
+| Deterministic TZ importers + transfer rollback + svod calc | mig 010 + `tzImport/` |
+| Safe support reports catalog | whitelist presets (без произвольного SQL) |
+| UX: BP lock banner на FormPage, PSD nav/role badge | Исправлено |
+| XML DO / SAP / ЭЦП | **Не входит** — stubs only |
 
-## Как принять
+## Bootstrap
 
-1. Применить миграции 005–006 (старт API).
+1. Обязательно прогнать numbered migrations (`005`–`010`) при старте API.
 2. Назначить PSD-роли в `/admin/users`.
-3. Сценарий БП: создать период (OKO) → на комплекте **Запустить БП** → ввод форм → сдача → журнал/объяснения на `/check-explanations` → на согласование → куратор → завершение → запись формы должна быть заблокирована.
-4. При необходимости импорт приложений ТЗ:
+3. Импорт приложений ТЗ:
    ```bash
-   DATABASE_URL=... npx tsx server/src/scripts/importTzAppendices.ts
+   cd server
+   DATABASE_URL=... npx tsx src/scripts/importTzAppendices.ts --preview
+   DATABASE_URL=... npx tsx src/scripts/importTzAppendices.ts --apply
    ```
-5. Загрузить DSL-правила через `POST /api/psd-checks/dsl-rules`, прогон `POST /api/psd-checks/dsl/run`.
+4. Package checks: `POST /api/psd-checks/package-run` `{ zid, eid, packageKind }`.
 
-## Ограничения (осознанные)
+## Acceptance gate (ещё не закрыт)
 
-- Полный корпус ~5 140 маппингов МинФин и ~4 000 переносов зависит от качества Excel-приложений и импорта; без них таблицы пустые.
-- Экспорт МинФин: шаблон `12345/ШаблоныФорм-МинФин.xlsx` + `minfin_mappings` (fallback: `excel_mappings`).
-- Конструктор произвольного SQL **не** делается: только whitelist-пресеты `support_report_presets`.
-- SSO/IdP — вне scope этого этапа.
+- [ ] Integration tests: PSD role matrix, org isolation, BP acceptance, package check run, completed lock, TZ import counts, svod/drill-down, MinFin filled workbook
+- [ ] Portal E2E real API journey
+- [ ] TZ volumes validated (~11 819 rules, ~4 137+1 820 transfers, ~5 141 MinFin)
+
+До закрытия gate — rollout в production **запрещён**.

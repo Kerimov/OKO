@@ -22,6 +22,7 @@ export interface CheckJournalEntryDto {
   eid: number;
   packageKind: PackageKind;
   ruleNumber: number | null;
+  ruleCode: string | null;
   checkType: string | null;
   passed: boolean;
   leftValue: number | null;
@@ -155,6 +156,7 @@ export async function appendCheckRunJournal(
     actor?: string | null;
     results: Array<{
       ruleNumber?: number | null;
+      ruleCode?: string | null;
       checkType?: string | null;
       passed: boolean;
       leftValue?: number | null;
@@ -170,9 +172,9 @@ export async function appendCheckRunJournal(
   const now = new Date().toISOString();
   const ins = db.prepare(
     `INSERT INTO check_run_journal (
-       run_id, zid, eid, package_kind, rule_number, check_type, passed,
+       run_id, zid, eid, package_kind, rule_number, rule_code, check_type, passed,
        left_value, right_value, message, form_id, requires_explanation, actor, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const r of input.results) {
     await ins.run(
@@ -181,6 +183,7 @@ export async function appendCheckRunJournal(
       input.eid,
       kind,
       r.ruleNumber ?? null,
+      r.ruleCode ?? null,
       r.checkType ?? null,
       r.passed ? 1 : 0,
       r.leftValue ?? null,
@@ -220,6 +223,7 @@ export async function listCheckJournal(
     eid: number;
     package_kind: string;
     rule_number: number | null;
+    rule_code: string | null;
     check_type: string | null;
     passed: number;
     left_value: number | null;
@@ -238,6 +242,7 @@ export async function listCheckJournal(
     eid: Number(r.eid),
     packageKind: normalizePackageKind(r.package_kind),
     ruleNumber: r.rule_number == null ? null : Number(r.rule_number),
+    ruleCode: r.rule_code ?? null,
     checkType: r.check_type,
     passed: !!r.passed,
     leftValue: r.left_value,
@@ -306,7 +311,7 @@ export async function getApprovalBlockers(
   const latest = (await db
     .prepare(
       `SELECT run_id FROM check_run_journal
-       WHERE zid = ? AND eid = ? AND package_kind = ?
+       WHERE zid = ? AND eid = ? AND package_kind = ? AND check_type = 'package_run'
        ORDER BY created_at DESC LIMIT 1`
     )
     .get(zid, eid, packageKind)) as { run_id: string } | undefined;

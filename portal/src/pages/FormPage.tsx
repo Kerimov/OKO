@@ -40,8 +40,11 @@ import { loadRowRashIndex, type RowRashIndexData } from "../engine/rowRashIndex"
 import { loadRashRefs, type RashRefsData } from "../engine/rashRefs";
 import { recalcForm, countRecalcRules } from "../engine/recalcEngine";
 import {
+  ensureBusinessProcess,
   listCellComments,
   upsertCellComment,
+  type BpStatus,
+  type BusinessProcessDto,
   type CellCommentDto,
 } from "../psdApi";
 import {
@@ -72,6 +75,7 @@ import type {
 import { buildInitialRows, alignInstanceRowsToSchema, formatPeriod, formStatusLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListBackLabel } from "../formsListLabels";
+import { t } from "../i18n";
 import { makeRowId } from "@oko/spreadsheet";
 
 export function FormPage() {
@@ -139,8 +143,14 @@ export function FormPage() {
   const formsBackLabel = formsListBackLabel(auth);
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const [periodClosed, setPeriodClosed] = useState(false);
+  const [bp, setBp] = useState<BusinessProcessDto | null>(null);
+  const bpStatus: BpStatus | null = bp?.status ?? null;
+  const bpLocked =
+    bpStatus === "not_started" ||
+    bpStatus === "pending_curator_approval" ||
+    bpStatus === "completed";
   const isLocked =
-    (instanceStatus === "submitted" && !admin) || periodClosed;
+    (instanceStatus === "submitted" && !admin) || periodClosed || bpLocked;
   const readOnly = isLocked || !canMutate;
   const alignedSchemaKeyRef = useRef<string | null>(null);
 
@@ -232,6 +242,16 @@ export function FormPage() {
             setPeriodClosed(p?.periodStatus === "closed");
           })
           .catch(() => setPeriodClosed(false));
+        if (backend) {
+          void ensureBusinessProcess({
+            zid: inst.zid,
+            eid: inst.eid,
+          })
+            .then(setBp)
+            .catch(() => setBp(null));
+        }
+      } else {
+        setBp(null);
       }
 
       // Черновик: берём актуальную схему, чтобы новые строки шаблона (после
@@ -925,6 +945,14 @@ export function FormPage() {
             <Link to="/catalog" className="back-link muted">
               Каталог
             </Link>
+            {instance.zid != null && instance.eid != null && (
+              <Link
+                to={`/check-explanations?zid=${instance.zid}&eid=${instance.eid}`}
+                className="back-link muted"
+              >
+                Проверки комплекта
+              </Link>
+            )}
           </div>
           <div className="form-title-block form-title-block-wide">
             <label className="display-name-label">
@@ -1105,7 +1133,18 @@ export function FormPage() {
       {!canMutate && (
         <div className="status-bar status-locked">Режим аудитора — только чтение.</div>
       )}
-      {isLocked && (
+      {bpLocked && bpStatus && (
+        <div className="status-bar status-locked">
+          {bpStatus === "not_started"
+            ? t("form.bpLocked.not_started")
+            : bpStatus === "pending_curator_approval"
+              ? t("form.bpLocked.pending")
+              : t("form.bpLocked.completed")}
+          {" "}
+          <Link to="/package">Открыть комплект</Link>
+        </div>
+      )}
+      {isLocked && !bpLocked && (
         <div className="status-bar status-locked">
           {periodClosed
             ? "Период закрыт — форма только для просмотра."
