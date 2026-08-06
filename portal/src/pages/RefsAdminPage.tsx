@@ -25,6 +25,7 @@ import {
 } from "../storage";
 import type { KontrAgent, RashRule } from "../types";
 import { useAuth } from "../useAuth";
+import { LoadingSkeleton } from "../components/LoadingSkeleton";
 
 type KontrDraft = {
   id: number | null;
