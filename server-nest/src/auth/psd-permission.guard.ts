@@ -22,7 +22,9 @@ export const RequirePsdPermissions = (...permissions: PsdPermission[]) =>
 
 @Injectable()
 export class PsdPermissionGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  // Avoid constructor DI for Reflector: Nest sometimes instantiates
+  // `@UseGuards(PsdPermissionGuard)` without injecting deps → 500.
+  private readonly reflector = new Reflector();
 
   canActivate(context: ExecutionContext): boolean {
     const required = this.reflector.getAllAndOverride<PsdPermission[]>(PSD_PERMISSIONS_KEY, [

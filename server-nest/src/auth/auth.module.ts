@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Global, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
@@ -6,6 +6,7 @@ import { AdminGuard } from "./admin.guard.js";
 import { RejectReadOnlyGuard } from "./reject-readonly.guard.js";
 import { PsdPermissionGuard } from "./psd-permission.guard.js";
 
+@Global()
 @Module({
   controllers: [AuthController],
   providers: [
