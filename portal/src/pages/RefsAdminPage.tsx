@@ -107,15 +107,14 @@ export function RefsAdminPage() {
   const visibleDirs = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return directories.filter((d) => {
-      if (dirFilter === "used" && d.ruleCount === 0 && !d.isKontr) return false;
-      if (dirFilter === "edited" && !d.overridden && !d.isKontr) return false;
-      if (dirFilter === "technical" && !d.technical) return false;
-      if (dirFilter !== "technical" && dirFilter !== "all" && d.technical && !d.isKontr) {
-        /* keep technical hidden unless explicitly requested or "all" */
-        if (dirFilter === "used" || dirFilter === "edited") return false;
+      if (dirFilter === "used") {
+        if (d.technical && !d.isKontr) return false;
+        if (d.ruleCount === 0 && !d.isKontr) return false;
+      } else if (dirFilter === "edited") {
+        if (!d.overridden) return false;
+      } else if (dirFilter === "technical") {
+        if (!d.technical) return false;
       }
-      if (dirFilter === "all" && d.technical) return true;
-      if (dirFilter === "used" && d.technical) return false;
       if (!needle) return true;
       return d.kind.toLowerCase().includes(needle);
     });
