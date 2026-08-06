@@ -210,6 +210,7 @@ export async function createKontrAgent(
   db: OkoDb,
   input: Omit<KontrAgentDto, "id"> & { name: string }
 ): Promise<KontrAgentDto> {
+  assertKontrFields(input);
   const maxId = (await db.prepare("SELECT COALESCE(MAX(id), 0) AS m FROM kontragents").get()) as {
     m: number;
   };
@@ -234,6 +235,30 @@ export async function createKontrAgent(
       input.oldName ?? null,
       input.idObdnsi ?? null
     );
+
+  try {
+    const { createKontrVersion } = await import("./kontrVersions.js");
+    await createKontrVersion(db, {
+      kontrId: id,
+      fields: {
+        name: input.name,
+        oldName: input.oldName ?? null,
+        inn: input.inn ?? null,
+        kpp: input.kpp ?? null,
+        ogrn: input.ogrn ?? null,
+        orgForm: input.orgForm ?? null,
+        orgType: input.orgType ?? null,
+        mandatoryRash: !!input.mandatoryRash,
+        country: input.country ?? null,
+        city: input.city ?? null,
+        idObdnsi: input.idObdnsi ?? null,
+      },
+      createdBy: "kontr.create",
+    });
+  } catch {
+    /* versions table may be absent before migration */
+  }
+
   return {
     id,
     name: input.name,
@@ -294,6 +319,7 @@ export async function updateKontrAgent(
     oldName: patch.oldName !== undefined ? patch.oldName : existing.old_name,
     idObdnsi: patch.idObdnsi !== undefined ? patch.idObdnsi : existing.id_obdnsi,
   };
+  assertKontrFields(next);
 
   await db
     .prepare(
@@ -317,7 +343,163 @@ export async function updateKontrAgent(
       id
     );
 
+  try {
+    const { createKontrVersion } = await import("./kontrVersions.js");
+    await createKontrVersion(db, {
+      kontrId: id,
+      fields: {
+        name: next.name,
+        oldName: next.oldName ?? null,
+        inn: next.inn ?? null,
+        kpp: next.kpp ?? null,
+        ogrn: next.ogrn ?? null,
+        orgForm: next.orgForm ?? null,
+        orgType: next.orgType ?? null,
+        mandatoryRash: !!next.mandatoryRash,
+        country: next.country ?? null,
+        city: next.city ?? null,
+        idObdnsi: next.idObdnsi ?? null,
+      },
+      createdBy: "kontr.update",
+    });
+  } catch {
+    /* ignore before migration */
+  }
+
   return { id, ...next };
+}
+
+export type KontrBulkItem = {
+  id?: number | null;
+  name: string;
+  oldName?: string | null;
+  inn?: string | null;
+  kpp?: string | null;
+  orgType?: number | null;
+  idObdnsi?: string | null;
+  orgForm?: string | null;
+  mandatoryRash?: boolean;
+  country?: string | null;
+  city?: string | null;
+  ogrn?: string | null;
+};
+
+function assertKontrFields(input: {
+  name?: string;
+  inn?: string | null;
+  kpp?: string | null;
+  orgType?: number | null;
+}): void {
+  if (!input.name?.trim()) throw new Error("name required");
+  const inn = (input.inn ?? "").trim();
+  if (inn && !/^\d{10}$|^\d{12}$/.test(inn)) {
+    throw new Error(`Invalid INN: ${inn}`);
+  }
+  const kpp = (input.kpp ?? "").trim();
+  if (kpp && !/^\d{9}$/.test(kpp)) {
+    throw new Error(`Invalid KPP: ${kpp}`);
+  }
+  if (
+    input.orgType != null &&
+    input.orgType !== undefined &&
+    ![1, 2, 3].includes(input.orgType)
+  ) {
+    throw new Error(`Invalid orgType: ${input.orgType}`);
+  }
+}
+
+/** Transactional create/update for dirty rows only. */
+export async function bulkUpsertKontrAgents(
+  db: OkoDb,
+  items: KontrBulkItem[]
+): Promise<{ created: number; updated: number; items: KontrAgentDto[] }> {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { created: 0, updated: 0, items: [] };
+  }
+  let created = 0;
+  let updated = 0;
+  const results: KontrAgentDto[] = [];
+
+  await db.transaction(async (tx) => {
+    const maxRow = (await tx
+      .prepare("SELECT COALESCE(MAX(id), 0) AS m FROM kontragents")
+      .get()) as { m: number };
+    let nextId = maxRow.m + 1;
+    const insert = tx.prepare(
+      `INSERT INTO kontragents (
+         id, name, org_form, inn, kpp, org_type, mandatory_rash, country, city, ogrn, old_name, id_obdnsi
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const update = tx.prepare(
+      `UPDATE kontragents SET
+         name = ?, org_form = ?, inn = ?, kpp = ?, org_type = ?, mandatory_rash = ?,
+         country = ?, city = ?, ogrn = ?, old_name = ?, id_obdnsi = ?
+       WHERE id = ?`
+    );
+    const select = tx.prepare(
+      `SELECT id, name, org_form, inn, kpp, org_type, mandatory_rash, country, city, ogrn, old_name, id_obdnsi
+       FROM kontragents WHERE id = ?`
+    );
+
+    for (const raw of items) {
+      assertKontrFields(raw);
+      const name = raw.name.trim();
+      const payload = {
+        name,
+        orgForm: raw.orgForm ?? null,
+        inn: raw.inn?.trim() || null,
+        kpp: raw.kpp?.trim() || null,
+        orgType: raw.orgType ?? null,
+        mandatoryRash: !!raw.mandatoryRash,
+        country: raw.country ?? null,
+        city: raw.city ?? null,
+        ogrn: raw.ogrn ?? null,
+        oldName: raw.oldName?.trim() || null,
+        idObdnsi: raw.idObdnsi?.trim() || null,
+      };
+
+      if (raw.id == null) {
+        const id = nextId++;
+        await insert.run(
+          id,
+          payload.name,
+          payload.orgForm,
+          payload.inn,
+          payload.kpp,
+          payload.orgType,
+          payload.mandatoryRash ? 1 : 0,
+          payload.country,
+          payload.city,
+          payload.ogrn,
+          payload.oldName,
+          payload.idObdnsi
+        );
+        created++;
+        results.push({ id, ...payload });
+      } else {
+        const existing = (await select.get(raw.id)) as { id: number } | undefined;
+        if (!existing) throw new Error(`Kontr agent not found: ${raw.id}`);
+        await update.run(
+          payload.name,
+          payload.orgForm,
+          payload.inn,
+          payload.kpp,
+          payload.orgType,
+          payload.mandatoryRash ? 1 : 0,
+          payload.country,
+          payload.city,
+          payload.ogrn,
+          payload.oldName,
+          payload.idObdnsi,
+          raw.id
+        );
+        updated++;
+        results.push({ id: raw.id, ...payload });
+      }
+    }
+  });
+
+  return { created, updated, items: results };
 }
 
 /** Access «Другое наименование»: current name → oldName, then apply new name. */

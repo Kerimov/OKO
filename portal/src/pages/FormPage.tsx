@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../apiClient";
 import { loadSchema, listFormCellDefinitions } from "../api";
+import { canMutateData } from "../auth";
 import { CheckResultsPanel } from "../components/CheckResultsPanel";
 import { FormTable } from "../components/FormTable";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
@@ -38,6 +39,11 @@ import {
 import { loadRowRashIndex, type RowRashIndexData } from "../engine/rowRashIndex";
 import { loadRashRefs, type RashRefsData } from "../engine/rashRefs";
 import { recalcForm, countRecalcRules } from "../engine/recalcEngine";
+import {
+  listCellComments,
+  upsertCellComment,
+  type CellCommentDto,
+} from "../psdApi";
 import {
   deleteInstance,
   exportInstance,
@@ -112,21 +118,93 @@ export function FormPage() {
   const recalcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const xlsxRef = useRef<HTMLInputElement>(null);
+  const [cellSel, setCellSel] = useState<{
+    rowIndex: number;
+    columnKey: string;
+    rowNo: string;
+  } | null>(null);
+  const [cellComments, setCellComments] = useState<CellCommentDto[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentArticle, setCommentArticle] = useState("");
+  const [commentAmount, setCommentAmount] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [commentStatus, setCommentStatus] = useState("");
 
   const kontrMode = schema ? isKontrForm(schema.id) : false;
   const rashMode = hasRashRules(rashRuleCount ?? 0);
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
+  const canMutate = canMutateData();
+  const backend = isBackendMode();
   const formsBackLabel = formsListBackLabel(auth);
   const instanceStatus: FormInstanceStatus = instance?.status ?? "draft";
   const [periodClosed, setPeriodClosed] = useState(false);
   const isLocked =
     (instanceStatus === "submitted" && !admin) || periodClosed;
+  const readOnly = isLocked || !canMutate;
   const alignedSchemaKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     alignedSchemaKeyRef.current = null;
   }, [instanceId]);
+
+  useEffect(() => {
+    if (!backend || !instanceId) {
+      setCellComments([]);
+      return;
+    }
+    void listCellComments(instanceId)
+      .then(setCellComments)
+      .catch(() => setCellComments([]));
+  }, [backend, instanceId]);
+
+  useEffect(() => {
+    if (!cellSel) {
+      setCommentText("");
+      setCommentArticle("");
+      setCommentAmount("");
+      return;
+    }
+    const rowNo = Number(cellSel.rowNo);
+    const existing = cellComments.find(
+      (c) => c.rowNo === rowNo && c.columnKey === cellSel.columnKey
+    );
+    setCommentText(existing?.freeText ?? "");
+    setCommentArticle(existing?.articleCode ?? "");
+    setCommentAmount(existing?.amount != null ? String(existing.amount) : "");
+    setCommentStatus("");
+  }, [cellSel, cellComments]);
+
+  const handleSaveCellComment = async () => {
+    if (!backend || !instance || !schema || !cellSel || !canMutate) return;
+    const rowNo = Number(cellSel.rowNo);
+    if (!Number.isFinite(rowNo)) return;
+    setCommentBusy(true);
+    setCommentStatus("");
+    try {
+      const amountRaw = commentAmount.trim();
+      const saved = await upsertCellComment({
+        instanceId: instance.instanceId,
+        formId: schema.id,
+        rowNo,
+        columnKey: cellSel.columnKey,
+        freeText: commentText.trim() || null,
+        articleCode: commentArticle.trim() || null,
+        amount: amountRaw === "" ? null : Number(amountRaw),
+      });
+      setCellComments((prev) => {
+        const without = prev.filter(
+          (c) => !(c.rowNo === saved.rowNo && c.columnKey === saved.columnKey)
+        );
+        return [...without, saved];
+      });
+      setCommentStatus("Комментарий сохранён");
+    } catch (e) {
+      setCommentStatus(e instanceof Error ? e.message : "Ошибка сохранения комментария");
+    } finally {
+      setCommentBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!instanceId) return;
@@ -1024,6 +1102,9 @@ export function FormPage() {
         </div>
       </div>
       {status && <div className="status-bar">{status}</div>}
+      {!canMutate && (
+        <div className="status-bar status-locked">Режим аудитора — только чтение.</div>
+      )}
       {isLocked && (
         <div className="status-bar status-locked">
           {periodClosed
@@ -1141,12 +1222,67 @@ export function FormPage() {
         kontrRefA1Name={kontrRefA1Name}
         rashThresholds={rashData?.thresholds}
         cellErrors={cellErrors}
-        readOnly={isLocked}
+        readOnly={readOnly}
         rashSlots={rashSlots}
         rashEntryCounts={rashEntryCounts}
         rashReadonlyCells={rashReadonlyCells}
-        onRashOpen={rashMode && !isLocked ? openRashModal : undefined}
+        onRashOpen={rashMode && !readOnly ? openRashModal : undefined}
+        onSelectionChange={backend ? setCellSel : undefined}
       />
+
+      {backend && (
+        <section className="tools-section" style={{ marginTop: "1rem" }}>
+          <h2>Комментарий к ячейке</h2>
+          {!cellSel && (
+            <p className="tools-hint">Выберите ячейку в таблице (режим сетки)</p>
+          )}
+          {cellSel && (
+            <>
+              <p className="tools-hint">
+                Строка {cellSel.rowNo} · графа <code>{cellSel.columnKey}</code>
+              </p>
+              <div className="tools-grid">
+                <label>
+                  Текст
+                  <input
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    disabled={readOnly}
+                  />
+                </label>
+                <label>
+                  Код статьи
+                  <input
+                    value={commentArticle}
+                    onChange={(e) => setCommentArticle(e.target.value)}
+                    disabled={readOnly}
+                  />
+                </label>
+                <label>
+                  Сумма
+                  <input
+                    value={commentAmount}
+                    onChange={(e) => setCommentAmount(e.target.value)}
+                    inputMode="decimal"
+                    disabled={readOnly}
+                  />
+                </label>
+              </div>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={commentBusy}
+                  onClick={() => void handleSaveCellComment()}
+                >
+                  {commentBusy ? "Сохранение…" : "Сохранить комментарий"}
+                </button>
+              )}
+              {commentStatus && <p className="tools-hint">{commentStatus}</p>}
+            </>
+          )}
+        </section>
+      )}
 
       {xlsxPreview && (
         <div className="rash-modal-backdrop" onClick={() => setXlsxPreview(null)}>

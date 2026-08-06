@@ -38,6 +38,8 @@ export class UsersController {
         password: body.password,
         displayName: body.displayName,
         role: body.role ?? "org",
+        psdRole: body.psdRole,
+        locale: body.locale,
         zid: body.zid,
       });
       await refreshUserAccountsCache();

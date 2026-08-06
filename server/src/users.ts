@@ -1,5 +1,10 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { OkoDb } from "./oko-db.js";
+import {
+  legacyToPsdRole,
+  resolvePsdRole,
+  type PsdRole,
+} from "./psdRoles.js";
 
 export type UserRole = "admin" | "org";
 
@@ -13,6 +18,8 @@ export interface UserRow {
   active: number;
   created_at: string;
   updated_at: string;
+  psd_role?: string | null;
+  locale?: string | null;
 }
 
 export interface UserDto {
@@ -20,6 +27,8 @@ export interface UserDto {
   username: string;
   displayName: string | null;
   role: UserRole;
+  psdRole: PsdRole;
+  locale: string;
   zid: number | null;
   organizationName?: string | null;
   active: boolean;
@@ -32,6 +41,8 @@ export interface SessionUser {
   username: string;
   displayName: string | null;
   role: UserRole;
+  psdRole: PsdRole;
+  locale: string;
   zid: number | null;
 }
 
@@ -102,6 +113,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(expected, derived);
 }
 
+const USER_SELECT = `id, username, password_hash, display_name, role, zid, active, created_at, updated_at,
+                     psd_role, locale`;
+
 async function rowToDto(db: OkoDb, row: UserRow): Promise<UserDto> {
   let organizationName: string | null = null;
   if (row.zid != null) {
@@ -110,11 +124,14 @@ async function rowToDto(db: OkoDb, row: UserRow): Promise<UserDto> {
       .get(row.zid)) as { name: string } | undefined;
     organizationName = org?.name ?? null;
   }
+  const role = row.role as UserRole;
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
-    role: row.role as UserRole,
+    role,
+    psdRole: resolvePsdRole({ legacyRole: role, psdRole: row.psd_role }),
+    locale: row.locale === "en" ? "en" : "ru",
     zid: row.zid,
     organizationName,
     active: !!row.active,
@@ -125,20 +142,14 @@ async function rowToDto(db: OkoDb, row: UserRow): Promise<UserDto> {
 
 export async function listUsers(db: OkoDb): Promise<UserDto[]> {
   const rows = (await db
-    .prepare(
-      `SELECT id, username, password_hash, display_name, role, zid, active, created_at, updated_at
-       FROM users ORDER BY role DESC, username`
-    )
+    .prepare(`SELECT ${USER_SELECT} FROM users ORDER BY role DESC, username`)
     .all()) as unknown as UserRow[];
   return Promise.all(rows.map((r) => rowToDto(db, r)));
 }
 
 export async function getUserById(db: OkoDb, id: number): Promise<UserDto | null> {
   const row = (await db
-    .prepare(
-      `SELECT id, username, password_hash, display_name, role, zid, active, created_at, updated_at
-       FROM users WHERE id = ?`
-    )
+    .prepare(`SELECT ${USER_SELECT} FROM users WHERE id = ?`)
     .get(id)) as unknown as UserRow | undefined;
   return row ? rowToDto(db, row) : null;
 }
@@ -146,10 +157,8 @@ export async function getUserById(db: OkoDb, id: number): Promise<UserDto | null
 export async function getUserByUsername(db: OkoDb, username: string): Promise<UserRow | null> {
   const sql =
     db.dialect === "postgres"
-      ? `SELECT id, username, password_hash, display_name, role, zid, active, created_at, updated_at
-         FROM users WHERE LOWER(username) = LOWER(?)`
-      : `SELECT id, username, password_hash, display_name, role, zid, active, created_at, updated_at
-         FROM users WHERE username = ? COLLATE NOCASE`;
+      ? `SELECT ${USER_SELECT} FROM users WHERE LOWER(username) = LOWER(?)`
+      : `SELECT ${USER_SELECT} FROM users WHERE username = ? COLLATE NOCASE`;
   const row = (await db.prepare(sql).get(username.trim())) as unknown as UserRow | undefined;
   return row ?? null;
 }
@@ -161,6 +170,8 @@ export async function createUser(
     password: string;
     displayName?: string;
     role: UserRole;
+    psdRole?: PsdRole;
+    locale?: string;
     zid?: number | null;
   }
 ): Promise<UserDto> {
@@ -176,10 +187,12 @@ export async function createUser(
   }
 
   const now = new Date().toISOString();
+  const psdRole = input.psdRole ?? legacyToPsdRole(input.role);
+  const locale = input.locale === "en" ? "en" : "ru";
   const inserted = (await db
     .prepare(
-      `INSERT INTO users (username, password_hash, display_name, role, zid, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+      `INSERT INTO users (username, password_hash, display_name, role, zid, active, created_at, updated_at, psd_role, locale)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
        RETURNING id`
     )
     .get(
@@ -189,7 +202,9 @@ export async function createUser(
       input.role,
       input.zid ?? null,
       now,
-      now
+      now,
+      psdRole,
+      locale
     )) as { id: number };
   return (await getUserById(db, inserted.id))!;
 }
@@ -201,6 +216,8 @@ export async function updateUser(
     displayName?: string | null;
     password?: string;
     role?: UserRole;
+    psdRole?: PsdRole;
+    locale?: string;
     zid?: number | null;
     active?: boolean;
   }
@@ -228,6 +245,14 @@ export async function updateUser(
   if (patch.role !== undefined) {
     fields.push("role = ?");
     values.push(patch.role);
+  }
+  if (patch.psdRole !== undefined) {
+    fields.push("psd_role = ?");
+    values.push(patch.psdRole);
+  }
+  if (patch.locale !== undefined) {
+    fields.push("locale = ?");
+    values.push(patch.locale === "en" ? "en" : "ru");
   }
   if (patch.zid !== undefined || patch.role !== undefined) {
     fields.push("zid = ?");
@@ -285,7 +310,7 @@ export async function resolveSessionUser(db: OkoDb, token: string): Promise<Sess
   const now = new Date();
   const row = (await db
     .prepare(
-      `SELECT u.id, u.username, u.display_name, u.role, u.zid, u.active, s.expires_at
+      `SELECT u.id, u.username, u.display_name, u.role, u.zid, u.active, u.psd_role, u.locale, s.expires_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at >= ?`
@@ -298,6 +323,8 @@ export async function resolveSessionUser(db: OkoDb, token: string): Promise<Sess
         role: string;
         zid: number | null;
         active: number;
+        psd_role: string | null;
+        locale: string | null;
         expires_at: string;
       }
     | undefined;
@@ -313,11 +340,14 @@ export async function resolveSessionUser(db: OkoDb, token: string): Promise<Sess
       .run(expiresAtIso(now), token);
   }
 
+  const legacyRole = row.role as UserRole;
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
-    role: row.role as UserRole,
+    role: legacyRole,
+    psdRole: resolvePsdRole({ legacyRole, psdRole: row.psd_role }),
+    locale: row.locale === "en" ? "en" : "ru",
     zid: row.zid,
   };
 }

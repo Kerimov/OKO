@@ -461,3 +461,6 @@ CREATE TABLE IF NOT EXISTS package_inbox (
 
 CREATE INDEX IF NOT EXISTS idx_package_inbox_status ON package_inbox(status, received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_package_inbox_sha ON package_inbox(sha256);
+
+-- PSD extensions are applied by migration 005_psd_foundation (roles, BP, NSI versions, etc.).
+-- See docs/PSD-ROLES.md and docs/PSD-INTEGRATIONS.md.

@@ -18,6 +18,7 @@ import { RecalcModule } from "./recalc/recalc.module.js";
 import { MethodologyModule } from "./methodology/methodology.module.js";
 import { TemplatesModule } from "./templates/templates.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
+import { PsdModule } from "./psd/psd.module.js";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ObservabilityModule } from "./observability/observability.module.js";
     RecalcModule,
     TemplatesModule,
     MethodologyModule,
+    PsdModule,
   ],
 })
 export class AppModule {}

@@ -123,6 +123,8 @@ export async function createPeriod(input: {
   periodStart?: string;
   periodEnd?: string;
   methodologyReleaseId?: string | null;
+  packageKind?: "OKO" | "BALANCE";
+  collectionUnitZid?: number | null;
 }): Promise<ReportingPeriod> {
   if (isBackendMode()) {
     return apiFetch<ReportingPeriod>("/api/periods", {
@@ -143,6 +145,8 @@ export async function createPeriod(input: {
     year: null,
     periodStatus: "open",
     methodologyReleaseId: input.methodologyReleaseId ?? null,
+    packageKind: input.packageKind === "BALANCE" ? "BALANCE" : "OKO",
+    collectionUnitZid: input.collectionUnitZid ?? input.zid,
   };
   periods.push(period);
   writeLocalPeriods(periods);

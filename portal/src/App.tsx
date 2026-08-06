@@ -19,6 +19,11 @@ import { PackagesDashboardPage } from "./pages/PackagesDashboardPage";
 import { UsersAdminPage } from "./pages/UsersAdminPage";
 import { RefsAdminPage } from "./pages/RefsAdminPage";
 import { InstructionsPage } from "./pages/InstructionsPage";
+import { BpMonitorPage } from "./pages/BpMonitorPage";
+import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { CollectionUnitsPage } from "./pages/CollectionUnitsPage";
+import { PsdReportsPage } from "./pages/PsdReportsPage";
+import { CheckExplanationsPage } from "./pages/CheckExplanationsPage";
 
 export default function App() {
   return (
@@ -33,6 +38,11 @@ export default function App() {
             <Route path="my/:instanceId" element={<FormPage />} />
             <Route path="tools" element={<ToolsPage />} />
             <Route path="package" element={<PackagePage />} />
+            <Route path="bp" element={<BpMonitorPage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
+            <Route path="collection-units" element={<CollectionUnitsPage />} />
+            <Route path="psd-reports" element={<PsdReportsPage />} />
+            <Route path="check-explanations" element={<CheckExplanationsPage />} />
             <Route path="admin/checks" element={<ChecksEditorPage />} />
             <Route path="admin/forms" element={<FormsEditorPage />} />
             <Route path="admin/saldo" element={<SaldoEditorPage />} />

@@ -43,6 +43,7 @@ import {
   downloadLoansNzsPackage,
   importLoansNzsPackage,
   KZS_GROUP,
+  LOAN_NZS_GROUPS,
   loadEffectiveLoansNzs,
   NZS_GROUP,
   readLoansNzsPackageFile,
@@ -892,6 +893,24 @@ export function ToolsPage() {
     setBusy(true);
     try {
       const incoming = await readLoansNzsPackageFile(file);
+      const current = loansPkg ?? (await loadEffectiveLoansNzs());
+      const { previewLoansNzsImport } = await import("../engine/refsValidation");
+      const preview = previewLoansNzsImport(current, incoming, loansMerge);
+      const lines = [
+        `Режим: ${loansMerge === "merge" ? "слияние" : "замена"}`,
+        ...LOAN_NZS_GROUPS.map(
+          (g) =>
+            `${g}: ${preview.currentCounts[g]} → ${preview.resultCounts[g]} (в файле ${preview.incomingCounts[g]})`
+        ),
+        preview.added ? `Прирост (оценка): +${preview.added}` : null,
+        preview.removed ? `Удаление (оценка): −${preview.removed}` : null,
+        ...preview.warnings,
+        "Применить импорт?",
+      ].filter(Boolean);
+      if (!confirm(lines.join("\n"))) {
+        setStatus("Импорт справочников отменён");
+        return;
+      }
       const { package: pkg, added, total } = await importLoansNzsPackage(
         incoming,
         loansMerge

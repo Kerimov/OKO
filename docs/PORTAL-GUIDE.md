@@ -4,6 +4,8 @@
 
 В портале: **Инструкция** в меню. Исходники: `portal/src/content/instructions-*.md`
 
+ПСД (расширение ТЗ ПРАУД): роли и мониторинг БП — [PSD-ROLES.md](./PSD-ROLES.md); внешние интеграции — [PSD-INTEGRATIONS.md](./PSD-INTEGRATIONS.md); приёмка без XML/SAP/ЭЦП — [PSD-ACCEPTANCE.md](./PSD-ACCEPTANCE.md).
+
 ---
 
 # Инструкция пользователя организации

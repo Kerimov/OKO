@@ -123,7 +123,17 @@ function resolveLegacyRole(token: string | null): ApiRole | null {
 function applySessionUser(req: Request, user: SessionUser, token: string): void {
   req.apiUser = user;
   req.sessionToken = token;
-  req.apiRole = user.role === "admin" ? "admin" : "user";
+  // Preserve legacy admin elevation; PSD support/BPM also get admin API role for tools.
+  const psd = user.psdRole;
+  if (
+    user.role === "admin" ||
+    psd === "support_specialist" ||
+    psd === "business_process_manager"
+  ) {
+    req.apiRole = "admin";
+  } else {
+    req.apiRole = "user";
+  }
 }
 
 export async function resolveAuth(req: Request, token: string | null): Promise<boolean> {
@@ -299,6 +309,8 @@ export async function buildAuthMePayload(req: Request): Promise<AuthMePayload> {
         username: dto.username,
         displayName: dto.displayName,
         role: dto.role,
+        psdRole: dto.psdRole,
+        locale: dto.locale,
         zid: dto.zid,
         organizationName: dto.organizationName ?? null,
       };
@@ -319,6 +331,8 @@ export interface LoginResult {
     username: string;
     displayName: string | null;
     role: string;
+    psdRole?: string;
+    locale?: string;
     zid: number | null;
     organizationName: string | null;
   };
@@ -346,12 +360,19 @@ export async function loginWithCredentials(
       : undefined;
   return {
     token,
-    role: sessionUser.role === "admin" ? "admin" : "user",
+    role:
+      sessionUser.role === "admin" ||
+      sessionUser.psdRole === "support_specialist" ||
+      sessionUser.psdRole === "business_process_manager"
+        ? "admin"
+        : "user",
     user: {
       id: sessionUser.id,
       username: sessionUser.username,
       displayName: sessionUser.displayName,
       role: sessionUser.role,
+      psdRole: sessionUser.psdRole,
+      locale: sessionUser.locale,
       zid: sessionUser.zid,
       organizationName: org?.name ?? null,
     },

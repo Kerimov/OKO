@@ -167,6 +167,12 @@ export interface Organization {
   name: string;
   code: string | null;
   parentZid: number | null;
+  unitKind?: "organization" | "branch" | "unit";
+  headZid?: number | null;
+  branchCode?: string | null;
+  unitCode?: string | null;
+  compositeCode?: string | null;
+  guid?: string | null;
 }
 
 export interface ReportingPeriod {
@@ -184,6 +190,8 @@ export interface ReportingPeriod {
   closedBy?: string | null;
   methodologyReleaseId?: string | null;
   formSetCount?: number;
+  packageKind?: "OKO" | "BALANCE";
+  collectionUnitZid?: number | null;
 }
 
 export interface WorkContext {

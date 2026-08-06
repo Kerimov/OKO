@@ -60,6 +60,16 @@ export class CreatePeriodDto {
   @IsOptional()
   @IsString()
   methodologyReleaseId?: string | null;
+
+  @ApiPropertyOptional({ enum: ["OKO", "BALANCE"] })
+  @IsOptional()
+  @IsString()
+  packageKind?: "OKO" | "BALANCE";
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  collectionUnitZid?: number | null;
 }
 
 export class WorkContextDto {
@@ -142,6 +152,29 @@ export class CreateUserDto {
   @IsString()
   role?: "admin" | "org";
 
+  @ApiPropertyOptional({
+    enum: [
+      "business_process_manager",
+      "department_curator",
+      "subsidiary_specialist",
+      "support_specialist",
+      "auditor_readonly",
+    ],
+  })
+  @IsOptional()
+  @IsString()
+  psdRole?:
+    | "business_process_manager"
+    | "department_curator"
+    | "subsidiary_specialist"
+    | "support_specialist"
+    | "auditor_readonly";
+
+  @ApiPropertyOptional({ enum: ["ru", "en"] })
+  @IsOptional()
+  @IsString()
+  locale?: "ru" | "en";
+
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   zid?: number | null;
@@ -162,6 +195,29 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   role?: "admin" | "org";
+
+  @ApiPropertyOptional({
+    enum: [
+      "business_process_manager",
+      "department_curator",
+      "subsidiary_specialist",
+      "support_specialist",
+      "auditor_readonly",
+    ],
+  })
+  @IsOptional()
+  @IsString()
+  psdRole?:
+    | "business_process_manager"
+    | "department_curator"
+    | "subsidiary_specialist"
+    | "support_specialist"
+    | "auditor_readonly";
+
+  @ApiPropertyOptional({ enum: ["ru", "en"] })
+  @IsOptional()
+  @IsString()
+  locale?: "ru" | "en";
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()

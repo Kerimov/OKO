@@ -2,12 +2,20 @@ import { apiFetch, clearApiToken, getApiToken, setApiToken } from "./apiClient";
 
 export type ApiRole = "admin" | "user";
 export type UserAccountRole = "admin" | "org";
+export type PsdRole =
+  | "business_process_manager"
+  | "department_curator"
+  | "subsidiary_specialist"
+  | "support_specialist"
+  | "auditor_readonly";
 
 export interface UserProfile {
   id: number;
   username: string;
   displayName: string | null;
   role: UserAccountRole;
+  psdRole?: PsdRole;
+  locale?: "ru" | "en";
   zid: number | null;
   organizationName: string | null;
 }
@@ -97,6 +105,15 @@ export function isAdminRole(): boolean {
 
 export function isOrgUser(): boolean {
   return currentUser?.role === "org";
+}
+
+export function isAuditorReadonly(): boolean {
+  return currentUser?.psdRole === "auditor_readonly";
+}
+
+export function canMutateData(): boolean {
+  if (!authRequired) return true;
+  return !isAuditorReadonly();
 }
 
 export async function initAuth(): Promise<void> {

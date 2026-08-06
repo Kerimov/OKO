@@ -21,22 +21,90 @@ import {
   renameKontrAgent,
   searchKontrAgents,
   updateKontrAgent,
+  bulkUpsertKontrAgents,
   type KontrAgentDto,
+  type KontrBulkItem,
 } from "../../../server/src/kontr.js";
 import { getDb } from "../../../server/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import {
+  PsdPermissionGuard,
+  RequirePsdPermissions,
+} from "../auth/psd-permission.guard.js";
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+  ArrayMaxSize,
+  ArrayMinSize,
+} from "class-validator";
+import { Type } from "class-transformer";
+
+class KontrBulkItemDto {
+  @IsOptional()
+  @IsInt()
+  id?: number | null;
+
+  @IsString()
+  @MaxLength(500)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  oldName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  inn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  kpp?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  orgType?: number | null;
+
+  @IsOptional()
+  @IsString()
+  idObdnsi?: string | null;
+
+  @IsOptional()
+  @IsString()
+  orgForm?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  mandatoryRash?: boolean;
+}
+
+class KontrBulkBodyDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(5000)
+  @ValidateNested({ each: true })
+  @Type(() => KontrBulkItemDto)
+  items!: KontrBulkItemDto[];
+}
 
 @ApiTags("kontr")
 @ApiBearerAuth()
+@UseGuards(PsdPermissionGuard)
 @Controller("kontr")
 export class KontrController {
   @Get("stats")
+  @RequirePsdPermissions("nsi.read")
   @ApiOperation({ summary: "Статистика справочника контрагентов" })
   async stats() {
     return getKontrStats(await getDb());
   }
 
   @Get()
+  @RequirePsdPermissions("nsi.read")
   @ApiOperation({ summary: "Справочник контрагентов (поиск / список)" })
   @ApiQuery({ name: "q", required: false })
   @ApiQuery({ name: "orgTypes", required: false })
@@ -67,6 +135,7 @@ export class KontrController {
 
   @Post("reimport")
   @UseGuards(AdminGuard)
+  @RequirePsdPermissions("tech.configure")
   @ApiOperation({ summary: "Перезагрузить kontr.json (admin)" })
   async reimport() {
     try {
@@ -79,20 +148,42 @@ export class KontrController {
     }
   }
 
+  @Post("bulk")
+  @RequirePsdPermissions("nsi.write")
+  @ApiOperation({ summary: "Пакетное создание/обновление контрагентов (транзакция)" })
+  async bulk(@Body() body: KontrBulkBodyDto) {
+    try {
+      return await bulkUpsertKontrAgents(
+        await getDb(),
+        body.items as KontrBulkItem[]
+      );
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "bulk failed",
+      });
+    }
+  }
+
   @Post()
   @HttpCode(201)
-  @UseGuards(AdminGuard)
-  @ApiOperation({ summary: "Создать контрагента (admin)" })
+  @RequirePsdPermissions("nsi.write")
+  @ApiOperation({ summary: "Создать контрагента" })
   async create(@Body() body: Omit<KontrAgentDto, "id"> & { name: string }) {
     if (!body.name?.trim()) {
       throw new BadRequestException({ error: "name required" });
     }
-    return createKontrAgent(await getDb(), body);
+    try {
+      return await createKontrAgent(await getDb(), body);
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "create failed",
+      });
+    }
   }
 
   @Patch(":id")
-  @UseGuards(AdminGuard)
-  @ApiOperation({ summary: "Обновить контрагента (admin)" })
+  @RequirePsdPermissions("nsi.write")
+  @ApiOperation({ summary: "Обновить контрагента" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: Partial<Omit<KontrAgentDto, "id">>
@@ -107,7 +198,7 @@ export class KontrController {
   }
 
   @Post(":id/rename")
-  @UseGuards(AdminGuard)
+  @RequirePsdPermissions("nsi.write")
   @ApiOperation({ summary: "Переименовать: имя → oldName, новое имя (N99)" })
   async rename(
     @Param("id", ParseIntPipe) id: number,

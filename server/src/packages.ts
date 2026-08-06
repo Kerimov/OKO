@@ -21,6 +21,12 @@ export interface OrganizationDto {
   name: string;
   code: string | null;
   parentZid: number | null;
+  unitKind?: string | null;
+  headZid?: number | null;
+  branchCode?: string | null;
+  unitCode?: string | null;
+  compositeCode?: string | null;
+  guid?: string | null;
 }
 
 export interface PeriodDto {
@@ -38,6 +44,8 @@ export interface PeriodDto {
   closedBy?: string | null;
   methodologyReleaseId?: string | null;
   formSetCount?: number;
+  packageKind?: "OKO" | "BALANCE";
+  collectionUnitZid?: number | null;
 }
 
 export interface WorkContextDto {
@@ -272,12 +280,24 @@ function rowToOrg(row: {
   name: string;
   code: string | null;
   parent_zid: number | null;
+  unit_kind?: string | null;
+  head_zid?: number | null;
+  branch_code?: string | null;
+  unit_code?: string | null;
+  composite_code?: string | null;
+  guid?: string | null;
 }): OrganizationDto {
   return {
     zid: row.zid,
     name: row.name,
     code: row.code,
     parentZid: row.parent_zid,
+    unitKind: row.unit_kind ?? "organization",
+    headZid: row.head_zid == null ? row.zid : Number(row.head_zid),
+    branchCode: row.branch_code ?? null,
+    unitCode: row.unit_code ?? null,
+    compositeCode: row.composite_code ?? null,
+    guid: row.guid ?? null,
   };
 }
 
@@ -296,6 +316,8 @@ function rowToPeriod(row: {
   closed_by?: string | null;
   methodology_release_id?: string | null;
   form_set_count?: number | null;
+  package_kind?: string | null;
+  collection_unit_zid?: number | null;
 }): PeriodDto {
   return {
     eid: row.eid,
@@ -312,6 +334,9 @@ function rowToPeriod(row: {
     closedBy: row.closed_by ?? null,
     methodologyReleaseId: row.methodology_release_id ?? null,
     formSetCount: row.form_set_count != null ? Number(row.form_set_count) : undefined,
+    packageKind: row.package_kind === "BALANCE" ? "BALANCE" : "OKO",
+    collectionUnitZid:
+      row.collection_unit_zid == null ? row.zid : Number(row.collection_unit_zid),
   };
 }
 
@@ -411,12 +436,21 @@ export async function setPackageWorkflow(
 
 export async function listOrganizations(db: OkoDb): Promise<OrganizationDto[]> {
   const rows = (await db
-    .prepare("SELECT zid, name, code, parent_zid FROM organizations ORDER BY name")
+    .prepare(
+      `SELECT zid, name, code, parent_zid, unit_kind, head_zid, branch_code, unit_code, composite_code, guid
+       FROM organizations ORDER BY name`
+    )
     .all()) as Array<{
     zid: number;
     name: string;
     code: string | null;
     parent_zid: number | null;
+    unit_kind: string | null;
+    head_zid: number | null;
+    branch_code: string | null;
+    unit_code: string | null;
+    composite_code: string | null;
+    guid: string | null;
   }>;
   return rows.map(rowToOrg);
 }
@@ -429,13 +463,19 @@ export async function createOrganization(
     m: number;
   };
   const zid = max.m + 1;
+  const code = input.code?.trim() || null;
+  const composite = `${zid}@${code || zid}`;
   await db
-    .prepare("INSERT INTO organizations (zid, name, code, parent_zid) VALUES (?, ?, ?, ?)")
-    .run(zid, input.name.trim(), input.code?.trim() || null, input.parentZid ?? null);
+    .prepare(
+      `INSERT INTO organizations (
+         zid, name, code, parent_zid, unit_kind, head_zid, composite_code
+       ) VALUES (?, ?, ?, ?, 'organization', ?, ?)`
+    )
+    .run(zid, input.name.trim(), code, input.parentZid ?? null, zid, composite);
   return {
     zid,
     name: input.name.trim(),
-    code: input.code?.trim() || null,
+    code,
     parentZid: input.parentZid ?? null,
   };
 }
@@ -444,6 +484,7 @@ export async function listPeriods(db: OkoDb, zid?: number): Promise<PeriodDto[]>
   const select = `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end, p.quarter, p.year,
               p.package_status, p.package_comment,
               p.period_status, p.closed_at, p.closed_by, p.methodology_release_id,
+              p.package_kind, p.collection_unit_zid,
               (SELECT COUNT(*) FROM period_form_set pfs WHERE pfs.eid = p.eid) AS form_set_count
        FROM periods p`;
   if (zid) {
@@ -498,6 +539,8 @@ export async function createPeriod(
     quarter?: number;
     year?: number;
     methodologyReleaseId?: string | null;
+    packageKind?: "OKO" | "BALANCE";
+    collectionUnitZid?: number | null;
   }
 ): Promise<PeriodDto> {
   const org = await db.prepare("SELECT 1 FROM organizations WHERE zid = ?").get(input.zid);
@@ -511,13 +554,15 @@ export async function createPeriod(
     input.methodologyReleaseId !== undefined
       ? input.methodologyReleaseId
       : await resolveActiveMethodologyId(db);
+  const packageKind = input.packageKind === "BALANCE" ? "BALANCE" : "OKO";
+  const collectionUnitZid = input.collectionUnitZid ?? input.zid;
 
   await db
     .prepare(
       `INSERT INTO periods (
          eid, zid, name, period_start, period_end, quarter, year,
-         period_status, methodology_release_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
+         period_status, methodology_release_id, package_kind, collection_unit_zid
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`
     )
     .run(
       eid,
@@ -527,10 +572,20 @@ export async function createPeriod(
       dateOrNull(input.periodEnd),
       input.quarter ?? null,
       input.year ?? null,
-      methodologyId
+      methodologyId,
+      packageKind,
+      collectionUnitZid
     );
 
   const formSetCount = await snapshotPeriodFormSet(db, eid);
+
+  // Ensure PSD business process row exists for this package.
+  try {
+    const { ensureBusinessProcess } = await import("./businessProcess.js");
+    await ensureBusinessProcess(db, input.zid, eid, packageKind);
+  } catch {
+    /* table may not exist until migration; ignore */
+  }
 
   return {
     eid,
@@ -544,6 +599,8 @@ export async function createPeriod(
     periodStatus: "open",
     methodologyReleaseId: methodologyId,
     formSetCount,
+    packageKind,
+    collectionUnitZid,
   };
 }
 

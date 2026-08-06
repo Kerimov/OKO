@@ -39,6 +39,7 @@ import {
 import { getFormCorrespondence, type FormCorrespondenceDto } from "./saldo.js";
 import type { OkoFormInstance } from "./types.js";
 import { ROOT } from "./paths.js";
+import { loadEffectiveRashRefsByName } from "./rashRefs.js";
 
 export type AggregationColorMode = "full" | CorrespondenceColor;
 
@@ -1271,14 +1272,10 @@ export async function validatePackageAccountRows(
   return { ...result, zid, eid: options.eid };
 }
 
-function loadUncheckingRows(): string[] {
+async function loadUncheckingRows(db: OkoDb): Promise<string[]> {
   try {
-    const refsPath = path.join(ROOT, "portal", "public", "data", "rash-refs.json");
-    if (!fs.existsSync(refsPath)) return [...DEFAULT_UNCHECKING_ROWS];
-    const data = JSON.parse(fs.readFileSync(refsPath, "utf-8")) as {
-      byName?: Record<string, Array<{ value?: string; kod?: string }>>;
-    };
-    const items = data.byName?.a__UncheckingRows ?? [];
+    const byName = await loadEffectiveRashRefsByName(db);
+    const items = byName.a__UncheckingRows ?? [];
     if (!items.length) return [...DEFAULT_UNCHECKING_ROWS];
     return items.map((i) => String(i.value ?? i.kod ?? "").trim()).filter(Boolean);
   } catch {
@@ -1301,7 +1298,7 @@ export async function checkPackageRelationsAccRows(
   const result = checkRelationsAccRows({
     accRows: acc?.rows ?? [],
     balRows: bal?.rows ?? [],
-    uncheckingRows: loadUncheckingRows(),
+    uncheckingRows: await loadUncheckingRows(db),
     tolerance: options.tolerance,
   });
   return { ...result, zid, eid: options.eid };
@@ -1345,7 +1342,7 @@ export async function fillPackageBalanceRows(
     accRows: acc?.rows ?? [],
     balRows: bal.rows,
     mode: options.mode ?? "ifEmpty",
-    uncheckingRows: loadUncheckingRows(),
+    uncheckingRows: await loadUncheckingRows(db),
   });
 
   if (!filled.ok) {

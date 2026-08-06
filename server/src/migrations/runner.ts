@@ -3,6 +3,8 @@ import { uniquePackageTemplateMigration } from "./001_unique_package_template.js
 import { spreadsheetCellModelMigration } from "./002_spreadsheet_cell_model.js";
 import { rashConstructorLayoutMigration } from "./003_rash_constructor_layout.js";
 import { rashAddsumRequiredMigration } from "./004_rash_addsum_required.js";
+import { psdFoundationMigration } from "./005_psd_foundation.js";
+import { psdChecksReportsMigration } from "./006_psd_checks_reports.js";
 import type { Migration } from "./types.js";
 
 export const NUMBERED_MIGRATIONS: Migration[] = [
@@ -10,6 +12,8 @@ export const NUMBERED_MIGRATIONS: Migration[] = [
   spreadsheetCellModelMigration,
   rashConstructorLayoutMigration,
   rashAddsumRequiredMigration,
+  psdFoundationMigration,
+  psdChecksReportsMigration,
 ];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {

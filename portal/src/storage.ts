@@ -586,6 +586,26 @@ export async function updateKontrAgent(
   });
 }
 
+export async function bulkUpsertKontrAgents(
+  items: Array<{
+    id?: number | null;
+    name: string;
+    oldName?: string | null;
+    inn?: string | null;
+    kpp?: string | null;
+    orgType?: number | null;
+    idObdnsi?: string | null;
+  }>
+): Promise<{ created: number; updated: number; items: KontrAgent[] }> {
+  if (!useBackend) {
+    throw new Error("Пакетное сохранение доступно только в режиме API");
+  }
+  return apiFetch("/api/kontr/bulk", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
 export async function renameKontrAgent(
   id: number,
   name: string

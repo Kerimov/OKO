@@ -41,13 +41,15 @@ test.describe("OKO portal critical shell", () => {
     await expect(page.getByRole("heading", { name: /Настройки/i })).toBeVisible();
   });
 
-  test("package route resolves to page chrome", async ({ page }) => {
-    await page.goto("/package");
-    await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
-    if (new URL(page.url()).pathname === "/") {
-      await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
-      return;
+  test("psd routes resolve when auth is open", async ({ page }) => {
+    for (const path of ["/bp", "/check-explanations", "/collection-units", "/psd-reports"]) {
+      await page.goto(path);
+      await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
+      if (new URL(page.url()).pathname === "/") {
+        await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+        return;
+      }
+      await expect(page.locator("h1").first()).toBeVisible();
     }
-    await expect(page.locator("main, .content, .package-page, h1").first()).toBeVisible();
   });
 });

@@ -6,8 +6,13 @@
 import { apiFetch } from "../apiClient";
 import { isBackendMode } from "../storage";
 import type { RashRefItem, RashRefsData } from "./rashRefs";
+import { LOAN_NZS_GROUPS } from "./refsPackage";
 import { parseRefFilter } from "./rashEngine";
 import type { RashRule } from "../types";
+
+function isLoanOwnedGroup(name: string): boolean {
+  return (LOAN_NZS_GROUPS as readonly string[]).includes(name);
+}
 
 export const REFS_OVERLAY_SETTINGS_KEY = "rashRefsOverlay";
 const LOCAL_KEY = "oko.rashRefsOverlay";
@@ -56,8 +61,14 @@ export async function loadRefsOverlay(): Promise<RefsOverlayPackage> {
 }
 
 export async function saveRefsOverlay(pkg: RefsOverlayPackage): Promise<void> {
+  const byName = { ...pkg.byName };
+  // KZS/НЗС владеет loansNzRefs — не храним их в общем overlay.
+  for (const g of LOAN_NZS_GROUPS) {
+    delete byName[g];
+  }
   const next: RefsOverlayPackage = {
     ...pkg,
+    byName,
     kind: "rash-refs-overlay",
     version: pkg.version || "1.0",
     updatedAt: new Date().toISOString(),
@@ -79,7 +90,7 @@ export function applyRefsOverlay(
   if (!overlay?.byName || !Object.keys(overlay.byName).length) return base;
   const byName = { ...base.byName };
   for (const [name, items] of Object.entries(overlay.byName)) {
-    if (!name.trim()) continue;
+    if (!name.trim() || isLoanOwnedGroup(name)) continue;
     byName[name] = Array.isArray(items) ? items.map((it) => ({ ...it })) : [];
   }
   return {

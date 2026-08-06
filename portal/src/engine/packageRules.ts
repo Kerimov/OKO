@@ -28,6 +28,8 @@ export interface MethodologyChecksums {
   saldo?: string;
   correspondence?: string;
   kontr?: string;
+  refsOverlay?: string;
+  loansNzRefs?: string;
 }
 
 /** Правила и справочники, выгружаемые ЦО вместе с комплектом для дочки. */
@@ -45,6 +47,21 @@ export interface PackageRulesBundle {
   saldo?: SaldoRulesData;
   correspondence?: FormCorrespondenceData;
   kontr?: { items: KontrAgent[] };
+  /** Overlay классификаторов расшифровок (без KZS/НЗС). */
+  refsOverlay?: {
+    version: string;
+    kind: "rash-refs-overlay";
+    updatedAt: string;
+    byName: Record<string, Array<{ kod: string; value: string; note?: string | null; newkod?: string | null }>>;
+  };
+  /** Пакет займов / НЗС. */
+  loansNzRefs?: {
+    version: string;
+    kind: "loans-nzs-refs";
+    exportedAt: string;
+    groups: Record<string, unknown[]>;
+    counts?: Record<string, number>;
+  };
   /** Access CheckItReorg* catalogues for desktop package sync. */
   checksReorg?: ReorgChecksData;
 }
@@ -85,6 +102,8 @@ export async function buildMethodologyChecksums(parts: {
   saldo?: unknown;
   correspondence?: unknown;
   kontr?: unknown;
+  refsOverlay?: unknown;
+  loansNzRefs?: unknown;
 }): Promise<MethodologyChecksums> {
   const out: MethodologyChecksums = {};
   if (parts.checks != null) out.checks = await sha256Hex(parts.checks);
@@ -94,29 +113,43 @@ export async function buildMethodologyChecksums(parts: {
   if (parts.saldo != null) out.saldo = await sha256Hex(parts.saldo);
   if (parts.correspondence != null) out.correspondence = await sha256Hex(parts.correspondence);
   if (parts.kontr != null) out.kontr = await sha256Hex(parts.kontr);
+  if (parts.refsOverlay != null) out.refsOverlay = await sha256Hex(parts.refsOverlay);
+  if (parts.loansNzRefs != null) out.loansNzRefs = await sha256Hex(parts.loansNzRefs);
   return out;
 }
 
 /** Актуальные правила с портала (БД или JSON-фолбэк). */
 export async function loadPackageRulesBundle(): Promise<PackageRulesBundle> {
-  const [checks, checksReorg, rash, recalc, rowFormulas, saldo, correspondence, kontrItems] =
-    await Promise.all([
-      loadChecks(),
-      loadReorgChecks().catch(
-        (): ReorgChecksData => ({
-          version: "0",
-          source: "none",
-          total: 0,
-          checks: [],
-        })
-      ),
-      loadRashRules(),
-      loadRecalcRules(),
-      loadRowFormulas(),
-      loadSaldoRules(),
-      loadFormCorrespondence(),
-      loadKontrAgents(),
-    ]);
+  const [
+    checks,
+    checksReorg,
+    rash,
+    recalc,
+    rowFormulas,
+    saldo,
+    correspondence,
+    kontrItems,
+    refsOverlay,
+    loansNzRefs,
+  ] = await Promise.all([
+    loadChecks(),
+    loadReorgChecks().catch(
+      (): ReorgChecksData => ({
+        version: "0",
+        source: "none",
+        total: 0,
+        checks: [],
+      })
+    ),
+    loadRashRules(),
+    loadRecalcRules(),
+    loadRowFormulas(),
+    loadSaldoRules(),
+    loadFormCorrespondence(),
+    loadKontrAgents(),
+    import("./refsOverlay").then((m) => m.loadRefsOverlay()),
+    import("./refsPackage").then((m) => m.loadEffectiveLoansNzs()),
+  ]);
 
   const parts = {
     checks,
@@ -126,6 +159,8 @@ export async function loadPackageRulesBundle(): Promise<PackageRulesBundle> {
     saldo,
     correspondence,
     kontr: { items: kontrItems },
+    refsOverlay,
+    loansNzRefs,
   };
   const checksums = await buildMethodologyChecksums(parts);
   const version = `bundle-${new Date().toISOString().slice(0, 10)}`;

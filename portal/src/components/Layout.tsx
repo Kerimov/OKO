@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { logout } from "../auth";
+import { isAuditorReadonly, logout } from "../auth";
 import { breadcrumbsForPath } from "../breadcrumbs";
 import { isBackendMode } from "../storage";
 import { useAuth } from "../useAuth";
@@ -110,6 +110,7 @@ export function Layout() {
   const orgUser = auth.user?.role === "org";
   const user = auth.user;
   const formsNavLabel = formsListNavLabel(auth);
+  const auditorRo = isAuditorReadonly();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
   const [sectionCollapsed, setSectionCollapsed] = useState(readSectionCollapsed);
@@ -156,6 +157,15 @@ export function Layout() {
           { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
           { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
           { to: "/package", label: "Комплект", isActive: (p) => p === "/package" },
+          ...(isBackendMode()
+            ? [
+                {
+                  to: "/bp",
+                  label: "Мониторинг БП",
+                  isActive: (p: string) => p === "/bp",
+                },
+              ]
+            : []),
         ],
       },
     ];
@@ -203,6 +213,38 @@ export function Layout() {
           },
           { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" },
           { to: "/admin/audit", label: "Аудит", isActive: (p) => p === "/admin/audit" },
+          {
+            to: "/integrations",
+            label: "Интеграции / своды",
+            isActive: (p) => p === "/integrations",
+          },
+          {
+            to: "/collection-units",
+            label: "Единицы сбора",
+            isActive: (p) => p === "/collection-units",
+          },
+          {
+            to: "/psd-reports",
+            label: "Отчёты ПСД",
+            isActive: (p) => p === "/psd-reports",
+          },
+          {
+            to: "/check-explanations",
+            label: "Объяснения проверок",
+            isActive: (p) => p === "/check-explanations",
+          },
+        ],
+      });
+    } else if (!isBackendMode()) {
+      list.push({
+        id: "editors-offline",
+        title: "Редакторы",
+        items: [
+          {
+            to: "/admin/refs",
+            label: "Справочники (local)",
+            isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr",
+          },
         ],
       });
     }
@@ -355,6 +397,15 @@ export function Layout() {
                 <span className="app-header-user-meta">
                   <span className="app-header-user-name">
                     {user.displayName || user.username}
+                    {auditorRo && (
+                      <span
+                        className="status-badge"
+                        style={{ marginLeft: 6, fontSize: "0.75em" }}
+                        title="Аудитор: мутации недоступны"
+                      >
+                        только чтение
+                      </span>
+                    )}
                   </span>
                   {user.organizationName && (
                     <span className="app-header-user-org">{user.organizationName}</span>

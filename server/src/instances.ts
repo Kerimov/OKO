@@ -394,7 +394,7 @@ export function assertInstanceEditable(inst: OkoFormInstance, isAdmin: boolean):
   }
 }
 
-/** Async check: submitted (non-admin) OR closed period. */
+/** Async check: submitted (non-admin) OR closed period OR completed BP. */
 export async function assertInstanceWritable(
   db: OkoDb,
   inst: OkoFormInstance,
@@ -404,6 +404,22 @@ export async function assertInstanceWritable(
   assertInstanceEditable(inst, isAdmin);
   const { assertPeriodWritableForInstance } = await import("./periodLifecycle.js");
   await assertPeriodWritableForInstance(db, inst.zid, inst.eid, opts);
+  if (opts?.force) return;
+  if (inst.zid != null && inst.eid != null) {
+    try {
+      const { assertFormsWritableForBp } = await import("./businessProcess.js");
+      const kindRow = (await db
+        .prepare(`SELECT package_kind FROM periods WHERE eid = ? AND zid = ?`)
+        .get(inst.eid, inst.zid)) as { package_kind: string | null } | undefined;
+      const kind = kindRow?.package_kind === "BALANCE" ? "BALANCE" : "OKO";
+      await assertFormsWritableForBp(db, inst.zid, inst.eid, kind);
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      // Ignore missing BP tables during early boot; rethrow lock/conflict.
+      if (err.status === 409) throw e;
+      if (String(err.message || "").includes("business_processes")) return;
+    }
+  }
 }
 
 export interface CellPatchInput {

@@ -49,6 +49,10 @@ import { loadRashEntries, saveRashEntries } from "../../../server/src/rash-data.
 import type { RashEntryDto } from "../../../server/src/rash-data.js";
 import type { OkoFormInstance } from "../../../server/src/types.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import {
+  PsdPermissionGuard,
+  RequirePsdPermissions,
+} from "../auth/psd-permission.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
@@ -62,6 +66,7 @@ import {
 
 @ApiTags("instances")
 @ApiBearerAuth()
+@UseGuards(PsdPermissionGuard)
 @Controller("instances")
 export class InstancesController {
   @Get("stats")
@@ -148,6 +153,7 @@ export class InstancesController {
   }
 
   @Post("bulk-status")
+  @RequirePsdPermissions("forms.write")
   @HttpCode(200)
   @ApiOperation({
     summary:
@@ -183,6 +189,7 @@ export class InstancesController {
 
   @Post("batch")
   @HttpCode(200)
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({
     summary: "Сохранить несколько экземпляров атомарно (одна транзакция)",
   })
@@ -212,6 +219,7 @@ export class InstancesController {
 
   @Post()
   @HttpCode(201)
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Создать / сохранить экземпляр" })
   async create(@Req() req: OkoRequest, @Body() body: OkoFormInstance) {
     try {
@@ -265,6 +273,7 @@ export class InstancesController {
   }
 
   @Put(":id")
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Обновить экземпляр" })
   async update(
     @Req() req: OkoRequest,
@@ -289,6 +298,7 @@ export class InstancesController {
   }
 
   @Patch(":id/cells")
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Пакетное обновление ячеек (без полной перезаписи формы)" })
   async patchCells(
     @Req() req: OkoRequest,
@@ -321,6 +331,7 @@ export class InstancesController {
   }
 
   @Patch(":id/status")
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Сменить статус draft / submitted (submitted — после period-проверок)" })
   async patchStatus(
     @Req() req: OkoRequest,
@@ -383,6 +394,7 @@ export class InstancesController {
   }
 
   @Delete(":id")
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Удалить экземпляр" })
   async remove(@Req() req: Request, @Param("id") id: string) {
     try {
@@ -419,6 +431,7 @@ export class InstancesController {
   }
 
   @Put(":id/rash")
+  @RequirePsdPermissions("forms.write")
   @ApiOperation({ summary: "Сохранить расшифровку экземпляра" })
   async putRash(
     @Req() req: OkoRequest,

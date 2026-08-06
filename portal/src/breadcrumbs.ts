@@ -37,6 +37,26 @@ export function breadcrumbsForPath(
     return [home, { label: "Комплект" }];
   }
 
+  if (parts[0] === "bp") {
+    return [home, { label: "Мониторинг БП" }];
+  }
+
+  if (parts[0] === "integrations") {
+    return [home, { label: "Интеграции / своды" }];
+  }
+
+  if (parts[0] === "collection-units") {
+    return [home, { label: "Единицы сбора" }];
+  }
+
+  if (parts[0] === "psd-reports") {
+    return [home, { label: "Отчёты ПСД" }];
+  }
+
+  if (parts[0] === "check-explanations") {
+    return [home, { label: "Объяснения проверок" }];
+  }
+
   if (parts[0] === "tools") {
     return [home, { label: "Сводка и импорт" }];
   }

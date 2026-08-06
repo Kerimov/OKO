@@ -1,12 +1,20 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../apiClient";
-import type { UserDto } from "../auth";
+import type { PsdRole, UserDto } from "../auth";
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
 import { roleLabel } from "../uiLabels";
 import { useAuth } from "../useAuth";
+
+const PSD_ROLES: Array<{ value: PsdRole; label: string }> = [
+  { value: "business_process_manager", label: "Руководитель БП" },
+  { value: "department_curator", label: "Куратор" },
+  { value: "subsidiary_specialist", label: "Специалист ДО" },
+  { value: "support_specialist", label: "Сопровождение" },
+  { value: "auditor_readonly", label: "Аудитор (чтение)" },
+];
 
 export function UsersAdminPage() {
   const backend = isBackendMode();
@@ -23,12 +31,16 @@ export function UsersAdminPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<"admin" | "org">("org");
+  const [psdRole, setPsdRole] = useState<PsdRole>("subsidiary_specialist");
+  const [locale, setLocale] = useState<"ru" | "en">("ru");
   const [zid, setZid] = useState<number | "">("");
 
   const [selected, setSelected] = useState<UserDto | null>(null);
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editRole, setEditRole] = useState<"admin" | "org">("org");
+  const [editPsdRole, setEditPsdRole] = useState<PsdRole>("subsidiary_specialist");
+  const [editLocale, setEditLocale] = useState<"ru" | "en">("ru");
   const [editZid, setEditZid] = useState<number | "">("");
   const [editActive, setEditActive] = useState(true);
 
@@ -37,6 +49,8 @@ export function UsersAdminPage() {
     setEditDisplayName(user.displayName ?? "");
     setEditPassword("");
     setEditRole(user.role);
+    setEditPsdRole(user.psdRole ?? (user.role === "admin" ? "support_specialist" : "subsidiary_specialist"));
+    setEditLocale(user.locale === "en" ? "en" : "ru");
     setEditZid(user.zid ?? "");
     setEditActive(user.active);
     setStatus("");
@@ -87,12 +101,16 @@ export function UsersAdminPage() {
           password,
           displayName: displayName || undefined,
           role,
+          psdRole,
+          locale,
           zid: role === "org" ? zid : null,
         }),
       });
       setUsername("");
       setPassword("");
       setDisplayName("");
+      setPsdRole("subsidiary_specialist");
+      setLocale("ru");
       setStatus("Пользователь создан");
       await load();
     } catch (err) {
@@ -114,6 +132,8 @@ export function UsersAdminPage() {
       const body: Record<string, unknown> = {
         displayName: editDisplayName.trim() || null,
         role: editRole,
+        psdRole: editPsdRole,
+        locale: editLocale,
         zid: editRole === "org" ? editZid : null,
         active: editActive,
       };
@@ -191,10 +211,27 @@ export function UsersAdminPage() {
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           </label>
           <label>
-            Роль
+            Роль (legacy)
             <select value={role} onChange={(e) => setRole(e.target.value as "admin" | "org")}>
               <option value="org">Организация</option>
               <option value="admin">Администратор</option>
+            </select>
+          </label>
+          <label>
+            Роль ПСД
+            <select value={psdRole} onChange={(e) => setPsdRole(e.target.value as PsdRole)}>
+              {PSD_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Язык
+            <select value={locale} onChange={(e) => setLocale(e.target.value as "ru" | "en")}>
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
             </select>
           </label>
           {role === "org" && (
@@ -245,6 +282,7 @@ export function UsersAdminPage() {
                   <th>Логин</th>
                   <th>Имя</th>
                   <th>Роль</th>
+                  <th>ПСД</th>
                   <th>Организация</th>
                   <th>Статус</th>
                 </tr>
@@ -259,6 +297,7 @@ export function UsersAdminPage() {
                     <td>{u.username}</td>
                     <td>{u.displayName ?? "—"}</td>
                     <td>{roleLabel(u.role)}</td>
+                    <td>{u.psdRole ?? "—"}</td>
                     <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
                     <td>{u.active ? "активен" : "отключён"}</td>
                   </tr>
@@ -295,13 +334,36 @@ export function UsersAdminPage() {
                   />
                 </label>
                 <label>
-                  Роль
+                  Роль (legacy)
                   <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value as "admin" | "org")}
                   >
                     <option value="org">Организация</option>
                     <option value="admin">Администратор</option>
+                  </select>
+                </label>
+                <label>
+                  Роль ПСД
+                  <select
+                    value={editPsdRole}
+                    onChange={(e) => setEditPsdRole(e.target.value as PsdRole)}
+                  >
+                    {PSD_ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Язык
+                  <select
+                    value={editLocale}
+                    onChange={(e) => setEditLocale(e.target.value as "ru" | "en")}
+                  >
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
                   </select>
                 </label>
                 {editRole === "org" && (

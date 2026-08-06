@@ -55,7 +55,12 @@ export function loanItemToRashRef(item: LoanNzsItem): RashRefItem {
     kod: item.newkod || item.kod || item.value,
     value: item.value || item.kod,
     note: item.note ?? null,
+    newkod: item.newkod ?? null,
   };
+}
+
+export function isLoanNzsGroup(kind: string): boolean {
+  return (LOAN_NZS_GROUPS as readonly string[]).includes(kind);
 }
 
 export function mergeLoanGroups(
@@ -202,18 +207,47 @@ export async function downloadLoansNzsPackage(
 
 export async function readLoansNzsPackageFile(file: File): Promise<LoansNzsPackage> {
   const text = await file.text();
-  const data = JSON.parse(text) as LoansNzsPackage;
-  if (!data?.groups || typeof data.groups !== "object") {
-    throw new Error("Неверный файл справочников займов/НЗС");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Файл справочников займов/НЗС: невалидный JSON");
   }
-  return data;
+  const { validateLoansNzsPackageShape } = await import("./refsValidation");
+  return validateLoansNzsPackageShape(parsed);
 }
 
 export async function importLoansNzsPackage(
   incoming: LoansNzsPackage,
-  mode: "replace" | "merge" = "merge"
+  mode: "replace" | "merge" = "merge",
+  opts?: { allowEmptyReplace?: boolean }
 ): Promise<{ package: LoansNzsPackage; added: number; total: number }> {
   const current = await loadEffectiveLoansNzs();
+  const { previewLoansNzsImport } = await import("./refsValidation");
+  const preview = previewLoansNzsImport(current, incoming, mode);
+  if (mode === "replace" && !opts?.allowEmptyReplace) {
+    const totalIncoming = LOAN_NZS_GROUPS.reduce(
+      (n, g) => n + (incoming.groups?.[g]?.length ?? 0),
+      0
+    );
+    if (totalIncoming === 0) {
+      throw new Error(
+        "Замена отклонена: файл не содержит записей KZS/НЗС (защита от очистки)"
+      );
+    }
+    for (const g of LOAN_NZS_GROUPS) {
+      const cur = current.groups?.[g]?.length ?? 0;
+      const inc = incoming.groups?.[g]?.length ?? 0;
+      if (cur > 0 && inc === 0) {
+        throw new Error(
+          `Замена отклонена: группа «${g}» стала бы пустой (${cur} → 0). Используйте слияние или передайте записи.`
+        );
+      }
+    }
+  }
+  if (preview.warnings.some((w) => w.includes("очистит")) && !opts?.allowEmptyReplace) {
+    /* already blocked above when empty; keep preview for callers */
+  }
   const groups = mergeLoanGroups(current.groups, incoming.groups ?? {}, mode);
   const pkg = buildLoansNzsPackage(groups, {
     organization: incoming.organization || current.organization,

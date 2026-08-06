@@ -3,6 +3,7 @@ import {
   type CheckMode,
   type CheckRule,
   type CheckRunResult,
+  type CheckResultItem,
 } from "@oko/engine";
 import { exportChecksPayload } from "./checks.js";
 import type { OkoDb } from "./oko-db.js";
@@ -12,6 +13,7 @@ import {
   setInstanceStatus,
 } from "./instances.js";
 import type { OkoFormInstance } from "./types.js";
+import { appendCheckRunJournal } from "./checkJournal.js";
 
 export class ChecksFailedError extends Error {
   readonly status = 422;
@@ -125,6 +127,54 @@ async function loadChecksForInstance(
   return payload.checks as CheckRule[];
 }
 
+/** Map CheckRunResult items into check_run_journal rows. */
+export function mapCheckRunResultToJournal(
+  result: CheckRunResult,
+  formId?: string | null
+): Array<{
+  ruleNumber: number | null;
+  checkType: string | null;
+  passed: boolean;
+  leftValue: number | null;
+  rightValue: number | null;
+  message: string | null;
+  formId: string | null;
+  requiresExplanation: boolean;
+}> {
+  return result.items.map((item: CheckResultItem) => {
+    const logicalFail = !item.passed && !item.parseError;
+    return {
+      ruleNumber: item.number ?? null,
+      checkType: item.parseError ? "parse" : "logical",
+      passed: !!item.passed,
+      leftValue: Number.isFinite(item.left) ? item.left : null,
+      rightValue: Number.isFinite(item.right) ? item.right : null,
+      message: item.message ?? item.error ?? null,
+      formId: formId ?? null,
+      // Logical failures require explanation before BP approval.
+      requiresExplanation: logicalFail,
+    };
+  });
+}
+
+/** Persist a check run into the journal when the instance has zid+eid. */
+export async function persistCheckRunToJournal(
+  db: OkoDb,
+  instance: OkoFormInstance,
+  result: CheckRunResult,
+  actor?: string | null
+): Promise<{ runId: string; count: number } | null> {
+  const zid = intOrNull(instance.zid);
+  const eid = intOrNull(instance.eid);
+  if (zid == null || eid == null) return null;
+  return appendCheckRunJournal(db, {
+    zid,
+    eid,
+    actor: actor ?? null,
+    results: mapCheckRunResultToJournal(result, instance.templateId),
+  });
+}
+
 /** Dry-run period (or other mode) checks for one form — no status change. */
 export async function runInstancePeriodChecks(
   db: OkoDb,
@@ -148,10 +198,12 @@ export async function runInstancePeriodChecks(
 /** Submit form: run period checks against package siblings, then set status. */
 export async function submitInstanceWithChecks(
   db: OkoDb,
-  instanceId: string
+  instanceId: string,
+  actor?: string | null
 ): Promise<OkoFormInstance | null> {
   const ran = await runInstancePeriodChecks(db, instanceId, "period");
   if (!ran) return null;
+  await persistCheckRunToJournal(db, ran.instance, ran.result, actor);
   // skipped = проверка не разобрана (часто пустые ячейки) — не блокируем сдачу.
   // Блокируем только явные failed.
   if (ran.result.failed > 0) {
@@ -263,6 +315,7 @@ export async function submitInstancesBulkWithChecks(
           siblings,
           "period"
         );
+        await persistCheckRunToJournal(db, existing, result);
         if (result.failed > 0) {
           failed.push({
             instanceId: id,

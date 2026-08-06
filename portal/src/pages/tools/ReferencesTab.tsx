@@ -179,6 +179,7 @@ export function ReferencesTab({
             type="file"
             accept=".json,application/json"
             hidden
+            aria-label="Файл справочников займов и НЗС"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void onImportLoans(file);
@@ -186,6 +187,10 @@ export function ReferencesTab({
             }}
           />
         </div>
+        <p className="hint-text">
+          Перед записью будет показан предпросмотр (текущие → новые счётчики). Режим «замена»
+          отклоняет пустые группы.
+        </p>
         <label className="checkbox-inline">
           <input
             type="radio"

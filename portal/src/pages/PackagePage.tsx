@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { canMutateData, isAuditorReadonly, type PsdRole } from "../auth";
 import {
   createOrganization,
   createPeriod,
@@ -15,6 +16,17 @@ import {
   saveWorkContext,
   setPackageWorkflowStatus,
 } from "../packagesApi";
+import {
+  ensureBusinessProcess,
+  getBpApprovalBlockers,
+  transitionBusinessProcess,
+  type ApprovalBlockers,
+  type BpAction,
+  type BpStatus,
+  type BusinessProcessDto,
+  type PackageKind,
+} from "../psdApi";
+import { isBackendMode } from "../storage";
 import type {
   Organization,
   PackageCompleteness,
@@ -25,11 +37,79 @@ import { formatPeriod, formStatusLabel, packageWorkflowLabel } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
 
+const BP_STATUS_LABEL: Record<BpStatus, string> = {
+  not_started: "Не начат",
+  collecting: "Сбор",
+  pending_curator_approval: "На согласовании",
+  curator_approved: "Согласован",
+  completed: "Завершён",
+};
+
+const BP_ACTIONS: Array<{
+  action: BpAction;
+  label: string;
+  from: BpStatus[];
+  roles: PsdRole[];
+}> = [
+  {
+    action: "start",
+    label: "Запустить",
+    from: ["not_started"],
+    roles: ["business_process_manager", "support_specialist"],
+  },
+  {
+    action: "submit_for_approval",
+    label: "На согласование",
+    from: ["collecting"],
+    roles: ["subsidiary_specialist", "support_specialist"],
+  },
+  {
+    action: "curator_approve",
+    label: "Согласовать",
+    from: ["pending_curator_approval"],
+    roles: ["department_curator", "support_specialist"],
+  },
+  {
+    action: "curator_return",
+    label: "Вернуть",
+    from: ["pending_curator_approval"],
+    roles: ["department_curator", "support_specialist"],
+  },
+  {
+    action: "complete",
+    label: "Завершить",
+    from: ["curator_approved"],
+    roles: ["business_process_manager", "support_specialist"],
+  },
+  {
+    action: "reopen",
+    label: "Открыть снова",
+    from: ["completed"],
+    roles: ["business_process_manager", "support_specialist"],
+  },
+];
+
+function resolveUiPsdRole(auth: {
+  authRequired: boolean;
+  role: string | null;
+  user: { role: string; psdRole?: PsdRole } | null;
+}): PsdRole {
+  if (auth.user?.psdRole) return auth.user.psdRole;
+  if (!auth.authRequired || auth.role === "admin" || auth.user?.role === "admin") {
+    return "support_specialist";
+  }
+  return "subsidiary_specialist";
+}
+
 export function PackagePage() {
   const auth = useAuth();
   const admin = !auth.authRequired || auth.role === "admin";
+  const canMutate = canMutateData();
+  const auditorRo = isAuditorReadonly();
+  const psdRole = resolveUiPsdRole(auth);
   const orgZid = auth.user?.role === "org" ? auth.user.zid ?? null : null;
   const formsLinkLabel = formsListNavLabel(auth);
+  const backend = isBackendMode();
   const [searchParams] = useSearchParams();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
@@ -45,7 +125,11 @@ export function PackagePage() {
   const [newPeriodName, setNewPeriodName] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
+  const [newPackageKind, setNewPackageKind] = useState<PackageKind>("OKO");
   const [workflowComment, setWorkflowComment] = useState("");
+  const [bp, setBp] = useState<BusinessProcessDto | null>(null);
+  const [bpBlockers, setBpBlockers] = useState<ApprovalBlockers | null>(null);
+  const [bpBusy, setBpBusy] = useState(false);
 
   const selectedOrg = useMemo(
     () => orgs.find((o) => o.zid === zid),
@@ -76,6 +160,29 @@ export function PackagePage() {
     setPeriods(await listPeriods(orgZid));
   }, []);
 
+  const refreshBp = useCallback(
+    async (z: number, e: number, kind: PackageKind) => {
+      if (!backend) {
+        setBp(null);
+        setBpBlockers(null);
+        return;
+      }
+      try {
+        const row = await ensureBusinessProcess({ zid: z, eid: e, packageKind: kind });
+        setBp(row);
+        try {
+          setBpBlockers(await getBpApprovalBlockers(row.id));
+        } catch {
+          setBpBlockers(null);
+        }
+      } catch {
+        setBp(null);
+        setBpBlockers(null);
+      }
+    },
+    [backend]
+  );
+
   useEffect(() => {
     (async () => {
       const [orgList, ctx] = await Promise.all([listOrganizations(), loadWorkContext()]);
@@ -99,22 +206,33 @@ export function PackagePage() {
         setEid(initialEid);
         if (typeof initialEid === "number") {
           await refreshCompleteness(initialZid, initialEid);
+          const kind =
+            perList.find((p) => p.eid === initialEid)?.packageKind === "BALANCE"
+              ? "BALANCE"
+              : "OKO";
+          await refreshBp(initialZid, initialEid, kind);
         }
       }
       setLoading(false);
     })();
-  }, [refreshCompleteness, searchParams]);
+  }, [refreshCompleteness, refreshBp, searchParams]);
 
   const handleZidChange = async (value: number) => {
     setZid(value);
     setEid("");
     setCompleteness(null);
+    setBp(null);
     await refreshPeriods(value);
     const perList = await listPeriods(value);
     if (perList[0]) {
       setEid(perList[0].eid);
       await saveWorkContext({ zid: value, eid: perList[0].eid });
       await refreshCompleteness(value, perList[0].eid);
+      await refreshBp(
+        value,
+        perList[0].eid,
+        perList[0].packageKind === "BALANCE" ? "BALANCE" : "OKO"
+      );
     } else {
       await saveWorkContext({ zid: value, eid: null });
     }
@@ -125,6 +243,11 @@ export function PackagePage() {
     if (zid !== "") {
       await saveWorkContext({ zid, eid: value });
       await refreshCompleteness(zid, value);
+      const kind =
+        periods.find((p) => p.eid === value)?.packageKind === "BALANCE"
+          ? "BALANCE"
+          : "OKO";
+      await refreshBp(zid, value, kind);
     }
   };
 
@@ -154,7 +277,7 @@ export function PackagePage() {
   };
 
   const handleCreatePeriod = async () => {
-    if (zid === "" || !newPeriodName.trim()) return;
+    if (zid === "" || !newPeriodName.trim() || !canMutate) return;
     setBusy(true);
     setStatus("");
     try {
@@ -163,19 +286,50 @@ export function PackagePage() {
         name: newPeriodName.trim(),
         periodStart: newPeriodStart || undefined,
         periodEnd: newPeriodEnd || undefined,
+        packageKind: newPackageKind,
       });
       await refreshPeriods(zid);
       setNewPeriodName("");
       setNewPeriodStart("");
       setNewPeriodEnd("");
+      setNewPackageKind("OKO");
       await handleEidChange(period.eid);
-      setStatus(`Период «${period.name}» создан (код ${period.eid})`);
+      setStatus(
+        `Период «${period.name}» создан (код ${period.eid}, тип ${period.packageKind ?? newPackageKind})`
+      );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка создания периода");
     } finally {
       setBusy(false);
     }
   };
+
+  const handleBpAction = async (action: BpAction) => {
+    if (!bp || !canMutate) return;
+    setBpBusy(true);
+    setStatus("");
+    try {
+      const updated = await transitionBusinessProcess(bp.id, action);
+      setBp(updated);
+      try {
+        setBpBlockers(await getBpApprovalBlockers(updated.id));
+      } catch {
+        setBpBlockers(null);
+      }
+      setStatus(`БП: ${BP_STATUS_LABEL[updated.status]}`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка перехода БП");
+    } finally {
+      setBpBusy(false);
+    }
+  };
+
+  const bpActions = useMemo(() => {
+    if (!bp) return [];
+    return BP_ACTIONS.filter(
+      (a) => a.from.includes(bp.status) && a.roles.includes(psdRole)
+    );
+  }, [bp, psdRole]);
 
   const handleCreatePackage = async () => {
     if (zid === "" || eid === "") return;
@@ -415,7 +569,8 @@ export function PackagePage() {
               <option value="">— выберите —</option>
               {periods.map((p) => (
                 <option key={p.eid} value={p.eid}>
-                  {p.name} (код {p.eid})
+                  {p.name} (код {p.eid}
+                  {p.packageKind ? `, ${p.packageKind}` : ""})
                 </option>
               ))}
             </select>
@@ -428,6 +583,9 @@ export function PackagePage() {
               selectedPeriod.periodStart ?? "",
               selectedPeriod.periodEnd ?? ""
             )}
+            {" · "}
+            Тип комплекта:{" "}
+            <strong>{selectedPeriod.packageKind ?? "OKO"}</strong>
             {" · "}
             Период:{" "}
             <strong>
@@ -443,7 +601,68 @@ export function PackagePage() {
         )}
       </section>
 
-      {admin && (
+      {backend && typeof zid === "number" && typeof eid === "number" && (
+        <section className="tools-section">
+          <h2>Бизнес-процесс</h2>
+          {auditorRo && (
+            <p className="tools-hint">
+              Режим аудитора: <strong>только чтение</strong>
+            </p>
+          )}
+          {bp ? (
+            <>
+              <p className="tools-hint">
+                Статус: <strong>{BP_STATUS_LABEL[bp.status]}</strong>
+                {" · "}
+                Тип: <strong>{bp.packageKind}</strong>
+                {" · "}
+                Итерация: {bp.iteration}
+                {bp.curatorName || bp.curatorUserId != null
+                  ? ` · куратор: ${bp.curatorName ?? bp.curatorUserId}`
+                  : ""}
+                {bp.lastChangedAt
+                  ? ` · изменён ${bp.lastChangedAt}${
+                      bp.lastChangedBy ? ` (${bp.lastChangedBy})` : ""
+                    }`
+                  : ""}
+              </p>
+              {bpBlockers?.blocked && (
+                <p className="error">
+                  Согласование заблокировано — нет объяснений:{" "}
+                  {bpBlockers.missingExplanations
+                    .map((m) => `#${m.ruleNumber}`)
+                    .join(", ")}
+                  .{" "}
+                  <Link to="/check-explanations">Объяснения проверок</Link>
+                </p>
+              )}
+              <div className="toolbar-actions" style={{ marginBottom: "0.75rem" }}>
+                {bpActions.map((a) => (
+                  <button
+                    key={a.action}
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={bpBusy || !canMutate}
+                    onClick={() => void handleBpAction(a.action)}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+                <Link to="/bp" className="btn btn-secondary">
+                  Мониторинг БП
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="tools-hint">
+              БП не загружен.{" "}
+              <Link to="/bp">Открыть мониторинг БП</Link>
+            </p>
+          )}
+        </section>
+      )}
+
+      {admin && canMutate && (
         <section className="tools-section">
           <h2>Добавить организацию</h2>
           <div className="tools-grid">
@@ -493,7 +712,7 @@ export function PackagePage() {
         </section>
       )}
 
-      {admin && (
+      {admin && canMutate && (
         <section className="tools-section">
           <h2>Добавить период</h2>
           <div className="tools-grid">
@@ -505,6 +724,17 @@ export function PackagePage() {
                 placeholder="1 квартал 2026"
                 disabled={zid === ""}
               />
+            </label>
+            <label>
+              Тип комплекта
+              <select
+                value={newPackageKind}
+                onChange={(e) => setNewPackageKind(e.target.value as PackageKind)}
+                disabled={zid === ""}
+              >
+                <option value="OKO">OKO</option>
+                <option value="BALANCE">BALANCE</option>
+              </select>
             </label>
             <label>
               Начало
@@ -528,7 +758,7 @@ export function PackagePage() {
           <button
             type="button"
             className="btn btn-secondary"
-            disabled={busy || zid === "" || !newPeriodName.trim()}
+            disabled={busy || zid === "" || !newPeriodName.trim() || !canMutate}
             onClick={() => void handleCreatePeriod()}
           >
             Создать период
@@ -575,7 +805,7 @@ export function PackagePage() {
                   key={a.status}
                   type="button"
                   className="btn btn-secondary"
-                  disabled={busy}
+                  disabled={busy || !canMutate}
                   onClick={() => void handleWorkflow(a.status)}
                 >
                   {a.label}
@@ -595,12 +825,12 @@ export function PackagePage() {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy || zid === "" || eid === "" || periodClosed}
+              disabled={busy || zid === "" || eid === "" || periodClosed || !canMutate}
               onClick={() => void handleCreatePackage()}
             >
               {busy ? "Создание…" : "Завести пустые формы (комплект)"}
             </button>
-            {admin && (
+            {admin && canMutate && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -616,7 +846,7 @@ export function PackagePage() {
                 {childOrgs.length > 0 ? ` (${childOrgs.length})` : ""}
               </button>
             )}
-            {admin && !periodClosed && wf === "accepted" && (
+            {admin && canMutate && !periodClosed && wf === "accepted" && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -626,7 +856,7 @@ export function PackagePage() {
                 Закрыть период
               </button>
             )}
-            {admin && periodClosed && (
+            {admin && canMutate && periodClosed && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -636,7 +866,7 @@ export function PackagePage() {
                 Переоткрыть период
               </button>
             )}
-            {canDeletePackage && !periodClosed && (
+            {canDeletePackage && canMutate && !periodClosed && (
               <button
                 type="button"
                 className="btn btn-danger-outline"
