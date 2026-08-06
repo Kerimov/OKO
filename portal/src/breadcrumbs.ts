@@ -19,10 +19,14 @@ export function breadcrumbsForPath(
   pathname: string,
   formsListLabel = "Мои формы"
 ): Crumb[] {
-  const home: Crumb = { label: "Главная", to: "/catalog" };
+  const home: Crumb = { label: "Главная", to: "/desktop" };
   const parts = pathname.split("/").filter(Boolean);
 
-  if (parts.length === 0 || pathname === "/catalog") {
+  if (parts.length === 0 || pathname === "/desktop") {
+    return [{ label: "Рабочий стол" }];
+  }
+
+  if (pathname === "/catalog") {
     return [home, { label: "Каталог" }];
   }
 

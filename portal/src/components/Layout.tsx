@@ -174,6 +174,13 @@ export function Layout() {
         title: "Работа",
         items: [
           {
+            to: "/desktop",
+            label: "Рабочий стол",
+            description: "Обзор и виджеты по роли",
+            icon: "desktop",
+            isActive: (p) => p === "/desktop",
+          },
+          {
             to: "/catalog",
             label: "Каталог",
             description: "Шаблоны и создание форм",
@@ -441,7 +448,7 @@ export function Layout() {
     <div className={`app${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}>
       <aside className={`sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
         <div className="sidebar-top">
-          <Link to="/catalog" className="sidebar-brand" title="ОКО — портал отчётности">
+          <Link to="/desktop" className="sidebar-brand" title="ОКО — портал отчётности">
             <span className="sidebar-brand-mark">ОКО</span>
             <span className="sidebar-brand-text">
               <span className="sidebar-brand-title">Портал отчётности</span>

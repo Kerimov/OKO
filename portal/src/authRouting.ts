@@ -2,10 +2,8 @@ import type { AuthSnapshot } from "./auth";
 
 type AuthState = AuthSnapshot;
 
-export function defaultAppPath(auth: AuthState): string {
-  if (auth.user?.role === "org") return "/my";
-  if (auth.user?.role === "admin" || auth.role === "admin") return "/package";
-  return "/catalog";
+export function defaultAppPath(_auth: AuthState): string {
+  return "/desktop";
 }
 
 export function needsAuthentication(backend: boolean, auth: AuthState): boolean {

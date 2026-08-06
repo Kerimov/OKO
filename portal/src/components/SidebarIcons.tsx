@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 export type SidebarIconName =
+  | "desktop"
   | "catalog"
   | "forms"
   | "packages"
@@ -40,6 +41,12 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 const ICONS: Record<SidebarIconName, ReactNode> = {
+  desktop: (
+    <Icon>
+      <path d="M4 5h16v10H4z" />
+      <path d="M9 19h6M12 15v4" />
+    </Icon>
+  ),
   catalog: (
     <Icon>
       <path d="M4 6h6v6H4zM14 6h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />

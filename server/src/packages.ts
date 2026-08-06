@@ -1899,6 +1899,8 @@ export async function createReportPackage(
   eid: number,
   opts?: {
     onProgress?: (progress: number, message?: string) => void | Promise<void>;
+    /** If set — create only these templates (subset). */
+    formIds?: string[];
   }
 ): Promise<CreatePackageResult> {
   let created = 0;
@@ -1924,7 +1926,13 @@ export async function createReportPackage(
         | undefined;
       if (!period) throw new Error("Period not found");
 
-      const formSet = await ensurePeriodFormSet(db, eid);
+      let formSet = await ensurePeriodFormSet(db, eid);
+      if (opts?.formIds?.length) {
+        const allow = new Set(
+          opts.formIds.map((id) => String(id).trim()).filter(Boolean)
+        );
+        formSet = formSet.filter((entry) => allow.has(entry.formId));
+      }
       const existing = await existingTemplatesForPackage(db, zid, eid);
       const now = new Date().toISOString();
       const instanceIds: string[] = [];
@@ -2518,7 +2526,11 @@ async function constructOnePackage(
     }
 
     if (input.forms.mode === "selected") {
-      await replacePeriodFormSet(db, eid, formIds);
+      const existingTemplates = await existingTemplatesForPackage(db, zid, eid);
+      // Empty package or brand-new period → pin incomplete form set.
+      if (periodCreated || existingTemplates.size === 0) {
+        await replacePeriodFormSet(db, eid, formIds);
+      }
     } else if (periodCreated) {
       // createPeriod already snapshots full catalog
     } else {
@@ -2529,7 +2541,9 @@ async function constructOnePackage(
     let formsCreated = 0;
     let formsSkipped = 0;
     if (input.options?.createInstances !== false) {
-      const pkg = await createReportPackage(db, zid, eid);
+      const pkg = await createReportPackage(db, zid, eid, {
+        formIds: input.forms.mode === "selected" ? formIds : undefined,
+      });
       formsCreated = pkg.created;
       formsSkipped = pkg.skipped;
     }

@@ -71,6 +71,9 @@ const CheckExplanationsPage = lazy(() =>
 const PerimeterPage = lazy(() =>
   import("./pages/PerimeterPage").then((m) => ({ default: m.PerimeterPage }))
 );
+const DesktopPage = lazy(() =>
+  import("./pages/DesktopPage").then((m) => ({ default: m.DesktopPage }))
+);
 
 function Lazy({ children }: { children: ReactNode }) {
   return (
@@ -86,6 +89,7 @@ export default function App() {
           <Route path="/" element={<EntryPage />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route element={<Layout />}>
+            <Route path="desktop" element={<Lazy><DesktopPage /></Lazy>} />
             <Route path="catalog" element={<HomePage />} />
             <Route path="my" element={<MyFormsPage />} />
             <Route path="my/:instanceId" element={<FormPage />} />

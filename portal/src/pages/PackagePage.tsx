@@ -6,7 +6,7 @@ import {
   resolveUiPsdRole,
   type PsdRole,
 } from "../auth";
-import { PackageConstructor } from "../components/PackageConstructor";
+import { PackageFormsFillPanel } from "../components/PackageFormsFillPanel";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import {
   Button,
@@ -89,7 +89,7 @@ type WorkspaceTab =
   | "bp"
   | "open-period"
   | "setup"
-  | "create-packages";
+  | "fill-forms";
 type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
 
 type PeriodCampaign = {
@@ -206,6 +206,10 @@ export function PackagePage() {
   const [packageChecksBusy, setPackageChecksBusy] = useState(false);
 
   const [selectedCampaignKey, setSelectedCampaignKey] = useState("");
+  /** Targets for «Завести формы» dialog (one org or multi-select). */
+  const [fillTargets, setFillTargets] = useState<PackageWorkspaceRow[] | null>(
+    null
+  );
   /** Filters for packages inside a period (right pane). */
   const [filterBp, setFilterBp] = useState("");
   const [filterIncomplete, setFilterIncomplete] = useState(false);
@@ -889,36 +893,102 @@ export function PackagePage() {
     setTab("forms");
   };
 
-  const handleCreatePackage = async () => {
-    if (typeof zid !== "number" || typeof eid !== "number") return;
+  const openFillForms = (targets: PackageWorkspaceRow[]) => {
+    const open = targets.filter((r) => r.periodStatus !== "closed");
+    if (!open.length) {
+      setStatus("Нет открытых комплектов для заведения форм");
+      return;
+    }
+    if (!selectedCampaignKey && open[0]) {
+      setSelectedCampaignKey(campaignKeyOf(open[0]));
+    }
+    setFillTargets(open);
+    setTab("fill-forms");
+  };
+
+  const handleFillFormsConfirm = async (opts: {
+    formsMode: "all" | "selected";
+    formIds: string[];
+  }) => {
+    if (!fillTargets?.length || !selectedCampaign) return;
     setBusy(true);
     setStatus("");
     try {
-      const result = await createReportPackageAsync(zid, eid, {
-        onProgress: (job: BackgroundJobStatusDto) => {
-          const msg = job.message || job.status;
-          setStatus(
-            job.status === "queued" || job.status === "running"
-              ? `Создание комплекта… ${job.progress}% — ${msg}`
-              : msg
-          );
+      // Full set for a single org — keep async job path (progress).
+      if (opts.formsMode === "all" && fillTargets.length === 1) {
+        const t = fillTargets[0];
+        await selectPackage(t.zid, t.eid, t.packageKind);
+        const result = await createReportPackageAsync(t.zid, t.eid, {
+          onProgress: (job: BackgroundJobStatusDto) => {
+            const msg = job.message || job.status;
+            setStatus(
+              job.status === "queued" || job.status === "running"
+                ? `Создание комплекта… ${job.progress}% — ${msg}`
+                : msg
+            );
+          },
+        });
+        setStatus(
+          `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total})`
+        );
+        applyCreateResultLocally(result);
+        await refreshAll();
+        setFillTargets(null);
+        setTab("overview");
+        return;
+      }
+
+      const res = await constructPackages({
+        mode: fillTargets.length > 1 ? "bulk" : "single",
+        targets: fillTargets.map((r) => ({ zid: r.zid })),
+        period: {
+          eid: fillTargets.length === 1 ? fillTargets[0].eid : undefined,
+          name: selectedCampaign.periodName,
+          periodStart: selectedCampaign.periodStart ?? undefined,
+          periodEnd: selectedCampaign.periodEnd ?? undefined,
+          packageKind: selectedCampaign.packageKind,
+          reuseExisting: true,
+        },
+        forms: {
+          mode: opts.formsMode,
+          formIds: opts.formsMode === "selected" ? opts.formIds : undefined,
+        },
+        options: {
+          createInstances: true,
+          allowCreatePeriod: false,
+          continueOnError: true,
         },
       });
+      const ok = res.rows.filter((r) => r.status === "created").length;
       setStatus(
-        `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total})`
+        `Формы заведены: комплектов ${ok}/${res.summary.targets}` +
+          (res.summary.formsCreated
+            ? ` · форм +${res.summary.formsCreated}`
+            : "") +
+          (res.summary.errors ? ` · ошибок ${res.summary.errors}` : "")
       );
-      applyCreateResultLocally(result);
-      void refreshAll().catch((e) => {
-        const err = e instanceof Error ? e.message : "ошибка";
-        setStatus(
-          `Комплект заведён: создано ${result.created}, пропущено ${result.skipped} (всего ${result.total}). Обновление списка: ${err}`
-        );
-      });
+      await loadList();
+      const first = fillTargets[0];
+      if (first) {
+        await selectPackage(first.zid, first.eid, first.packageKind);
+        setTab("overview");
+      } else {
+        setTab("period");
+      }
+      setFillTargets(null);
+      clearSelection();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка создания комплекта");
+      setStatus(e instanceof Error ? e.message : "Ошибка заведения форм");
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleCreatePackage = async () => {
+    if (typeof zid !== "number" || typeof eid !== "number" || !selectedRow) {
+      return;
+    }
+    openFillForms([selectedRow]);
   };
 
   const handleDeletePackage = async () => {
@@ -1375,7 +1445,7 @@ export function PackagePage() {
             <TabBar
               ariaLabel="Разделы"
               value={
-                tab === "open-period" || tab === "setup" || tab === "create-packages"
+                tab === "open-period" || tab === "setup" || tab === "fill-forms"
                   ? tab
                   : selectedRow && (tab === "overview" || tab === "forms" || tab === "bp")
                     ? tab
@@ -1401,11 +1471,6 @@ export function PackagePage() {
                       ? ([["open-period", "Открыть период"]] as Array<
                           [WorkspaceTab, string]
                         >)
-                      : []),
-                    ...(selectedCampaign && canMutate
-                      ? ([
-                          ["create-packages", "Создать комплекты"],
-                        ] as Array<[WorkspaceTab, string]>)
                       : []),
                     ...(admin && canMutate
                       ? ([["setup", "Настройка"]] as Array<[WorkspaceTab, string]>)
@@ -1507,32 +1572,23 @@ export function PackagePage() {
             </section>
           )}
 
-          {tab === "create-packages" && canMutate && selectedCampaign && (
-            <PackageConstructor
-              orgs={orgs}
-              admin={admin}
-              canMutate={canMutate}
-              lockedCampaign={{
-                periodName: selectedCampaign.periodName,
-                packageKind: selectedCampaign.packageKind,
-                periodStart: selectedCampaign.periodStart,
-                periodEnd: selectedCampaign.periodEnd,
+          {tab === "fill-forms" && canMutate && fillTargets && fillTargets.length > 0 ? (
+            <PackageFormsFillPanel
+              targets={fillTargets}
+              busy={busy}
+              onCancel={() => {
+                setFillTargets(null);
+                setTab("period");
               }}
-              siblingRows={rows}
-              onCreated={async (nextZid, nextEid, kind) => {
-                setStatus("Комплекты созданы");
-                await loadList();
-                await selectPackage(nextZid, nextEid, kind);
-                setTab("overview");
-              }}
+              onConfirm={(opts) => void handleFillFormsConfirm(opts)}
             />
-          )}
+          ) : null}
 
           {(tab === "period" ||
             (!selectedRow &&
               tab !== "open-period" &&
               tab !== "setup" &&
-              tab !== "create-packages")) &&
+              tab !== "fill-forms")) &&
           selectedCampaign ? (
             <section className="tools-section package-workspace-card">
               <div className="package-workspace-card-head">
@@ -1564,14 +1620,6 @@ export function PackagePage() {
                   </p>
                 </div>
                 <div className="toolbar-actions">
-                  {canMutate && selectedCampaign.status !== "closed" && (
-                    <Button
-                      onClick={() => setTab("create-packages")}
-                      disabled={busy}
-                    >
-                      Создать комплекты…
-                    </Button>
-                  )}
                   {canMutate && selectedCampaign.closableCount > 0 && (
                     <Button
                       variant="secondary"
@@ -1657,6 +1705,42 @@ export function PackagePage() {
                   </label>
                   {checkedRows.length > 0 ? (
                     <div className="package-workspace-bulk-actions">
+                      {canMutate && (
+                        <Button
+                          size="sm"
+                          disabled={
+                            busy ||
+                            !checkedRows.some(
+                              (r) =>
+                                r.periodStatus !== "closed" &&
+                                r.filled < r.total
+                            )
+                          }
+                          onClick={() =>
+                            openFillForms(
+                              checkedRows.filter(
+                                (r) =>
+                                  r.periodStatus !== "closed" &&
+                                  r.filled < r.total
+                              )
+                            )
+                          }
+                        >
+                          Завести формы
+                          {checkedRows.filter(
+                            (r) =>
+                              r.periodStatus !== "closed" && r.filled < r.total
+                          ).length
+                            ? ` (${
+                                checkedRows.filter(
+                                  (r) =>
+                                    r.periodStatus !== "closed" &&
+                                    r.filled < r.total
+                                ).length
+                              })`
+                            : ""}
+                        </Button>
+                      )}
                       {canBulkStartCollection && (
                         <Button
                           size="sm"
@@ -1768,21 +1852,16 @@ export function PackagePage() {
                               >
                                 Открыть
                               </button>
-                              {!closed && r.filled === 0 && canMutate && (
+                              {!closed && r.filled < r.total && canMutate && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={busy}
-                                  onClick={() => {
-                                    void selectPackage(
-                                      r.zid,
-                                      r.eid,
-                                      r.packageKind
-                                    );
-                                    void handleCreatePackage();
-                                  }}
+                                  onClick={() => openFillForms([r])}
                                 >
-                                  Завести формы
+                                  {r.filled === 0
+                                    ? "Завести формы"
+                                    : "Дозавести формы"}
                                 </button>
                               )}
                               {canClose && canMutate && (
@@ -1834,7 +1913,7 @@ export function PackagePage() {
           !selectedRow &&
           tab !== "open-period" &&
           tab !== "setup" &&
-          tab !== "create-packages" ? (
+          tab !== "fill-forms" ? (
             <section className="tools-section">
               <h2>Период не выбран</h2>
               <p className="tools-hint">
@@ -1855,7 +1934,7 @@ export function PackagePage() {
           {selectedRow &&
           tab !== "open-period" &&
           tab !== "setup" &&
-          tab !== "create-packages" &&
+          tab !== "fill-forms" &&
           tab !== "period" ? (
             <>
               <section className="tools-section package-workspace-card">
@@ -1994,9 +2073,11 @@ export function PackagePage() {
                       <Button
                         variant="secondary"
                         disabled={busy}
-                        onClick={() => void handleCreatePackage()}
+                        onClick={() => openFillForms([selectedRow])}
                       >
-                        Завести недостающие формы
+                        {selectedRow.filled === 0
+                          ? "Завести формы"
+                          : "Дозавести формы"}
                       </Button>
                     )}
                     <Button variant="secondary" onClick={() => setTab("forms")}>
@@ -2047,12 +2128,12 @@ export function PackagePage() {
                       </select>
                     </label>
                   </CollapsibleFilters>
-                  {canMutate && !periodClosed && (
+                  {canMutate && !periodClosed && selectedRow && (
                     <div className="toolbar-actions section-actions">
                       <Button
                         variant="secondary"
-                        disabled={busy}
-                        onClick={() => void handleCreatePackage()}
+                        disabled={busy || selectedRow.filled >= selectedRow.total}
+                        onClick={() => openFillForms([selectedRow])}
                       >
                         Завести / дозавести
                       </Button>
