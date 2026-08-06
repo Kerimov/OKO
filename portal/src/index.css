@@ -3653,6 +3653,43 @@ a.btn:hover {
   align-items: center;
 }
 
+.exchange-layout {
+  margin-top: 0.75rem;
+}
+
+.exchange-period-list h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.exchange-period-scroll {
+  max-height: min(70vh, 36rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.exchange-period-detail {
+  min-width: 0;
+}
+
+.exchange-campaign-head {
+  margin-bottom: 0.75rem;
+}
+
+.exchange-campaign-head h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+}
+
+.exchange-guid {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
 .exchange-row-imported {
   background: color-mix(in srgb, var(--success) 6%, var(--surface));
 }

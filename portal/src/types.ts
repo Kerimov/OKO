@@ -246,6 +246,8 @@ export type BpStatusUi =
 export interface PackageWorkspaceRow {
   zid: number;
   eid: number;
+  /** Stable package GUID — identity for exchange. */
+  packageId: string;
   organizationName: string;
   organizationCode: string | null;
   periodName: string;
@@ -268,7 +270,7 @@ export interface PackageWorkspaceRow {
   methodologyReleaseId: string | null;
   lastExportedAt: string | null;
   lastImportedAt: string | null;
-  /** Successful import count for this org/period (0 = never). */
+  /** Successful import count for this package GUID (0 = never). */
   importVersion: number;
 }
 

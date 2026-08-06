@@ -10,6 +10,8 @@ export interface ReportPackage {
   periodEnd: string;
   zid?: number | null;
   eid?: number | null;
+  /** Stable package GUID from periods.package_id. */
+  packageId?: string | null;
   instanceCount: number;
   instances: OkoFormInstance[];
   /** Правила проверок и справочники с ЦО (v1.2+). */

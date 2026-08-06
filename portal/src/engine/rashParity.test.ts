@@ -243,6 +243,36 @@ describe("rash P0/P1 fixes", () => {
     expect(issues.some((i) => i.message.includes("Требуется расшифровка"))).toBe(true);
   });
 
+  it("errors when explicitly bound rash cell is empty (below threshold)", () => {
+    const rule = rashData.rules.find((r) => r.kod === 51112) ?? rashData.rules[0];
+    const columns = [
+      { key: "num", label: "№", type: "text" as const },
+      { key: "name", label: "Наименование", type: "text" as const },
+      { key: "B", label: "B", type: "number" as const },
+      { key: "M", label: "M", type: "number" as const },
+    ];
+    const rows: RowData[] = [{ num: "20", name: "Нефть", B: "", M: "" }];
+    const data: RashRulesData = {
+      version: "test",
+      total: 1,
+      rules: [rule],
+      addsum: [],
+      thresholds,
+    };
+    const issues = validateCellRash(
+      "N05_11",
+      rows,
+      columns,
+      [],
+      data,
+      rowIndex as RowRashIndexData,
+      []
+    );
+    expect(
+      issues.some((i) => i.message.includes("Ячейка не заполнена"))
+    ).toBe(true);
+  });
+
   it("does not put classifier numeric codes into allowedTypes", () => {
     const country = parseRefFilter("Страна/31,32,RU");
     expect(country?.allowedTypes).toEqual([]);

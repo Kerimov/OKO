@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -339,15 +340,12 @@ export function SpreadsheetFormTable({
     }
   };
 
-  const pasteTsv = async () => {
+  const applyPasteText = (text: string) => {
     if (readOnly || !active) return;
-    let text = "";
-    try {
-      text = await navigator.clipboard.readText();
-    } catch {
-      return;
-    }
-    const lines = text.replace(/\r/g, "").split("\n").filter((l, i, a) => !(i === a.length - 1 && l === ""));
+    const lines = text
+      .replace(/\r/g, "")
+      .split("\n")
+      .filter((l, i, a) => !(i === a.length - 1 && l === ""));
     if (!lines.length) return;
     pushUndo(rows);
     const next = rows.map((r) => ({ ...r }));
@@ -364,6 +362,29 @@ export function SpreadsheetFormTable({
       }
     }
     onChange(next);
+    // Single-cell paste: keep formula bar in sync (not in edit mode).
+    if (lines.length === 1 && lines[0].split("\t").length === 1) {
+      setFormulaBar(lines[0]);
+    }
+  };
+
+  const onPaste = (e: ReactClipboardEvent) => {
+    if (readOnly || !active) return;
+    // While editing, the focused <input> must receive the paste alone.
+    // Intercepting here (or via Ctrl+V → pasteTsv) doubles the value.
+    if (editing) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+    ) {
+      return;
+    }
+    const text =
+      e.clipboardData.getData("text/plain") || e.clipboardData.getData("text");
+    if (!text) return;
+    e.preventDefault();
+    applyPasteText(text);
   };
 
   const fillDown = () => {
@@ -391,11 +412,8 @@ export function SpreadsheetFormTable({
       void copySelection();
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
-      e.preventDefault();
-      void pasteTsv();
-      return;
-    }
+    // Paste: handled by onPaste only. Ctrl+V + pasteTsv while editing was
+    // applying the clipboard twice (grid write + native input insert).
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       if (e.shiftKey) {
@@ -444,6 +462,8 @@ export function SpreadsheetFormTable({
       return;
     }
     if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Prevent the same key from also landing in the freshly focused input.
+      e.preventDefault();
       beginEdit(active.r, active.c, e.key);
       return;
     }
@@ -613,6 +633,7 @@ export function SpreadsheetFormTable({
         className="spreadsheet-grid-focus"
         tabIndex={0}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         role="grid"
         aria-label={formId ? `Таблица формы ${formId}` : "Таблица формы"}
       >
@@ -792,6 +813,10 @@ export function SpreadsheetFormTable({
                           onChange={(e) => {
                             setDraft(e.target.value);
                             setFormulaBar(e.target.value);
+                          }}
+                          onPaste={(e) => {
+                            // Keep native paste on the input; do not let grid onPaste run.
+                            e.stopPropagation();
                           }}
                           onBlur={() => {
                             endEdit(true);

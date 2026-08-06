@@ -23,6 +23,7 @@ import {
 import { listInstances, loadInstance } from "../../storage";
 import type { OkoFormInstance, PackageWorkspaceRow } from "../../types";
 import { bpStatusLabel, packageKindLabel } from "../../uiLabels";
+import { formatPeriod } from "../../utils";
 import { loadSchema } from "../../api";
 import type { ExchangeMode } from "./tabs";
 import { Button, StatusBadge } from "../../components/ui";
@@ -42,8 +43,8 @@ function formatExchangeAt(iso: string | null | undefined): string {
   }
 }
 
-function rowKey(r: { zid: number; eid: number }): string {
-  return `${r.zid}:${r.eid}`;
+function rowKey(r: { packageId?: string; zid: number; eid: number }): string {
+  return r.packageId?.trim() || `${r.zid}:${r.eid}`;
 }
 
 function isPackageFile(file: File): boolean {
@@ -68,91 +69,6 @@ async function loadPackageInstances(zid: number, eid: number): Promise<OkoFormIn
 }
 
 type UploadMarkFilter = "" | "imported" | "pending";
-
-function useWorkspacePackageList() {
-  const [workspaceRows, setWorkspaceRows] = useState<PackageWorkspaceRow[]>([]);
-  const [workspaceLoading, setWorkspaceLoading] = useState(false);
-  const [bulkSearch, setBulkSearch] = useState("");
-  const [bulkPeriod, setBulkPeriod] = useState("");
-  const [bulkKind, setBulkKind] = useState("");
-  const [bulkBp, setBulkBp] = useState("");
-  const [bulkOnlyFilled, setBulkOnlyFilled] = useState(false);
-  const [uploadMark, setUploadMark] = useState<UploadMarkFilter>("");
-
-  const reloadWorkspace = useCallback(async () => {
-    setWorkspaceLoading(true);
-    try {
-      setWorkspaceRows(await fetchPackageWorkspace());
-    } catch (e) {
-      // Keep previous rows — clearing the list on a transient error looks like
-      // «комплекты пропали».
-      throw e instanceof Error
-        ? e
-        : new Error("Не удалось загрузить список комплектов");
-    } finally {
-      setWorkspaceLoading(false);
-    }
-  }, []);
-
-  const periodOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of workspaceRows) {
-      const key = r.periodName || String(r.eid);
-      if (!map.has(key)) map.set(key, key);
-    }
-    return [...map.keys()].sort((a, b) => a.localeCompare(b, "ru"));
-  }, [workspaceRows]);
-
-  const filteredRows = useMemo(() => {
-    const q = bulkSearch.trim().toLowerCase();
-    return workspaceRows.filter((r) => {
-      if (bulkPeriod && (r.periodName || String(r.eid)) !== bulkPeriod) return false;
-      if (bulkKind && r.packageKind !== bulkKind) return false;
-      if (bulkBp && r.bpStatus !== bulkBp) return false;
-      if (bulkOnlyFilled && !(r.total > 0 && r.filled >= r.total)) return false;
-      if (uploadMark === "imported" && !r.lastImportedAt) return false;
-      if (uploadMark === "pending" && r.lastImportedAt) return false;
-      if (!q) return true;
-      return (
-        r.organizationName.toLowerCase().includes(q) ||
-        (r.organizationCode ?? "").toLowerCase().includes(q) ||
-        (r.periodName ?? "").toLowerCase().includes(q) ||
-        String(r.zid).includes(q) ||
-        String(r.eid).includes(q)
-      );
-    });
-  }, [
-    workspaceRows,
-    bulkSearch,
-    bulkPeriod,
-    bulkKind,
-    bulkBp,
-    bulkOnlyFilled,
-    uploadMark,
-  ]);
-
-  return {
-    workspaceRows,
-    workspaceLoading,
-    reloadWorkspace,
-    periodOptions,
-    filteredRows,
-    filters: {
-      bulkSearch,
-      setBulkSearch,
-      bulkPeriod,
-      setBulkPeriod,
-      bulkKind,
-      setBulkKind,
-      bulkBp,
-      setBulkBp,
-      bulkOnlyFilled,
-      setBulkOnlyFilled,
-      uploadMark,
-      setUploadMark,
-    },
-  };
-}
 
 function ExchangeMarksCell({
   row,
@@ -203,26 +119,272 @@ function ExchangeMarksCell({
   );
 }
 
+type ExchangeCampaign = {
+  key: string;
+  periodName: string;
+  packageKind: PackageWorkspaceRow["packageKind"];
+  periodStart: string | null;
+  periodEnd: string | null;
+  orgCount: number;
+  withForms: number;
+  status: "open" | "closed" | "mixed";
+};
+
+function campaignKeyOf(r: {
+  periodName: string;
+  packageKind: string;
+}): string {
+  return `${r.periodName}||${r.packageKind}`;
+}
+
+function useWorkspacePackageList() {
+  const [workspaceRows, setWorkspaceRows] = useState<PackageWorkspaceRow[]>([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [selectedCampaignKey, setSelectedCampaignKey] = useState("");
+  const [bulkSearch, setBulkSearch] = useState("");
+  const [bulkBp, setBulkBp] = useState("");
+  const [bulkOnlyFilled, setBulkOnlyFilled] = useState(false);
+  const [hideEmpty, setHideEmpty] = useState(true);
+  const [uploadMark, setUploadMark] = useState<UploadMarkFilter>("");
+
+  const reloadWorkspace = useCallback(async () => {
+    setWorkspaceLoading(true);
+    setWorkspaceError("");
+    try {
+      const rows = await fetchPackageWorkspace();
+      setWorkspaceRows(rows);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Не удалось загрузить список комплектов";
+      setWorkspaceError(msg);
+      throw e instanceof Error ? e : new Error(msg);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void reloadWorkspace().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [reloadWorkspace]);
+
+  const campaigns = useMemo(() => {
+    const map = new Map<string, ExchangeCampaign & { openCount: number; closedCount: number }>();
+    for (const r of workspaceRows) {
+      if (hideEmpty && r.filled === 0 && !r.lastExportedAt && !r.lastImportedAt) {
+        continue;
+      }
+      const key = campaignKeyOf(r);
+      const prev = map.get(key);
+      if (prev) {
+        prev.orgCount += 1;
+        if (r.filled > 0) prev.withForms += 1;
+        if (r.periodStatus === "closed") prev.closedCount += 1;
+        else prev.openCount += 1;
+      } else {
+        map.set(key, {
+          key,
+          periodName: r.periodName,
+          packageKind: r.packageKind,
+          periodStart: r.periodStart,
+          periodEnd: r.periodEnd,
+          orgCount: 1,
+          withForms: r.filled > 0 ? 1 : 0,
+          status: r.periodStatus === "closed" ? "closed" : "open",
+          openCount: r.periodStatus === "closed" ? 0 : 1,
+          closedCount: r.periodStatus === "closed" ? 1 : 0,
+        });
+      }
+    }
+    const list: ExchangeCampaign[] = [];
+    for (const c of map.values()) {
+      list.push({
+        key: c.key,
+        periodName: c.periodName,
+        packageKind: c.packageKind,
+        periodStart: c.periodStart,
+        periodEnd: c.periodEnd,
+        orgCount: c.orgCount,
+        withForms: c.withForms,
+        status:
+          c.openCount > 0 && c.closedCount > 0
+            ? "mixed"
+            : c.closedCount > 0
+              ? "closed"
+              : "open",
+      });
+    }
+    return list.sort((a, b) => {
+      const ae = a.periodEnd ?? "";
+      const be = b.periodEnd ?? "";
+      if (ae !== be) return be.localeCompare(ae);
+      return a.periodName.localeCompare(b.periodName, "ru");
+    });
+  }, [workspaceRows, hideEmpty]);
+
+  useEffect(() => {
+    if (!campaigns.length) {
+      if (selectedCampaignKey) setSelectedCampaignKey("");
+      return;
+    }
+    if (!campaigns.some((c) => c.key === selectedCampaignKey)) {
+      setSelectedCampaignKey(campaigns[0]!.key);
+    }
+  }, [campaigns, selectedCampaignKey]);
+
+  const selectedCampaign =
+    campaigns.find((c) => c.key === selectedCampaignKey) ?? null;
+
+  const filteredRows = useMemo(() => {
+    if (!selectedCampaignKey) return [];
+    const q = bulkSearch.trim().toLowerCase();
+    return workspaceRows.filter((r) => {
+      if (campaignKeyOf(r) !== selectedCampaignKey) return false;
+      if (hideEmpty && r.filled === 0 && !r.lastExportedAt && !r.lastImportedAt) {
+        return false;
+      }
+      if (bulkBp && r.bpStatus !== bulkBp) return false;
+      if (bulkOnlyFilled && !(r.total > 0 && r.filled >= r.total)) return false;
+      if (uploadMark === "imported" && !r.lastImportedAt) return false;
+      if (uploadMark === "pending" && r.lastImportedAt) return false;
+      if (!q) return true;
+      return (
+        r.organizationName.toLowerCase().includes(q) ||
+        (r.organizationCode ?? "").toLowerCase().includes(q) ||
+        String(r.zid).includes(q) ||
+        String(r.eid).includes(q)
+      );
+    });
+  }, [
+    workspaceRows,
+    selectedCampaignKey,
+    hideEmpty,
+    bulkSearch,
+    bulkBp,
+    bulkOnlyFilled,
+    uploadMark,
+  ]);
+
+  return {
+    workspaceRows,
+    workspaceLoading,
+    workspaceError,
+    reloadWorkspace,
+    campaigns,
+    selectedCampaignKey,
+    setSelectedCampaignKey,
+    selectedCampaign,
+    filteredRows,
+    filters: {
+      bulkSearch,
+      setBulkSearch,
+      bulkBp,
+      setBulkBp,
+      bulkOnlyFilled,
+      setBulkOnlyFilled,
+      hideEmpty,
+      setHideEmpty,
+      uploadMark,
+      setUploadMark,
+    },
+  };
+}
+
+type WorkspaceListApi = ReturnType<typeof useWorkspacePackageList>;
+
+function ExchangePeriodSidebar({
+  campaigns,
+  selectedKey,
+  loading,
+  onSelect,
+}: {
+  campaigns: ExchangeCampaign[];
+  selectedKey: string;
+  loading: boolean;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <aside className="tools-section exchange-period-list" aria-label="Периоды">
+      <h3>Периоды</h3>
+      <p className="table-sub">
+        {loading ? "Загрузка…" : `Периодов: ${campaigns.length}`}
+      </p>
+      <div className="exchange-period-scroll">
+        {campaigns.map((c) => {
+          const selected = c.key === selectedKey;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              className={`package-workspace-item${selected ? " is-selected" : ""}`}
+              onClick={() => onSelect(c.key)}
+            >
+              <div className="package-workspace-item-body">
+                <div className="package-workspace-item-title">{c.periodName}</div>
+                <div className="package-workspace-item-meta">
+                  {packageKindLabel(c.packageKind)}
+                  {c.periodStart && c.periodEnd
+                    ? ` · ${formatPeriod(c.periodStart, c.periodEnd)}`
+                    : ""}
+                </div>
+                <div className="package-workspace-item-stats">
+                  <StatusBadge
+                    tone={
+                      c.status === "closed"
+                        ? "returned"
+                        : c.status === "mixed"
+                          ? "draft"
+                          : "accepted"
+                    }
+                    label={
+                      c.status === "closed"
+                        ? "закрыт"
+                        : c.status === "mixed"
+                          ? "частично"
+                          : "открыт"
+                    }
+                  />
+                  <span className="table-sub">
+                    {c.orgCount} орг. · с формами {c.withForms}
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+        {!loading && !campaigns.length && (
+          <p className="tools-hint">Нет периодов для обмена</p>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 function WorkspaceFilters({
-  periodOptions,
   filters,
   showUploadMarkFilter,
 }: {
-  periodOptions: string[];
-  filters: ReturnType<typeof useWorkspacePackageList>["filters"];
+  filters: WorkspaceListApi["filters"];
   showUploadMarkFilter?: boolean;
 }) {
   const {
     bulkSearch,
     setBulkSearch,
-    bulkPeriod,
-    setBulkPeriod,
-    bulkKind,
-    setBulkKind,
     bulkBp,
     setBulkBp,
     bulkOnlyFilled,
     setBulkOnlyFilled,
+    hideEmpty,
+    setHideEmpty,
     uploadMark,
     setUploadMark,
   } = filters;
@@ -231,41 +393,21 @@ function WorkspaceFilters({
     <CollapsibleFilters
       activeCount={countActiveFilters(
         bulkSearch.trim().length > 0,
-        bulkPeriod !== "",
-        bulkKind !== "",
         bulkBp !== "",
         bulkOnlyFilled,
+        !hideEmpty,
         Boolean(showUploadMarkFilter && uploadMark)
       )}
       bodyClassName="tools-grid"
     >
       <label>
-        Поиск
+        Поиск организации
         <input
           type="search"
           value={bulkSearch}
           onChange={(e) => setBulkSearch(e.target.value)}
-          placeholder="Организация или период…"
+          placeholder="Название, код, ZID…"
         />
-      </label>
-      <label>
-        Период
-        <select value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)}>
-          <option value="">Все</option>
-          {periodOptions.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Тип
-        <select value={bulkKind} onChange={(e) => setBulkKind(e.target.value)}>
-          <option value="">Все</option>
-          <option value="OKO">{packageKindLabel("OKO")}</option>
-          <option value="BALANCE">{packageKindLabel("BALANCE")}</option>
-        </select>
       </label>
       <label>
         Статус БП
@@ -301,6 +443,14 @@ function WorkspaceFilters({
         />
         Только полные
       </label>
+      <label className="checkbox-inline" style={{ alignSelf: "end" }}>
+        <input
+          type="checkbox"
+          checked={hideEmpty}
+          onChange={(e) => setHideEmpty(e.target.checked)}
+        />
+        Скрыть пустые
+      </label>
     </CollapsibleFilters>
   );
 }
@@ -308,6 +458,7 @@ function WorkspaceFilters({
 function WorkspacePackagesTable({
   rows,
   loading,
+  campaign,
   selectable,
   checkedKeys,
   busy,
@@ -317,6 +468,7 @@ function WorkspacePackagesTable({
 }: {
   rows: PackageWorkspaceRow[];
   loading: boolean;
+  campaign: ExchangeCampaign | null;
   selectable?: boolean;
   checkedKeys?: Set<string>;
   busy?: boolean;
@@ -327,6 +479,9 @@ function WorkspacePackagesTable({
   if (loading) {
     return <p className="hint-text">Загрузка комплектов…</p>;
   }
+  if (!campaign) {
+    return <p className="hint-text">Выберите период слева.</p>;
+  }
   return (
     <div className="table-wrap exchange-table-wrap">
       <table className="form-table exchange-packages-table">
@@ -334,11 +489,11 @@ function WorkspacePackagesTable({
           <tr>
             {selectable ? <th className="table-col-check" /> : null}
             <th>Организация</th>
-            <th>Период</th>
-            <th>Тип</th>
+            <th>GUID</th>
             <th>Формы</th>
             <th>Обмен</th>
             <th>БП</th>
+            <th>Период орг.</th>
           </tr>
         </thead>
         <tbody>
@@ -368,13 +523,16 @@ function WorkspacePackagesTable({
                   <div className="table-sub">
                     ZID {r.zid}
                     {r.organizationCode ? ` · ${r.organizationCode}` : ""}
+                    {" · "}
+                    <Link to={`/package?zid=${r.zid}&eid=${r.eid}`}>комплект</Link>
                   </div>
                 </td>
                 <td>
-                  <div>{r.periodName}</div>
+                  <code className="exchange-guid" title={r.packageId}>
+                    {r.packageId.slice(0, 8)}…
+                  </code>
                   <div className="table-sub">EID {r.eid}</div>
                 </td>
-                <td>{packageKindLabel(r.packageKind)}</td>
                 <td>
                   {r.filled}/{r.total} · сдано {r.submitted}
                   <div className="table-sub">{r.percent}%</div>
@@ -392,12 +550,21 @@ function WorkspacePackagesTable({
                     "—"
                   )}
                 </td>
+                <td>
+                  <StatusBadge
+                    tone={r.periodStatus === "closed" ? "returned" : "accepted"}
+                    label={r.periodStatus === "closed" ? "закрыт" : "открыт"}
+                  />
+                  <div className="table-sub">EID {r.eid}</div>
+                </td>
               </tr>
             );
           })}
           {!rows.length && (
             <tr>
-              <td colSpan={selectable ? 7 : 6}>Нет комплектов по фильтрам</td>
+              <td colSpan={selectable ? 7 : 6}>
+                Нет комплектов в этом периоде по фильтрам
+              </td>
             </tr>
           )}
         </tbody>
@@ -407,20 +574,13 @@ function WorkspacePackagesTable({
 }
 
 export interface PackageExportTabProps {
+  list: WorkspaceListApi;
   onStatus?: (message: string) => void;
 }
 
-export function PackageExportTab({ onStatus }: PackageExportTabProps) {
-  const list = useWorkspacePackageList();
+export function PackageExportTab({ list, onStatus }: PackageExportTabProps) {
   const [busy, setBusy] = useState(false);
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => new Set());
-
-  useEffect(() => {
-    void list.reloadWorkspace().catch((e) => {
-      onStatus?.(e instanceof Error ? e.message : "Не удалось загрузить список комплектов");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const checkedRows = useMemo(
     () => list.filteredRows.filter((r) => checkedKeys.has(rowKey(r))),
@@ -517,70 +677,96 @@ export function PackageExportTab({ onStatus }: PackageExportTabProps) {
     <section className="tools-section">
       <h2>Выгрузить комплекты</h2>
       <p>
-        Отметьте один или несколько комплектов и скачайте ZIP — внутри отдельный файл на
-        каждую организацию и <code>manifest.json</code>.
+        Сначала выберите <strong>период</strong> слева, затем отметьте комплекты
+        организаций и скачайте ZIP.
       </p>
       <p className="hint-text">
-        Создание комплектов — в <Link to="/package">Комплектах</Link>. Обратная загрузка —
-        переключатель «Загрузить» выше.
+        Создание периодов и комплектов — в <Link to="/package">Комплектах</Link>.
+        Пустые комплекты скрыты по умолчанию.
       </p>
+      {list.workspaceError ? (
+        <p className="error-box">{list.workspaceError}</p>
+      ) : null}
 
-      <WorkspaceFilters periodOptions={list.periodOptions} filters={list.filters} />
+      <div className="package-workspace-layout exchange-layout">
+        <ExchangePeriodSidebar
+          campaigns={list.campaigns}
+          selectedKey={list.selectedCampaignKey}
+          loading={list.workspaceLoading}
+          onSelect={list.setSelectedCampaignKey}
+        />
+        <div className="exchange-period-detail">
+          {list.selectedCampaign ? (
+            <header className="exchange-campaign-head">
+              <h3>
+                {list.selectedCampaign.periodName} ·{" "}
+                {packageKindLabel(list.selectedCampaign.packageKind)}
+              </h3>
+              <p className="table-sub">
+                {list.selectedCampaign.orgCount} организаций в периоде
+              </p>
+            </header>
+          ) : null}
 
-      <div
-        className="toolbar-actions"
-        style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
-      >
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={allFilteredChecked}
-            disabled={list.workspaceLoading || list.filteredRows.length === 0}
-            onChange={toggleSelectAllFiltered}
+          <WorkspaceFilters filters={list.filters} />
+
+          <div
+            className="toolbar-actions"
+            style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
+          >
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={allFilteredChecked}
+                disabled={list.workspaceLoading || list.filteredRows.length === 0}
+                onChange={toggleSelectAllFiltered}
+              />
+              Выбрать все в периоде ({list.filteredRows.length})
+            </label>
+            <Button
+              disabled={busy || checkedRows.length === 0}
+              onClick={() => void handleDownloadSelected()}
+            >
+              {busy
+                ? "Выгрузка…"
+                : checkedRows.length <= 1
+                  ? `Скачать${checkedRows.length === 1 ? " комплект" : ""} (${checkedRows.length})`
+                  : `Скачать выбранные (${checkedRows.length})`}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy || !singleSelected}
+              onClick={() => void handleExcelSelected()}
+              title="Excel только для одного отмеченного комплекта"
+            >
+              Excel
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={list.workspaceLoading || busy}
+              onClick={() =>
+                void list.reloadWorkspace().catch((e) => {
+                  onStatus?.(
+                    e instanceof Error ? e.message : "Не удалось обновить список"
+                  );
+                })
+              }
+            >
+              Обновить
+            </Button>
+          </div>
+
+          <WorkspacePackagesTable
+            rows={list.filteredRows}
+            loading={list.workspaceLoading}
+            campaign={list.selectedCampaign}
+            selectable
+            checkedKeys={checkedKeys}
+            busy={busy}
+            onToggle={toggleChecked}
           />
-          Выбрать все ({list.filteredRows.length})
-        </label>
-        <Button
-          disabled={busy || checkedRows.length === 0}
-          onClick={() => void handleDownloadSelected()}
-        >
-          {busy
-            ? "Выгрузка…"
-            : checkedRows.length <= 1
-              ? `Скачать${checkedRows.length === 1 ? " комплект" : ""} (${checkedRows.length})`
-              : `Скачать выбранные (${checkedRows.length})`}
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={busy || !singleSelected}
-          onClick={() => void handleExcelSelected()}
-          title="Excel только для одного отмеченного комплекта"
-        >
-          Excel
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={list.workspaceLoading || busy}
-          onClick={() =>
-            void list.reloadWorkspace().catch((e) => {
-              onStatus?.(
-                e instanceof Error ? e.message : "Не удалось обновить список"
-              );
-            })
-          }
-        >
-          Обновить список
-        </Button>
+        </div>
       </div>
-
-      <WorkspacePackagesTable
-        rows={list.filteredRows}
-        loading={list.workspaceLoading}
-        selectable
-        checkedKeys={checkedKeys}
-        busy={busy}
-        onToggle={toggleChecked}
-      />
     </section>
   );
 }
@@ -593,6 +779,7 @@ type DropJob = {
 };
 
 export interface PackageUploadTabProps {
+  list: WorkspaceListApi;
   importOverwrite: boolean;
   onImportOverwriteChange: (value: boolean) => void;
   onStatus?: (message: string) => void;
@@ -619,13 +806,13 @@ export interface PackageUploadTabProps {
 }
 
 export function PackageUploadTab({
+  list,
   importOverwrite,
   onImportOverwriteChange,
   onStatus,
   onImported,
   inbox,
 }: PackageUploadTabProps) {
-  const list = useWorkspacePackageList();
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [jobs, setJobs] = useState<DropJob[]>([]);
@@ -644,13 +831,6 @@ export function PackageUploadTab({
   const dragDepth = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    void list.reloadWorkspace().catch((e) => {
-      onStatus?.(e instanceof Error ? e.message : "Не удалось загрузить список комплектов");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const refreshList = async () => {
     try {
       await list.reloadWorkspace();
@@ -660,10 +840,11 @@ export function PackageUploadTab({
   };
 
   const importedCount = useMemo(
-    () => list.workspaceRows.filter((r) => r.lastImportedAt).length,
-    [list.workspaceRows]
+    () =>
+      list.filteredRows.filter((r) => r.lastImportedAt).length,
+    [list.filteredRows]
   );
-  const pendingCount = list.workspaceRows.length - importedCount;
+  const pendingCount = list.filteredRows.length - importedCount;
 
   const updateJob = useCallback((id: string, patch: Partial<DropJob>) => {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
@@ -1018,43 +1199,59 @@ export function PackageUploadTab({
 
       <section className="tools-section">
         <h2>
-          Комплекты{" "}
+          Комплекты периода{" "}
           <span className="cat-count">
             загружено {importedCount} · ждут {pendingCount}
           </span>
         </h2>
         <p className="hint-text">
-          Та же таблица, что при выгрузке: видно, какие комплекты уже приняты обратно.
+          Выберите период слева — видно, какие комплекты уже приняты обратно.
         </p>
+        {list.workspaceError ? (
+          <p className="error-box">{list.workspaceError}</p>
+        ) : null}
 
-        <WorkspaceFilters
-          periodOptions={list.periodOptions}
-          filters={list.filters}
-          showUploadMarkFilter
-        />
-
-        <div className="toolbar-actions section-actions">
-          <Button
-            variant="secondary"
-            disabled={list.workspaceLoading || busy}
-            onClick={() =>
-              void list.reloadWorkspace().catch((e) => {
-                onStatus?.(
-                  e instanceof Error ? e.message : "Не удалось обновить список"
-                );
-              })
-            }
-          >
-            Обновить список
-          </Button>
+        <div className="package-workspace-layout exchange-layout">
+          <ExchangePeriodSidebar
+            campaigns={list.campaigns}
+            selectedKey={list.selectedCampaignKey}
+            loading={list.workspaceLoading}
+            onSelect={list.setSelectedCampaignKey}
+          />
+          <div className="exchange-period-detail">
+            {list.selectedCampaign ? (
+              <header className="exchange-campaign-head">
+                <h3>
+                  {list.selectedCampaign.periodName} ·{" "}
+                  {packageKindLabel(list.selectedCampaign.packageKind)}
+                </h3>
+              </header>
+            ) : null}
+            <WorkspaceFilters filters={list.filters} showUploadMarkFilter />
+            <div className="toolbar-actions section-actions">
+              <Button
+                variant="secondary"
+                disabled={list.workspaceLoading || busy}
+                onClick={() =>
+                  void list.reloadWorkspace().catch((e) => {
+                    onStatus?.(
+                      e instanceof Error ? e.message : "Не удалось обновить список"
+                    );
+                  })
+                }
+              >
+                Обновить
+              </Button>
+            </div>
+            <WorkspacePackagesTable
+              rows={list.filteredRows}
+              loading={list.workspaceLoading}
+              campaign={list.selectedCampaign}
+              highlightImported
+              showExportedMark={false}
+            />
+          </div>
         </div>
-
-        <WorkspacePackagesTable
-          rows={list.filteredRows}
-          loading={list.workspaceLoading}
-          highlightImported
-          showExportedMark={false}
-        />
       </section>
 
       {pendingPackage && pendingTarget && (
@@ -1374,7 +1571,7 @@ export function PackageUploadTab({
   );
 }
 
-export interface ExchangeTabProps extends PackageUploadTabProps {
+export interface ExchangeTabProps extends Omit<PackageUploadTabProps, "list"> {
   mode: ExchangeMode;
   onModeChange: (mode: ExchangeMode) => void;
 }
@@ -1384,6 +1581,17 @@ export function ExchangeTab({
   onModeChange,
   ...uploadProps
 }: ExchangeTabProps) {
+  const list = useWorkspacePackageList();
+
+  useEffect(() => {
+    void list.reloadWorkspace().catch((e) => {
+      uploadProps.onStatus?.(
+        e instanceof Error ? e.message : "Не удалось загрузить список комплектов"
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <div className="tools-subtabs" role="tablist" aria-label="Обмен комплектами">
@@ -1407,9 +1615,9 @@ export function ExchangeTab({
         </button>
       </div>
       {mode === "export" ? (
-        <PackageExportTab onStatus={uploadProps.onStatus} />
+        <PackageExportTab list={list} onStatus={uploadProps.onStatus} />
       ) : (
-        <PackageUploadTab {...uploadProps} />
+        <PackageUploadTab list={list} {...uploadProps} />
       )}
     </>
   );

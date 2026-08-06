@@ -158,6 +158,8 @@ export interface PackageDashboardRow {
 export interface PackageWorkspaceRow {
   zid: number;
   eid: number;
+  /** Stable package GUID — exchange marks and identity key. */
+  packageId: string;
   organizationName: string;
   organizationCode: string | null;
   periodName: string;
@@ -271,6 +273,7 @@ export interface ReportPackageInput {
   periodEnd?: string;
   zid?: number | null;
   eid?: number | null;
+  packageId?: string | null;
   instances: OkoFormInstance[];
 }
 
@@ -456,6 +459,11 @@ export function packageIdFor(
   packageKind: string | null | undefined
 ): string {
   return `pkg-${zid}-${eid}-${packageKind === "BALANCE" ? "BALANCE" : "OKO"}`;
+}
+
+/** New unique package GUID — never reuse zid/eid so exchange history cannot stick to recreations. */
+export function newPackageGuid(): string {
+  return randomUUID();
 }
 
 /** Resolve one package's complete context from its reporting-period record. */
@@ -769,7 +777,7 @@ export async function createPeriod(
     .prepare("SELECT 1 FROM organizations WHERE zid = ?")
     .get(collectionUnitZid);
   if (!collectionUnit) throw new Error("Collection unit not found");
-  const packageId = packageIdFor(input.zid, eid, packageKind);
+  const packageId = newPackageGuid();
 
   await db
     .prepare(
@@ -1217,7 +1225,7 @@ export async function getPackageWorkspace(
     formSetByEid.set(Number(r.eid), list);
   }
 
-  let periodSql = `SELECT p.eid, p.zid, p.name, p.period_start, p.period_end,
+  let periodSql = `SELECT p.eid, p.zid, p.package_id, p.name, p.period_start, p.period_end,
             p.period_status, p.package_kind, p.methodology_release_id,
             o.name AS org_name, o.code AS org_code
      FROM periods p
@@ -1232,6 +1240,7 @@ export async function getPackageWorkspace(
   const periods = (await db.prepare(periodSql).all(...periodParams)) as Array<{
     eid: number;
     zid: number;
+    package_id: string | null;
     name: string;
     period_start: string | null;
     period_end: string | null;
@@ -1241,6 +1250,16 @@ export async function getPackageWorkspace(
     org_name: string;
     org_code: string | null;
   }>;
+
+  // Ensure every period has a stable GUID (legacy rows may still use deterministic ids).
+  for (const p of periods) {
+    if (p.package_id?.trim()) continue;
+    const guid = newPackageGuid();
+    await db
+      .prepare(`UPDATE periods SET package_id = ? WHERE zid = ? AND eid = ?`)
+      .run(guid, p.zid, p.eid);
+    p.package_id = guid;
+  }
 
   let instSql = `SELECT instance_id, zid, eid, template_id, status, updated_at
      FROM form_instances`;
@@ -1371,11 +1390,16 @@ export async function getPackageWorkspace(
         blockersByKey.get(`${zid}:${eid}:${packageKind}`)?.blocked ?? false;
     }
 
-    const exchange = exchangeByKey.get(`${zid}:${eid}`);
+    const exchange = exchangeByKey.get(
+      p.package_id ?? packageIdFor(zid, eid, packageKind)
+    );
+    const packageId =
+      p.package_id?.trim() || packageIdFor(zid, eid, packageKind);
 
     rows.push({
       zid,
       eid,
+      packageId,
       organizationName: p.org_name,
       organizationCode: p.org_code,
       periodName: p.name,
@@ -1597,6 +1621,24 @@ async function purgePackageRelations(
     zid,
     eid
   );
+  await tryDelete(
+    db,
+    "DELETE FROM package_exchange WHERE zid = ? AND eid = ?",
+    zid,
+    eid
+  );
+  // Also by GUID if period still readable.
+  try {
+    const period = (await db
+      .prepare(`SELECT package_id FROM periods WHERE zid = ? AND eid = ?`)
+      .get(zid, eid)) as { package_id: string | null } | undefined;
+    if (period?.package_id) {
+      const { deletePackageExchange } = await import("./packageExchange.js");
+      await deletePackageExchange(db, { packageId: period.package_id });
+    }
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function deleteReportPackage(
@@ -1774,7 +1816,7 @@ async function buildExportPackageForKey(
 
   const period = (await db
     .prepare(
-      `SELECT p.name, p.period_start, p.period_end, p.package_kind,
+      `SELECT p.name, p.period_start, p.period_end, p.package_kind, p.package_id,
               o.name AS org_name, o.code AS org_code
        FROM periods p
        JOIN organizations o ON o.zid = p.zid
@@ -1786,11 +1828,20 @@ async function buildExportPackageForKey(
         period_start: string | null;
         period_end: string | null;
         package_kind: string | null;
+        package_id: string | null;
         org_name: string;
         org_code: string | null;
       }
     | undefined;
   if (!period) throw new Error("Период не найден");
+
+  let packageId = period.package_id?.trim() || "";
+  if (!packageId) {
+    packageId = newPackageGuid();
+    await db
+      .prepare(`UPDATE periods SET package_id = ? WHERE zid = ? AND eid = ?`)
+      .run(packageId, zid, eid);
+  }
 
   const summaries = await listInstanceSummaries(db, { zid, eid });
   const instances: OkoFormInstance[] = [];
@@ -1810,13 +1861,14 @@ async function buildExportPackageForKey(
   const filename = `oko_package_${orgPart}_${periodPart}_z${zid}_e${eid}.json`;
 
   const pkg = {
-    version: "1.2",
+    version: "1.3",
     exportedAt: new Date().toISOString(),
     organization: period.org_name,
     periodStart: dateToString(period.period_start),
     periodEnd: dateToString(period.period_end),
     zid,
     eid,
+    packageId,
     packageKind,
     instanceCount: instances.length,
     instances,
@@ -1895,7 +1947,19 @@ export async function exportReportPackagesBulk(
       exported += 1;
       try {
         const { touchPackageExported } = await import("./packageExchange.js");
-        await touchPackageExported(db, item.zid, item.eid, exportedAt);
+        const ctx = await resolvePackageContext(db, {
+          zid: item.zid,
+          eid: item.eid,
+        });
+        if (ctx?.packageId) {
+          await touchPackageExported(
+            db,
+            ctx.packageId,
+            item.zid,
+            item.eid,
+            exportedAt
+          );
+        }
       } catch {
         /* exchange mark is best-effort */
       }
@@ -2783,7 +2847,13 @@ export async function importReportPackage(
   if (result.created > 0 || result.updated > 0 || result.skipped > 0) {
     try {
       const { touchPackageImported } = await import("./packageExchange.js");
-      await touchPackageImported(db, targetZid, targetEid);
+      const ctx = await resolvePackageContext(db, {
+        zid: targetZid,
+        eid: targetEid,
+      });
+      if (ctx?.packageId) {
+        await touchPackageImported(db, ctx.packageId, targetZid, targetEid);
+      }
     } catch {
       /* exchange mark is best-effort */
     }

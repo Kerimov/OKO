@@ -29,8 +29,8 @@ type LocalExchangeMap = Record<
   }
 >;
 
-function exchangeKey(zid: number, eid: number): string {
-  return `${zid}:${eid}`;
+function exchangeKeyByPackageId(packageId: string): string {
+  return `pkg:${packageId}`;
 }
 
 function readLocalExchange(): LocalExchangeMap {
@@ -47,23 +47,31 @@ function writeLocalExchange(map: LocalExchangeMap): void {
   localStorage.setItem(LOCAL_EXCHANGE_KEY, JSON.stringify(map));
 }
 
-function touchLocalExported(zid: number, eid: number, at = new Date().toISOString()): void {
+function touchLocalExported(packageId: string, at = new Date().toISOString()): void {
+  if (!packageId) return;
   const map = readLocalExchange();
-  const prev = map[exchangeKey(zid, eid)] ?? {};
-  map[exchangeKey(zid, eid)] = { ...prev, lastExportedAt: at };
+  const key = exchangeKeyByPackageId(packageId);
+  const prev = map[key] ?? {};
+  map[key] = { ...prev, lastExportedAt: at };
   writeLocalExchange(map);
 }
 
-function touchLocalImported(zid: number, eid: number, at = new Date().toISOString()): void {
+function touchLocalImported(packageId: string, at = new Date().toISOString()): void {
+  if (!packageId) return;
   const map = readLocalExchange();
-  const prev = map[exchangeKey(zid, eid)] ?? {};
+  const key = exchangeKeyByPackageId(packageId);
+  const prev = map[key] ?? {};
   const prevVersion = Number(prev.importVersion ?? 0);
-  map[exchangeKey(zid, eid)] = {
+  map[key] = {
     ...prev,
     lastImportedAt: at,
     importVersion: prevVersion + 1,
   };
   writeLocalExchange(map);
+}
+
+function newLocalPackageGuid(): string {
+  return crypto.randomUUID();
 }
 
 function readLocalOrgs(): Organization[] {
@@ -106,6 +114,7 @@ async function ensureLocalDefaults(): Promise<void> {
   const period: ReportingPeriod = {
     eid: 1,
     zid: 1,
+    packageId: newLocalPackageGuid(),
     name:
       meta.periodStart && meta.periodEnd
         ? `${meta.periodStart} — ${meta.periodEnd}`
@@ -218,6 +227,7 @@ export async function createPeriod(input: {
   const period: ReportingPeriod = {
     eid,
     zid: input.zid,
+    packageId: newLocalPackageGuid(),
     name: input.name.trim(),
     periodStart: input.periodStart || null,
     periodEnd: input.periodEnd || null,
@@ -449,10 +459,17 @@ export async function fetchPackageWorkspace(zid?: number): Promise<
     const org = orgs.find((o) => o.zid === p.zid);
     if (!org) continue;
     const c = await fetchPackageCompleteness(p.zid, p.eid);
-    const mark = exchange[exchangeKey(p.zid, p.eid)];
+    let packageId = p.packageId?.trim() || "";
+    if (!packageId) {
+      packageId = newLocalPackageGuid();
+      p.packageId = packageId;
+      writeLocalPeriods(periods);
+    }
+    const mark = exchange[exchangeKeyByPackageId(packageId)];
     rows.push({
       zid: p.zid,
       eid: p.eid,
+      packageId,
       organizationName: org.name,
       organizationCode: org.code ?? null,
       periodName: p.name,
@@ -839,7 +856,14 @@ export async function exportReportPackagesBulk(
         ok: true,
       });
       exported += 1;
-      touchLocalExported(item.zid, item.eid, exportedAt);
+      const packageId =
+        (pkg as ReportPackage & { packageId?: string }).packageId ||
+        (
+          await listPeriods(item.zid).then((ps) =>
+            ps.find((p) => p.eid === item.eid)
+          )
+        )?.packageId;
+      if (packageId) touchLocalExported(packageId, exportedAt);
     } catch (e) {
       failed += 1;
       manifestPackages.push({
@@ -899,7 +923,9 @@ export async function importReportPackage(
     await saveInstance(inst);
   }
   if (result.created > 0 || result.updated > 0 || result.skipped > 0) {
-    touchLocalImported(zid, eid);
+    const periods = await listPeriods(zid);
+    const packageId = periods.find((p) => p.eid === eid)?.packageId;
+    if (packageId) touchLocalImported(packageId);
   }
   return result;
 }

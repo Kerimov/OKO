@@ -14,7 +14,7 @@ import type {
 } from "../types";
 import { isKontrForm } from "../constants";
 import { loadRashRules } from "../api";
-import { numVal, rashThresholdLevel } from "@oko/engine";
+import { isCellValueUnfilled, numVal, rashThresholdLevel } from "@oko/engine";
 import { evalColumnLetterFormula } from "@oko/spreadsheet";
 import {
   rashKodForCell,
@@ -1181,6 +1181,11 @@ export function validateCellRash(
       ? evaluateTotalFormula(formula, row)
       : numVal(row[displayCol]);
     const level = rashThresholdLevel(Math.abs(parentValue), data.thresholds);
+    const parentUnfilled = formula
+      ? parseFormulaColumns(formula).every((col) =>
+          isCellValueUnfilled(row[col])
+        )
+      : isCellValueUnfilled(row[displayCol]);
 
     if (entries.length === 0 && level > 0) {
       issues.push({
@@ -1189,6 +1194,18 @@ export function validateCellRash(
         column: slot.columnKey,
         severity: severityForLevel(level),
         message: `Требуется расшифровка по правилу №${slot.rashKod} (порог ${data.thresholds.labels[level - 1]})`,
+      });
+      continue;
+    }
+
+    // Explicit binding: empty cell is an error even below threshold (not only whole-form empty).
+    if (entries.length === 0 && slot.fromPlacement && parentUnfilled) {
+      issues.push({
+        rowIndex: rowIdx,
+        rowLabel: label,
+        column: slot.columnKey,
+        severity: "error",
+        message: `Ячейка не заполнена (настроена расшифровка №${slot.rashKod})`,
       });
       continue;
     }

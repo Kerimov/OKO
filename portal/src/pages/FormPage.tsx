@@ -847,7 +847,10 @@ export function FormPage() {
           ok
             ? "Проверка пройдена (сервер)"
             : hasFillError
-              ? "Форма пустая — увязки 0=0 не считаются заполнением"
+              ? `Форма пустая — ошибок увязок: ${serverResult.failed}` +
+                (serverResult.skipped
+                  ? `, не разобрано: ${serverResult.skipped}`
+                  : "")
               : `Ошибок увязок: ${serverResult.failed}` +
                 (serverResult.skipped ? `, не разобрано: ${serverResult.skipped}` : ""),
           ok ? "ok" : "error"
@@ -863,7 +866,7 @@ export function FormPage() {
           result.failed === 0
             ? "Проверка пройдена"
             : hasFillError
-              ? "Форма пустая — увязки 0=0 не считаются заполнением"
+              ? `Форма пустая — ошибок увязок: ${result.failed}`
               : `Ошибок увязок: ${result.failed}`,
           result.failed === 0 ? "ok" : "error"
         );

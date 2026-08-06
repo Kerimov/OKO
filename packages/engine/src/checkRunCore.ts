@@ -52,6 +52,16 @@ function parseCellValue(raw: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** True when a raw cell has no meaningful numeric amount. */
+export function isCellValueUnfilled(raw: unknown): boolean {
+  if (raw === undefined || raw === null || raw === "") return true;
+  const s = String(raw).trim();
+  if (!s) return true;
+  const n = parseFloat(s.replace(/\s/g, "").replace(",", "."));
+  if (!Number.isFinite(n)) return true;
+  return n === 0;
+}
+
 /** True when the form has no meaningful numeric amounts (Access iCheckFilledForm gate). */
 export function isFormNumericallyEmpty(
   rows: RowData[] | null | undefined,
@@ -66,15 +76,76 @@ export function isFormNumericallyEmpty(
   for (const row of rows) {
     for (const [key, raw] of Object.entries(row)) {
       if (ignore.has(key.toLowerCase())) continue;
-      if (raw === undefined || raw === null || raw === "") continue;
-      const s = String(raw).trim();
-      if (!s) continue;
-      // Balance Стр. text alone does not count as filled amounts
-      const n = parseFloat(s.replace(/\s/g, "").replace(",", "."));
-      if (Number.isFinite(n) && n !== 0) return false;
+      if (!isCellValueUnfilled(raw)) return false;
     }
   }
   return true;
+}
+
+const TOTAL_FORM_RE = /TOTAL\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/gi;
+
+/**
+ * Labels of Cell / CELL_sv / CellK / TOTAL refs that have no numeric amount.
+ * Used to reject formal 0=0 passes when the configured cells are blank.
+ */
+export function unfilledRefsInExpression(
+  expression: string,
+  instances: OkoFormInstance[]
+): string[] {
+  const index = buildFormIndex(latestInstancePerTemplate(instances));
+  const rowsByForm = new Map<string, RowData[]>();
+  for (const inst of latestInstancePerTemplate(instances)) {
+    rowsByForm.set(inst.templateId, inst.rows);
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (label: string) => {
+    if (seen.has(label)) return;
+    seen.add(label);
+    out.push(label);
+  };
+
+  for (const ref of [
+    ...extractCellRefs(expression),
+    ...extractCellSvRefs(expression),
+  ]) {
+    const rowData = index.get(ref.form)?.get(String(ref.row));
+    const raw = rowData?.[ref.column];
+    if (!rowData || isCellValueUnfilled(raw)) {
+      push(`${ref.form}.${ref.column}${ref.row}`);
+    }
+  }
+
+  for (const ref of extractCellKRefs(expression)) {
+    const rows = rowsByForm.get(ref.form) ?? [];
+    let anyFilled = false;
+    for (const row of rows) {
+      if (!rowMatchesCondition(row, ref.condition)) continue;
+      if (!rowMatchesKey(row, ref.rowKey)) continue;
+      if (!isCellValueUnfilled(row[ref.column])) {
+        anyFilled = true;
+        break;
+      }
+    }
+    if (!anyFilled) {
+      push(`${ref.form}.CellK(${ref.column})`);
+    }
+  }
+
+  TOTAL_FORM_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TOTAL_FORM_RE.exec(expression)) !== null) {
+    const form = m[1];
+    const column = m[2];
+    const rows = rowsByForm.get(form) ?? [];
+    const anyFilled = rows.some((row) => !isCellValueUnfilled(row[column]));
+    if (!anyFilled) {
+      push(`TOTAL(${form},${column})`);
+    }
+  }
+
+  return out;
 }
 
 function parseConditionValue(raw: string): number | string {
@@ -209,8 +280,6 @@ function pickRules(
   });
 }
 
-const TOTAL_FORM_RE = /TOTAL\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/gi;
-
 /** Form template ids referenced by period checks for one form (for lazy instance load). */
 export function formsUsedByFormChecks(
   checks: CheckRule[],
@@ -294,9 +363,37 @@ export function runFormChecksWithData(
 ): CheckRunResult {
   const rules = pickRules(checks, { formId, mode, excludeAggr: true });
   const result = runChecksOnInstances(rules, instances);
+  const inst = latestInstancePerTemplate(instances);
+
+  // Formal passes (typical 0=0) are invalid when any configured cell is blank.
+  const items = result.items.map((item) => {
+    if (item.parseError || !item.passed) return item;
+    const unfilled = unfilledRefsInExpression(item.expression, inst);
+    if (unfilled.length === 0) return item;
+    const preview = unfilled.slice(0, 6).join(", ");
+    const more = unfilled.length > 6 ? ` и ещё ${unfilled.length - 6}` : "";
+    return {
+      ...item,
+      passed: false,
+      failedClause: `не заполнены: ${preview}${more}`,
+      failedOp: item.failedOp ?? "=",
+      message:
+        item.message ??
+        "Увязка не засчитана: задействованные ячейки не заполнены (формальный 0=0)",
+    };
+  });
+
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const item of items) {
+    if (item.parseError) skipped++;
+    else if (item.passed) passed++;
+    else failed++;
+  }
 
   const target =
-    latestInstancePerTemplate(instances).find((i) => i.templateId === formId) ??
+    inst.find((i) => i.templateId === formId) ??
     instances.find((i) => i.templateId === formId);
   if (target && isFormNumericallyEmpty(target.rows)) {
     const fillItem: CheckResultItem = {
@@ -312,11 +409,18 @@ export function runFormChecksWithData(
     };
     return {
       total: result.total + 1,
-      passed: result.passed,
-      failed: result.failed + 1,
-      skipped: result.skipped,
-      items: [fillItem, ...result.items],
+      passed,
+      failed: failed + 1,
+      skipped,
+      items: [fillItem, ...items],
     };
   }
-  return result;
+
+  return {
+    total: result.total,
+    passed,
+    failed,
+    skipped,
+    items,
+  };
 }

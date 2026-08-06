@@ -28,10 +28,12 @@ export {
 export {
   evalContextFromInstances,
   formsUsedByFormChecks,
+  isCellValueUnfilled,
   isFormNumericallyEmpty,
   latestInstancePerTemplate,
   runChecksOnInstances,
   runFormChecksWithData,
+  unfilledRefsInExpression,
   type CheckMode,
   type CheckResultItem,
   type CheckRule,
