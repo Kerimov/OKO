@@ -367,6 +367,9 @@ export async function listInstanceSummaries(
 export async function deleteInstanceFromDb(db: OkoDb, instanceId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.prepare("DELETE FROM form_cell_values WHERE instance_id = ?").run(instanceId);
+    await tx.prepare("DELETE FROM cell_comments WHERE instance_id = ?").run(instanceId);
+    await tx.prepare("DELETE FROM cell_change_log WHERE instance_id = ?").run(instanceId);
+    await tx.prepare("DELETE FROM form_rash_entries WHERE instance_id = ?").run(instanceId);
     await tx.prepare("DELETE FROM form_instances WHERE instance_id = ?").run(instanceId);
     await tx.prepare("DELETE FROM portal_instances WHERE instance_id = ?").run(instanceId);
   });

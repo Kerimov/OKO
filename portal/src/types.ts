@@ -362,6 +362,21 @@ export interface DeletePackageResult {
   periodRemoved: boolean;
 }
 
+export interface BulkDeletePackageItemResult {
+  zid: number;
+  eid: number;
+  ok: boolean;
+  deletedInstances?: number;
+  error?: string;
+}
+
+export interface BulkDeletePackageResult {
+  deleted: number;
+  failed: number;
+  deletedInstances: number;
+  results: BulkDeletePackageItemResult[];
+}
+
 export interface RashRule {
   kod: number;
   name: string;

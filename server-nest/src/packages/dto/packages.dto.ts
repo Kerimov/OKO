@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -6,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateNested,
 } from "class-validator";
 import type { OkoFormInstance } from "../../../../server/src/types.js";
 
@@ -90,6 +92,14 @@ export class PackageZidEidDto {
   @ApiProperty()
   @IsNumber()
   eid!: number;
+}
+
+export class PackageBulkDeleteDto {
+  @ApiProperty({ type: [PackageZidEidDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PackageZidEidDto)
+  items!: PackageZidEidDto[];
 }
 
 export class PackageWorkflowPutDto extends PackageZidEidDto {

@@ -1273,6 +1273,31 @@ async function listPackageInstanceIds(
   return [...ids];
 }
 
+/** Remove BP, form-set, checks, svod and locks tied to a package (zid × eid). */
+async function purgePackageRelations(
+  db: OkoDb,
+  zid: number,
+  eid: number
+): Promise<void> {
+  // Events cascade via business_process_events.bp_id ON DELETE CASCADE.
+  await db
+    .prepare("DELETE FROM business_processes WHERE zid = ? AND eid = ?")
+    .run(zid, eid);
+  await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
+  await db
+    .prepare("DELETE FROM check_explanations WHERE zid = ? AND eid = ?")
+    .run(zid, eid);
+  await db
+    .prepare("DELETE FROM check_run_journal WHERE zid = ? AND eid = ?")
+    .run(zid, eid);
+  await db
+    .prepare("DELETE FROM agg_run_locks WHERE parent_zid = ? AND eid = ?")
+    .run(zid, eid);
+  await db.prepare("DELETE FROM svod_results WHERE eid = ?").run(eid);
+  // Members cascade via svod_members.svod_id ON DELETE CASCADE.
+  await db.prepare("DELETE FROM svod_definitions WHERE eid = ?").run(eid);
+}
+
 export async function deleteReportPackage(
   db: OkoDb,
   zid: number,
@@ -1290,6 +1315,7 @@ export async function deleteReportPackage(
     for (const instanceId of instanceIds) {
       await deleteInstanceFromDb(tx, instanceId);
     }
+    await purgePackageRelations(tx, zid, eid);
     await tx.prepare("DELETE FROM periods WHERE eid = ? AND zid = ?").run(eid, zid);
   });
 
@@ -1304,6 +1330,92 @@ export async function deleteReportPackage(
   }
 
   return { deletedInstances: instanceIds.length, periodRemoved: true };
+}
+
+export interface BulkDeletePackageItem {
+  zid: number;
+  eid: number;
+}
+
+export interface BulkDeletePackageItemResult {
+  zid: number;
+  eid: number;
+  ok: boolean;
+  deletedInstances?: number;
+  error?: string;
+}
+
+export interface BulkDeletePackageResult {
+  deleted: number;
+  failed: number;
+  deletedInstances: number;
+  results: BulkDeletePackageItemResult[];
+}
+
+const BULK_DELETE_MAX = 200;
+
+export async function deleteReportPackagesBulk(
+  db: OkoDb,
+  items: BulkDeletePackageItem[]
+): Promise<BulkDeletePackageResult> {
+  if (!Array.isArray(items) || items.length === 0) {
+    const err = new Error("Укажите хотя бы один комплект");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+  if (items.length > BULK_DELETE_MAX) {
+    const err = new Error(`За один раз можно удалить не более ${BULK_DELETE_MAX} комплектов`);
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const seen = new Set<string>();
+  const unique: BulkDeletePackageItem[] = [];
+  for (const raw of items) {
+    const zid = Number(raw?.zid);
+    const eid = Number(raw?.eid);
+    if (!Number.isFinite(zid) || !Number.isFinite(eid) || zid <= 0 || eid <= 0) {
+      continue;
+    }
+    const key = `${zid}:${eid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ zid, eid });
+  }
+  if (unique.length === 0) {
+    const err = new Error("Нет корректных пар zid/eid");
+    (err as Error & { status: number }).status = 400;
+    throw err;
+  }
+
+  const results: BulkDeletePackageItemResult[] = [];
+  let deleted = 0;
+  let failed = 0;
+  let deletedInstances = 0;
+
+  for (const item of unique) {
+    try {
+      const result = await deleteReportPackage(db, item.zid, item.eid);
+      deleted += 1;
+      deletedInstances += result.deletedInstances;
+      results.push({
+        zid: item.zid,
+        eid: item.eid,
+        ok: true,
+        deletedInstances: result.deletedInstances,
+      });
+    } catch (e) {
+      failed += 1;
+      results.push({
+        zid: item.zid,
+        eid: item.eid,
+        ok: false,
+        error: e instanceof Error ? e.message : "Ошибка удаления",
+      });
+    }
+  }
+
+  return { deleted, failed, deletedInstances, results };
 }
 
 export async function createReportPackage(

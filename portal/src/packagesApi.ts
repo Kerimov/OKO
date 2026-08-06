@@ -3,6 +3,7 @@ import { loadCatalog, loadSchema } from "./api";
 import { isBackendMode, loadGlobalMeta, saveInstance, listInstances, defaultDisplayName, deleteInstance } from "./storage";
 import { buildInitialRows } from "./utils";
 import type {
+  BulkDeletePackageResult,
   CreatePackageResult,
   DeletePackageResult,
   Organization,
@@ -463,6 +464,44 @@ export async function deleteReportPackage(
   }
 
   return { deletedInstances: toDelete.length, periodRemoved: true };
+}
+
+export async function deleteReportPackagesBulk(
+  items: Array<{ zid: number; eid: number }>
+): Promise<BulkDeletePackageResult> {
+  if (isBackendMode()) {
+    return apiFetch<BulkDeletePackageResult>("/api/packages/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  const results: BulkDeletePackageResult["results"] = [];
+  let deleted = 0;
+  let failed = 0;
+  let deletedInstances = 0;
+  for (const item of items) {
+    try {
+      const result = await deleteReportPackage(item.zid, item.eid);
+      deleted += 1;
+      deletedInstances += result.deletedInstances;
+      results.push({
+        zid: item.zid,
+        eid: item.eid,
+        ok: true,
+        deletedInstances: result.deletedInstances,
+      });
+    } catch (e) {
+      failed += 1;
+      results.push({
+        zid: item.zid,
+        eid: item.eid,
+        ok: false,
+        error: e instanceof Error ? e.message : "Ошибка удаления",
+      });
+    }
+  }
+  return { deleted, failed, deletedInstances, results };
 }
 
 export async function importReportPackage(

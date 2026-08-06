@@ -2867,6 +2867,24 @@ a.btn:hover {
   margin: 0.15rem 0 0;
 }
 
+.package-workspace-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.package-workspace-bulk-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .package-workspace-list-scroll {
   overflow-y: auto;
   flex: 1;
@@ -2877,11 +2895,32 @@ a.btn:hover {
 }
 
 .package-workspace-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
   text-align: left;
   border: 1px solid var(--border);
   background: var(--bg);
   border-radius: 8px;
-  padding: 0.65rem 0.75rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.4rem;
+  color: inherit;
+  font: inherit;
+}
+
+.package-workspace-item-check {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 0.35rem 0.15rem 0;
+  cursor: pointer;
+}
+
+.package-workspace-item-body {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.2rem 0.25rem;
   cursor: pointer;
   color: inherit;
   font: inherit;
@@ -2896,6 +2935,10 @@ a.btn:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.package-workspace-item.is-checked:not(.is-selected) {
+  border-color: color-mix(in srgb, var(--danger, #b42318) 35%, var(--border));
 }
 
 .package-workspace-item-title {

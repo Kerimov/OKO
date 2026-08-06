@@ -14,6 +14,7 @@ import {
   reopenPeriod,
   distributePackagesToChildren,
   deleteReportPackage,
+  deleteReportPackagesBulk,
   fetchPackageWorkspace,
   fetchPackageWorkspaceDetail,
   listOrganizations,
@@ -127,6 +128,7 @@ export function PackagePage() {
   const [filterPeriod, setFilterPeriod] = useState("");
   const [filterIncomplete, setFilterIncomplete] = useState(false);
   const [filterBlockers, setFilterBlockers] = useState(false);
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => new Set());
 
   const [formSearch, setFormSearch] = useState("");
   const [formFilter, setFormFilter] = useState<FormFilter>("all");
@@ -164,6 +166,8 @@ export function PackagePage() {
 
   const canDeletePackage =
     admin || (orgZid != null && typeof zid === "number" && zid === orgZid);
+
+  const canBulkDelete = canMutate && !auditorRo && (admin || orgZid != null);
 
   const syncUrl = useCallback(
     (nextZid: number, nextEid: number) => {
@@ -280,6 +284,25 @@ export function PackagePage() {
     }
     return { packages: filteredRows.length, filled, submitted };
   }, [filteredRows]);
+
+  const deletableFilteredRows = useMemo(
+    () =>
+      filteredRows.filter((r) => {
+        if (r.periodStatus === "closed") return false;
+        if (admin) return true;
+        return orgZid != null && r.zid === orgZid;
+      }),
+    [filteredRows, admin, orgZid]
+  );
+
+  const allDeletableChecked =
+    deletableFilteredRows.length > 0 &&
+    deletableFilteredRows.every((r) => checkedKeys.has(rowKey(r)));
+
+  const checkedRows = useMemo(
+    () => filteredRows.filter((r) => checkedKeys.has(rowKey(r))),
+    [filteredRows, checkedKeys]
+  );
 
   const formItems = useMemo(() => {
     const items = completeness?.items ?? [];
@@ -440,6 +463,7 @@ export function PackagePage() {
       !confirm(
         `Удалить комплект «${selectedRow.organizationName} — ${selectedRow.periodName}»?\n\n` +
           (filled > 0 ? `Будут удалены все формы (${filled}).\n` : "Форм нет.\n") +
+          "Также будут удалены БП, набор форм периода и связанные данные комплекта.\n" +
           "Отчётный период будет удалён. Действие необратимо."
       )
     ) {
@@ -449,6 +473,11 @@ export function PackagePage() {
     setStatus("");
     try {
       const result = await deleteReportPackage(zid, eid);
+      setCheckedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey({ zid, eid }));
+        return next;
+      });
       setDetail(null);
       const list = await loadList();
       const next = list.find((r) => r.zid === zid) ?? list[0];
@@ -462,6 +491,107 @@ export function PackagePage() {
       setStatus(`Комплект удалён: форм ${result.deletedInstances}`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка удаления комплекта");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleChecked = (key: string, checked: boolean) => {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAllDeletable = () => {
+    if (allDeletableChecked) {
+      setCheckedKeys((prev) => {
+        const next = new Set(prev);
+        for (const r of deletableFilteredRows) next.delete(rowKey(r));
+        return next;
+      });
+      return;
+    }
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      for (const r of deletableFilteredRows) next.add(rowKey(r));
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || checkedRows.length === 0) return;
+    const toDelete = checkedRows.filter((r) => {
+      if (r.periodStatus === "closed") return false;
+      if (admin) return true;
+      return orgZid != null && r.zid === orgZid;
+    });
+    if (!toDelete.length) {
+      setStatus("Нет комплектов, доступных для удаления (закрытые периоды пропускаются)");
+      return;
+    }
+    const filledSum = toDelete.reduce((s, r) => s + r.filled, 0);
+    if (
+      !confirm(
+        `Удалить выбранные комплекты: ${toDelete.length}?\n\n` +
+          (filledSum > 0
+            ? `Будут удалены формы (всего заведено: ${filledSum}).\n`
+            : "") +
+          "Также будут удалены БП и связанные данные каждого комплекта.\n" +
+          "Действие необратимо."
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      const result = await deleteReportPackagesBulk(
+        toDelete.map((r) => ({ zid: r.zid, eid: r.eid }))
+      );
+      const deletedKeys = new Set(
+        result.results.filter((r) => r.ok).map((r) => `${r.zid}:${r.eid}`)
+      );
+      setCheckedKeys((prev) => {
+        const next = new Set(prev);
+        for (const k of deletedKeys) next.delete(k);
+        return next;
+      });
+      const list = await loadList();
+      const currentKey =
+        typeof zid === "number" && typeof eid === "number" ? `${zid}:${eid}` : "";
+      if (currentKey && deletedKeys.has(currentKey)) {
+        setDetail(null);
+        const next = list[0];
+        if (next) {
+          await selectPackage(next.zid, next.eid, next.packageKind);
+        } else {
+          setZid("");
+          setEid("");
+          await saveWorkContext({
+            zid: orgZid ?? (typeof zid === "number" ? zid : null),
+            eid: null,
+          });
+        }
+      } else if (typeof zid === "number" && typeof eid === "number") {
+        await loadDetail(zid, eid, selectedRow?.packageKind);
+      }
+      const failHint =
+        result.failed > 0
+          ? ` · ошибок ${result.failed}` +
+            (result.results
+              .filter((r) => !r.ok)
+              .slice(0, 3)
+              .map((r) => ` (${r.zid}/${r.eid}: ${r.error ?? "—"})`)
+              .join("") || "")
+          : "";
+      setStatus(
+        `Удалено комплектов: ${result.deleted} (форм ${result.deletedInstances})${failHint}`
+      );
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Ошибка массового удаления");
     } finally {
       setBusy(false);
     }
@@ -657,44 +787,96 @@ export function PackagePage() {
               В списке: {listTotals.packages} · заведено {listTotals.filled} · сдано{" "}
               {listTotals.submitted}
             </p>
+            {canBulkDelete && (
+              <div className="package-workspace-bulk-bar">
+                <label className="package-workspace-bulk-select-all">
+                  <input
+                    type="checkbox"
+                    checked={allDeletableChecked}
+                    disabled={busy || deletableFilteredRows.length === 0}
+                    onChange={toggleSelectAllDeletable}
+                  />{" "}
+                  Выбрать все ({deletableFilteredRows.length})
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-danger-outline btn-sm"
+                  disabled={busy || checkedRows.length === 0}
+                  onClick={() => void handleBulkDelete()}
+                >
+                  Удалить выбранные
+                  {checkedRows.length > 0 ? ` (${checkedRows.length})` : ""}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="package-workspace-list-scroll">
             {filteredRows.map((r) => {
-              const selected = selectedRow && rowKey(r) === rowKey(selectedRow);
+              const key = rowKey(r);
+              const selected = selectedRow && key === rowKey(selectedRow);
+              const canCheck =
+                canBulkDelete &&
+                r.periodStatus !== "closed" &&
+                (admin || (orgZid != null && r.zid === orgZid));
+              const checked = checkedKeys.has(key);
               return (
-                <button
-                  key={rowKey(r)}
-                  type="button"
-                  className={`package-workspace-item${selected ? " is-selected" : ""}`}
-                  onClick={() => void selectPackage(r.zid, r.eid, r.packageKind)}
+                <div
+                  key={key}
+                  className={`package-workspace-item${selected ? " is-selected" : ""}${
+                    checked ? " is-checked" : ""
+                  }`}
                 >
-                  <div className="package-workspace-item-title">
-                    {r.organizationName}
-                    {r.organizationCode ? (
-                      <span className="table-sub"> · {r.organizationCode}</span>
-                    ) : null}
-                  </div>
-                  <div className="package-workspace-item-meta">
-                    {r.periodName} · {packageKindLabel(r.packageKind)}
-                  </div>
-                  <div className="package-workspace-item-stats">
-                    {r.bpStatus ? (
-                      <span className={`status-badge ${r.bpStatus}`} style={{ marginLeft: 0 }}>
-                        {bpStatusLabel(r.bpStatus)}
+                  {canBulkDelete && (
+                    <label
+                      className="package-workspace-item-check"
+                      title={
+                        r.periodStatus === "closed"
+                          ? "Закрытый период: сначала переоткройте"
+                          : undefined
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={busy || !canCheck}
+                        onChange={(e) => toggleChecked(key, e.target.checked)}
+                        aria-label={`Выбрать ${r.organizationName} — ${r.periodName}`}
+                      />
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    className="package-workspace-item-body"
+                    onClick={() => void selectPackage(r.zid, r.eid, r.packageKind)}
+                  >
+                    <div className="package-workspace-item-title">
+                      {r.organizationName}
+                      {r.organizationCode ? (
+                        <span className="table-sub"> · {r.organizationCode}</span>
+                      ) : null}
+                    </div>
+                    <div className="package-workspace-item-meta">
+                      {r.periodName} · {packageKindLabel(r.packageKind)}
+                    </div>
+                    <div className="package-workspace-item-stats">
+                      {r.bpStatus ? (
+                        <span className={`status-badge ${r.bpStatus}`} style={{ marginLeft: 0 }}>
+                          {bpStatusLabel(r.bpStatus)}
+                        </span>
+                      ) : (
+                        <span className="status-badge not_started" style={{ marginLeft: 0 }}>
+                          Нет БП
+                        </span>
+                      )}
+                      <span className="table-sub">
+                        {r.filled}/{r.total} · {r.percent}%
+                        {r.periodStatus === "closed" ? " · закрыт" : ""}
+                        {r.hasBlockers ? " · блокеры" : ""}
                       </span>
-                    ) : (
-                      <span className="status-badge not_started" style={{ marginLeft: 0 }}>
-                        Нет БП
-                      </span>
-                    )}
-                    <span className="table-sub">
-                      {r.filled}/{r.total} · {r.percent}%
-                      {r.periodStatus === "closed" ? " · закрыт" : ""}
-                      {r.hasBlockers ? " · блокеры" : ""}
-                    </span>
-                  </div>
-                </button>
+                    </div>
+                  </button>
+                </div>
               );
             })}
             {!filteredRows.length && (

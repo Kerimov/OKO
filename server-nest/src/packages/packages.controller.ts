@@ -19,6 +19,7 @@ import {
   createReportPackage,
   constructPackages,
   deleteReportPackage,
+  deleteReportPackagesBulk,
   getPackageCompleteness,
   getPackagesDashboard,
   getPackageWorkspace,
@@ -33,6 +34,7 @@ import {
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
+  PackageBulkDeleteDto,
   PackageConstructDto,
   PackageImportDto,
   PackageZidEidDto,
@@ -193,6 +195,25 @@ export class PackagesController {
       throw new BadRequestException({
         error: e instanceof Error ? e.message : "delete failed",
       });
+    }
+  }
+
+  @Post("bulk-delete")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Массовое удаление комплектов" })
+  async bulkDelete(@Req() req: Request, @Body() body: PackageBulkDeleteDto) {
+    const items = body.items ?? [];
+    if (!items.length) {
+      throw new BadRequestException({ error: "items required" });
+    }
+    try {
+      for (const item of items) {
+        assertOrgZidParam(req, Number(item.zid));
+      }
+      return deleteReportPackagesBulk(await getDb(), items);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      rethrowAsHttp(e, "bulk delete failed");
     }
   }
 
