@@ -14,6 +14,7 @@ import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
 import { roleLabel } from "../uiLabels";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
+import { StatusBadge } from "./ui";
 
 const SIDEBAR_COLLAPSED_KEY = "oko-portal-sidebar-collapsed";
 const SIDEBAR_SECTIONS_KEY = "oko-portal-sidebar-sections";
@@ -21,6 +22,8 @@ const SIDEBAR_SECTIONS_KEY = "oko-portal-sidebar-sections";
 type NavItem = {
   to: string;
   label: string;
+  description?: string;
+  icon?: string;
   isActive: (pathname: string) => boolean;
 };
 
@@ -55,7 +58,15 @@ function SidebarLink({ item }: { item: NavItem }) {
   return (
     <li>
       <Link to={item.to} className={active ? "active" : ""}>
-        {item.label}
+        <span className="sidebar-nav-icon" aria-hidden>
+          {item.icon ?? item.label.slice(0, 2).toUpperCase()}
+        </span>
+        <span className="sidebar-nav-copy">
+          <span className="sidebar-nav-label">{item.label}</span>
+          {item.description ? (
+            <span className="sidebar-nav-description">{item.description}</span>
+          ) : null}
+        </span>
       </Link>
     </li>
   );
@@ -164,14 +175,34 @@ export function Layout() {
         id: "work",
         title: "Работа",
         items: [
-          { to: "/catalog", label: "Каталог", isActive: (p) => p === "/catalog" },
-          { to: "/my", label: formsNavLabel, isActive: (p) => p.startsWith("/my") },
-          { to: "/package", label: "Комплекты", isActive: (p) => p === "/package" || p === "/admin/packages" },
+          {
+            to: "/catalog",
+            label: "Каталог",
+            description: "Шаблоны и создание форм",
+            icon: "КТ",
+            isActive: (p) => p === "/catalog",
+          },
+          {
+            to: "/my",
+            label: formsNavLabel,
+            description: "Заполнение и сдача",
+            icon: "ФР",
+            isActive: (p) => p.startsWith("/my"),
+          },
+          {
+            to: "/package",
+            label: "Комплекты",
+            description: "Периоды, БП и контроль",
+            icon: "КП",
+            isActive: (p) => p === "/package" || p === "/admin/packages",
+          },
           ...(isBackendMode()
             ? [
                 {
                   to: "/bp",
                   label: t("nav.bpMonitor"),
+                  description: "Согласование комплектов",
+                  icon: "БП",
                   isActive: (p: string) => p === "/bp",
                 },
               ]
@@ -185,7 +216,13 @@ export function Layout() {
         id: "ops",
         title: "Операции",
         items: [
-          { to: "/tools", label: "Обмен и операции", isActive: (p) => p === "/tools" },
+          {
+            to: "/tools",
+            label: "Обмен",
+            description: "Загрузка, выгрузка, сверка",
+            icon: "ОБ",
+            isActive: (p) => p === "/tools",
+          },
         ],
       });
     }
@@ -195,18 +232,46 @@ export function Layout() {
         id: "editors",
         title: "Редакторы",
         items: [
-          { to: "/admin/forms", label: "Формы", isActive: (p) => p === "/admin/forms" },
+          {
+            to: "/admin/forms",
+            label: "Формы",
+            description: "Структура шаблонов",
+            icon: "ШФ",
+            isActive: (p) => p === "/admin/forms",
+          },
           {
             to: "/admin/checks",
             label: "Увязки",
+            description: "Контрольные правила",
+            icon: "УВ",
             isActive: (p) => p.startsWith("/admin/checks"),
           },
-          { to: "/admin/saldo", label: "Сальдо", isActive: (p) => p === "/admin/saldo" },
-          { to: "/admin/excel", label: "Маппинг Excel", isActive: (p) => p === "/admin/excel" },
-          { to: "/admin/rash", label: "Расшифровки", isActive: (p) => p === "/admin/rash" },
+          {
+            to: "/admin/saldo",
+            label: "Сальдо",
+            description: "Начальные остатки",
+            icon: "СД",
+            isActive: (p) => p === "/admin/saldo",
+          },
+          {
+            to: "/admin/excel",
+            label: "Excel",
+            description: "Импорт и экспорт",
+            icon: "XL",
+            isActive: (p) => p === "/admin/excel",
+          },
+          {
+            to: "/admin/rash",
+            label: "Расшифровки",
+            description: "Контрагенты и детализация",
+            icon: "РШ",
+            isActive: (p) => p === "/admin/rash",
+          },
           {
             to: "/admin/aggregation",
             label: "Агрегация",
+            description: "Сборные отчёты",
+            icon: "АГ",
             isActive: (p) => p === "/admin/aggregation",
           },
         ],
@@ -217,13 +282,21 @@ export function Layout() {
       const adminItems: NavItem[] = [];
       if (techNav) {
         adminItems.push(
-          { to: "/admin/users", label: "Пользователи", isActive: (p) => p === "/admin/users" }
+          {
+            to: "/admin/users",
+            label: "Пользователи",
+            description: "Роли и доступ",
+            icon: "ПЛ",
+            isActive: (p) => p === "/admin/users",
+          }
         );
       }
       if (auditNav) {
         adminItems.push({
           to: "/admin/audit",
           label: "Аудит",
+          description: "Журнал действий",
+          icon: "АУ",
           isActive: (p) => p === "/admin/audit",
         });
       }
@@ -232,16 +305,22 @@ export function Layout() {
           {
             to: "/admin/refs",
             label: "Справочники",
+            description: "НСИ и контрагенты",
+            icon: "НС",
             isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr",
           },
           {
             to: "/perimeter",
             label: t("nav.perimeter"),
+            description: "Периметр организаций",
+            icon: "ПМ",
             isActive: (p) => p === "/perimeter",
           },
           {
             to: "/collection-units",
             label: "Единицы сбора",
+            description: "Участники отчётности",
+            icon: "ЕС",
             isActive: (p) => p === "/collection-units",
           }
         );
@@ -250,6 +329,8 @@ export function Layout() {
         adminItems.push({
           to: "/integrations",
           label: t("nav.integrations"),
+          description: "Подключения и сервисы",
+          icon: "ИН",
           isActive: (p) => p === "/integrations",
         });
       }
@@ -257,12 +338,16 @@ export function Layout() {
         adminItems.push({
           to: "/psd-reports",
           label: t("nav.psdReports"),
+          description: "Отчёты ПСД",
+          icon: "ОТ",
           isActive: (p) => p === "/psd-reports",
         });
       }
       adminItems.push({
         to: "/check-explanations",
         label: "Объяснения проверок",
+        description: "Работа с блокерами",
+        icon: "ОП",
         isActive: (p) => p === "/check-explanations",
       });
       list.push({
@@ -278,6 +363,8 @@ export function Layout() {
           {
             to: "/admin/refs",
             label: "Справочники (local)",
+            description: "Локальные данные",
+            icon: "НС",
             isActive: (p) => p.startsWith("/admin/refs") || p === "/admin/kontr",
           },
         ],
@@ -287,8 +374,20 @@ export function Layout() {
     list.push({
       id: "misc",
       items: [
-        { to: "/instructions", label: "Инструкция", isActive: (p) => p === "/instructions" },
-        { to: "/settings", label: "Настройки", isActive: (p) => p === "/settings" },
+        {
+          to: "/instructions",
+          label: "Инструкция",
+          description: "Как работать в системе",
+          icon: "ИН",
+          isActive: (p) => p === "/instructions",
+        },
+        {
+          to: "/settings",
+          label: "Настройки",
+          description: "Режимы и параметры",
+          icon: "НТ",
+          isActive: (p) => p === "/settings",
+        },
       ],
     });
 
@@ -314,6 +413,13 @@ export function Layout() {
     () => breadcrumbsForPath(pathname, formsNavLabel),
     [pathname, formsNavLabel]
   );
+  const currentItem = useMemo(() => {
+    for (const section of sections) {
+      const item = section.items.find((candidate) => candidate.isActive(pathname));
+      if (item) return { ...item, sectionTitle: section.title };
+    }
+    return null;
+  }, [pathname, sections]);
 
   useEffect(() => {
     const active = sections.find((s) => s.items.some((item) => item.isActive(pathname)));
@@ -341,6 +447,7 @@ export function Layout() {
             <span className="sidebar-brand-mark">ОКО</span>
             <span className="sidebar-brand-text">
               <span className="sidebar-brand-title">Портал отчётности</span>
+              <span className="sidebar-brand-sub">ПСД-контроль</span>
             </span>
           </Link>
           <button
@@ -405,6 +512,17 @@ export function Layout() {
                 );
               })}
             </nav>
+            <div className="app-header-context">
+              <span className="app-header-context-kicker">
+                {currentItem?.sectionTitle ?? "Раздел"}
+              </span>
+              <span className="app-header-context-title">
+                {currentItem?.label ?? crumbs[crumbs.length - 1]?.label ?? "ОКО"}
+              </span>
+              {currentItem?.description ? (
+                <span className="app-header-context-desc">{currentItem.description}</span>
+              ) : null}
+            </div>
           </div>
           <div className="app-header-right">
             <button
@@ -432,23 +550,19 @@ export function Layout() {
                 <span className="app-header-user-meta">
                   <span className="app-header-user-name">
                     {user.displayName || user.username}
+                  </span>
+                  <span className="header-user-chips">
                     {isBackendMode() && (
-                      <span
-                        className="status-badge"
-                        style={{ marginLeft: 6, fontSize: "0.75em" }}
-                        title="Роль ПСД"
-                      >
+                      <span className="role-chip role-chip--psd" title="Роль ПСД">
                         {psdRoleLabelRu(psdRole)}
                       </span>
                     )}
                     {auditorRo && (
-                      <span
-                        className="status-badge"
-                        style={{ marginLeft: 6, fontSize: "0.75em" }}
+                      <StatusBadge
+                        tone="warning"
+                        label={t("badge.readonly")}
                         title="Аудитор: мутации недоступны"
-                      >
-                        {t("badge.readonly")}
-                      </span>
+                      />
                     )}
                   </span>
                   {user.organizationName && (
@@ -458,7 +572,7 @@ export function Layout() {
               </div>
             )}
             {isBackendMode() && auth.role && auth.loginAvailable && (
-              <button type="button" className="app-header-logout" onClick={handleLogout}>
+              <button type="button" className="btn btn-ghost btn-sm app-header-logout" onClick={handleLogout}>
                 Выйти
               </button>
             )}
@@ -467,7 +581,10 @@ export function Layout() {
         <main className="main">
           <Outlet />
         </main>
-        <footer className="footer">ОКО · корпоративная отчётность</footer>
+        <footer className="footer">
+          <span>ОКО · корпоративная отчётность</span>
+          <span>Единая витрина комплектов, проверок и обмена</span>
+        </footer>
       </div>
 
       <CommandPalette

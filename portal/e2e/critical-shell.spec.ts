@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+async function expectLoginGate(page: import("@playwright/test").Page) {
+  await expect(
+    page.getByRole("heading", { name: /Вход( в портал)?/i }).first()
+  ).toBeVisible();
+  await expect(page.locator(".login-brand-mark")).toContainText("ОКО");
+}
+
 /**
  * Critical UI smoke against static preview (no API required).
  * Full API journeys can extend with OKO_E2E_API later.
@@ -24,7 +31,7 @@ test.describe("OKO portal critical shell", () => {
     await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
     const path = new URL(page.url()).pathname;
     if (path === "/" || path === "/login") {
-      await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+      await expectLoginGate(page);
       return;
     }
     await expect(page).toHaveURL(/tab=exchange/);
@@ -35,7 +42,7 @@ test.describe("OKO portal critical shell", () => {
     await page.goto("/settings");
     await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
     if (new URL(page.url()).pathname === "/") {
-      await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+      await expectLoginGate(page);
       return;
     }
     await expect(page.getByRole("heading", { name: /Настройки/i })).toBeVisible();
@@ -53,7 +60,7 @@ test.describe("OKO portal critical shell", () => {
       await page.goto(path);
       await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
       if (new URL(page.url()).pathname === "/") {
-        await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+        await expectLoginGate(page);
         return;
       }
       await expect(page.locator("h1").first()).toBeVisible();

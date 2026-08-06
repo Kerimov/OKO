@@ -1,0 +1,130 @@
+/* Design tokens — strict modern enterprise OKO */
+
+:root {
+  --font-sans: "Onest", system-ui, -apple-system, sans-serif;
+  --font-display: "Onest", system-ui, -apple-system, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+
+  /* Surfaces */
+  --bg: #f6fafe;
+  --bg-accent: #eef7ff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #edf6fd;
+  --color-surface-default: var(--surface);
+  --color-surface-elevated: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+
+  /* Text */
+  --ink: #10263a;
+  --text: var(--ink);
+  --muted: #5f778d;
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--muted);
+  --color-text-inverse: #ffffff;
+
+  /* Borders */
+  --border: #d8e6f1;
+  --border-strong: #bfd4e6;
+  --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  /* Brand / interactive */
+  --gazprom-blue: #0079c1;
+  --gazprom-blue-hover: #0065a3;
+  --gazprom-blue-deep: #005a9e;
+  --gazprom-navy: #003b68;
+  --gazprom-cyan: #00a3e0;
+  --gazprom-sky: #e8f3fb;
+  --primary: var(--gazprom-blue);
+  --primary-hover: var(--gazprom-blue-hover);
+  --primary-deep: var(--gazprom-blue-deep);
+  --accent: var(--primary);
+  --accent-soft: var(--gazprom-sky);
+  --accent-strong: var(--gazprom-cyan);
+  --color-interactive: var(--primary);
+  --color-interactive-hover: var(--primary-hover);
+  --color-interactive-muted: var(--accent-soft);
+
+  /* Semantic */
+  --danger: #c2410c;
+  --danger-soft: #fff0e8;
+  --success: #047857;
+  --success-soft: #e7f8ef;
+  --warning: #b45309;
+  --warning-soft: #fff7e8;
+  --info: var(--gazprom-blue);
+  --info-soft: var(--gazprom-sky);
+
+  /* Status palette */
+  --status-draft-bg: #eef3f8;
+  --status-draft-fg: #35506b;
+  --status-draft-dot: #6b849c;
+  --status-submitted-bg: var(--success-soft);
+  --status-submitted-fg: var(--success);
+  --status-submitted-dot: var(--success);
+  --status-returned-bg: var(--danger-soft);
+  --status-returned-fg: var(--danger);
+  --status-returned-dot: var(--danger);
+  --status-corrected-bg: var(--warning-soft);
+  --status-corrected-fg: var(--warning);
+  --status-corrected-dot: #e09b1a;
+  --status-accepted-bg: var(--success-soft);
+  --status-accepted-fg: var(--success);
+  --status-accepted-dot: var(--success);
+  --status-collecting-bg: var(--info-soft);
+  --status-collecting-fg: var(--primary-deep);
+  --status-collecting-dot: var(--primary);
+  --status-pending-bg: var(--warning-soft);
+  --status-pending-fg: var(--warning);
+  --status-pending-dot: #e09b1a;
+  --status-approved-bg: #e8f3fb;
+  --status-approved-fg: var(--gazprom-blue-deep);
+  --status-approved-dot: var(--gazprom-blue);
+  --status-completed-bg: var(--success-soft);
+  --status-completed-fg: var(--success);
+  --status-completed-dot: var(--success);
+  --status-blocked-bg: var(--danger-soft);
+  --status-blocked-fg: var(--danger);
+  --status-blocked-dot: var(--danger);
+  --status-imported-bg: var(--success-soft);
+  --status-imported-fg: var(--success);
+  --status-exported-bg: var(--info-soft);
+  --status-exported-fg: var(--primary-deep);
+
+  /* Shell */
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --sidebar-bg: var(--gazprom-navy);
+  --sidebar-hover: rgba(255, 255, 255, 0.08);
+  --sidebar-active: rgba(11, 110, 170, 0.28);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --frozen-bg: #eef4fa;
+
+  /* Elevation */
+  --shadow: 0 10px 26px rgba(15, 45, 74, 0.05);
+  --shadow-card: 0 14px 36px rgba(15, 45, 74, 0.07);
+  --shadow-float: 0 22px 54px rgba(15, 45, 74, 0.18);
+
+  /* Radius / space / controls */
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --control-height: 36px;
+  --control-height-sm: 30px;
+  --focus-ring: 0 0 0 3px rgba(0, 121, 193, 0.24);
+
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
+  font-feature-settings: "tnum" 1;
+}

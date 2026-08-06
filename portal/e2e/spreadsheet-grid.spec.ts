@@ -13,7 +13,9 @@ test.describe("OKO spreadsheet grid chrome", () => {
 
     const path = new URL(page.url()).pathname;
     if (path === "/" || path === "/login") {
-      await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: /Вход( в портал)?/i }).first()
+      ).toBeVisible();
       return;
     }
 
@@ -24,7 +26,9 @@ test.describe("OKO spreadsheet grid chrome", () => {
       await page.goto("/tools/forms");
       await expect(page.locator(".loading")).toHaveCount(0, { timeout: 15_000 });
       if (new URL(page.url()).pathname === "/" || new URL(page.url()).pathname === "/login") {
-        await expect(page.getByRole("heading", { name: "ОКО" })).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: /Вход( в портал)?/i }).first()
+        ).toBeVisible();
         return;
       }
       const gridTab = page.getByRole("button", { name: "Сетка" });

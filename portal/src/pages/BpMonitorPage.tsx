@@ -13,6 +13,7 @@ import type { Organization, ReportingPeriod } from "../types";
 import type { IdOrEmpty } from "../components/OrgPeriodSelects";
 import { orgOptionLabel, packageKindLabel, periodOptionLabel, BP_STATUS_LABEL, formatDateTimeRu } from "../uiLabels";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import { StatusBadge } from "../components/ui";
 
 type BpStatus =
   | "not_started"
@@ -314,9 +315,7 @@ export function BpMonitorPage() {
                     <td>{bp.periodName ?? `Период ${bp.eid}`}</td>
                     <td>{packageKindLabel(bp.packageKind)}</td>
                     <td>
-                      <span className={`status-badge ${bp.status}`}>
-                        {BP_STATUS_LABEL[bp.status]}
-                      </span>
+                      <StatusBadge status={bp.status} label={BP_STATUS_LABEL[bp.status]} />
                     </td>
                     <td>{bp.iteration}</td>
                     <td>{bp.curatorName ?? "—"}</td>
@@ -348,9 +347,10 @@ export function BpMonitorPage() {
                 {" · "}
                 {packageKindLabel(selected.packageKind)}
                 <br />
-                <span className={`status-badge ${selected.status}`} style={{ marginLeft: 0 }}>
-                  {BP_STATUS_LABEL[selected.status]}
-                </span>
+                <StatusBadge
+                  status={selected.status}
+                  label={BP_STATUS_LABEL[selected.status]}
+                />
                 {" · изменён "}
                 {formatDateTimeRu(selected.lastChangedAt)}
                 {selected.lastChangedBy ? ` (${selected.lastChangedBy})` : ""}

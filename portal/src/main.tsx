@@ -4,6 +4,10 @@ import App from "./App";
 import { initStorage, isBackendMode } from "./storage";
 import { initAuth } from "./auth";
 import "./index.css";
+import "./styles/design-system.css";
+import "./styles/shell.css";
+import "./styles/data-display.css";
+import "./styles/screens.css";
 import { useAuth } from "./useAuth";
 
 function Bootstrap() {

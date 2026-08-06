@@ -77,6 +77,7 @@ import { useAuth } from "../useAuth";
 import { formsListBackLabel } from "../formsListLabels";
 import { t } from "../i18n";
 import { makeRowId } from "@oko/spreadsheet";
+import { Button, StatusBadge, StatusBanner } from "../components/ui";
 
 export function FormPage() {
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -1002,48 +1003,28 @@ export function FormPage() {
             <div className="form-subtitle">
               <span className="form-code">{schema.id}</span>
               <span>{schema.title}</span>
-              <span className={`status-badge ${instanceStatus}`}>
-                {formStatusLabel(instanceStatus)}
-              </span>
+              <StatusBadge status={instanceStatus} label={formStatusLabel(instanceStatus)} />
             </div>
           </div>
           <div className="toolbar-primary-actions">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => void handleReset()}
-            >
+            <Button variant="secondary" size="sm" onClick={() => void handleReset()}>
               Сбросить
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger-outline btn-sm"
-              onClick={() => void handleDelete()}
-            >
+            </Button>
+            <Button variant="danger-outline" size="sm" onClick={() => void handleDelete()}>
               Удалить
-            </button>
+            </Button>
             {instanceStatus === "draft" && !isLocked && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => void handleSubmitForm()}
-              >
+              <Button variant="outline" onClick={() => void handleSubmitForm()}>
                 Сдать форму
-              </button>
+              </Button>
             )}
             {instanceStatus === "submitted" && admin && !periodClosed && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => void handleReopenForm()}
-              >
+              <Button variant="outline" onClick={() => void handleReopenForm()}>
                 Вернуть в черновик
-              </button>
+              </Button>
             )}
             {!isLocked && (
-              <button type="button" className="btn btn-primary" onClick={() => void handleSave()}>
-                Сохранить
-              </button>
+              <Button onClick={() => void handleSave()}>Сохранить</Button>
             )}
           </div>
         </div>
@@ -1057,23 +1038,19 @@ export function FormPage() {
                   Образец PDF
                 </a>
               )}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => fileRef.current?.click()}
-              >
+              <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
                 Импорт
-              </button>
+              </Button>
               <input ref={fileRef} type="file" accept=".json" hidden onChange={handleImport} />
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={isLocked || importingXlsx}
                 onClick={() => xlsxRef.current?.click()}
                 title="Импорт значений из .xlsx (предпросмотр)"
               >
                 {importingXlsx ? "Excel…" : "Импорт Excel"}
-              </button>
+              </Button>
               <input
                 ref={xlsxRef}
                 type="file"
@@ -1081,38 +1058,34 @@ export function FormPage() {
                 hidden
                 onChange={(e) => void handleXlsxPick(e)}
               />
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleExportExcel}
                 disabled={exportingExcel}
               >
                 {exportingExcel ? "Выгрузка…" : "В Excel"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleExportPdf}
                 disabled={exportingPdf}
               >
                 {exportingPdf ? "PDF…" : "В PDF"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleExport}
-              >
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleExport}>
                 Экспорт JSON
-              </button>
+              </Button>
             </div>
           </div>
 
           <div className="toolbar-group">
             <span className="toolbar-group-label">Расчёт и проверка</span>
             <div className="toolbar-group-actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleRecalc}
                 disabled={recalcing}
                 title={
@@ -1122,7 +1095,7 @@ export function FormPage() {
                 }
               >
                 {recalcing ? "…" : "Пересчёт"}
-              </button>
+              </Button>
               {(recalcRuleCount ?? 0) > 0 && (
                 <label className="auto-recalc-toggle" title="Пересчёт итоговых строк и граф">
                   <input
@@ -1137,18 +1110,18 @@ export function FormPage() {
                   Авто
                 </label>
               )}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleCheck}
                 disabled={checking}
               >
                 {checking ? "Проверка…" : "Проверить форму"}
-              </button>
+              </Button>
               {rashMode && (
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => void handleCheckRash()}
                   disabled={checkingRash}
                   title={
@@ -1158,40 +1131,36 @@ export function FormPage() {
                   }
                 >
                   {checkingRash ? "Расшифровка…" : "Проверить расшифровки"}
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </div>
       </div>
       {status && (
-        <div
-          className={`status-bar${statusTone === "error" ? " status-bar-error" : ""}`}
-          role={statusTone === "error" ? "alert" : "status"}
-        >
+        <StatusBanner tone={statusTone === "error" ? "error" : "success"}>
           {status}
-        </div>
+        </StatusBanner>
       )}
       {!canMutate && (
-        <div className="status-bar status-locked">Режим аудитора — только чтение.</div>
+        <StatusBanner tone="warning">Режим аудитора — только чтение.</StatusBanner>
       )}
       {bpLocked && bpStatus && (
-        <div className="status-bar status-locked">
+        <StatusBanner tone="warning">
           {bpStatus === "not_started"
             ? t("form.bpLocked.not_started")
             : bpStatus === "pending_curator_approval"
               ? t("form.bpLocked.pending")
-              : t("form.bpLocked.completed")}
-          {" "}
+              : t("form.bpLocked.completed")}{" "}
           <Link to="/package">Открыть комплект</Link>
-        </div>
+        </StatusBanner>
       )}
       {isLocked && !bpLocked && (
-        <div className="status-bar status-locked">
+        <StatusBanner tone="warning">
           {periodClosed
             ? "Период закрыт — форма только для просмотра."
             : "Форма сдана и доступна только для просмотра. Для правок обратитесь к администратору."}
-        </div>
+        </StatusBanner>
       )}
       {periodClosed && instanceStatus === "submitted" && admin && (
         <div className="tools-hint">
@@ -1350,14 +1319,13 @@ export function FormPage() {
                 </label>
               </div>
               {!readOnly && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
+                <Button
+                  variant="secondary"
                   disabled={commentBusy}
                   onClick={() => void handleSaveCellComment()}
                 >
                   {commentBusy ? "Сохранение…" : "Сохранить комментарий"}
-                </button>
+                </Button>
               )}
               {commentStatus && <p className="tools-hint">{commentStatus}</p>}
             </>
@@ -1433,25 +1401,22 @@ export function FormPage() {
                 )}
               </tbody>
             </table>
-            <div className="toolbar-actions" style={{ marginTop: "1rem" }}>
-              <button
-                type="button"
-                className="btn btn-primary"
+            <div className="toolbar-actions modal-actions">
+              <Button
                 disabled={isLocked || xlsxPreview.diffs.every((d) => d.readonly)}
                 onClick={() => void applyXlsxImport()}
               >
                 Применить
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setXlsxPreview(null);
                   setXlsxBuffer(null);
                 }}
               >
                 Отмена
-              </button>
+              </Button>
             </div>
           </div>
         </div>

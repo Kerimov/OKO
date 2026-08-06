@@ -50,6 +50,25 @@ import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
 import { PackageConstructor } from "../components/PackageConstructor";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import {
+  Button,
+  PageHeader,
+  StatusBadge,
+  StatusBanner,
+  TabBar,
+} from "../components/ui";
+
+function ProgressMeter({ percent, label }: { percent: number; label?: string }) {
+  const safe = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+  return (
+    <div className="progress-meter" title={label ?? `${safe}%`}>
+      <div className="progress-meter-track">
+        <div className="progress-meter-fill" style={{ width: `${safe}%` }} />
+      </div>
+      <span className="progress-meter-label">{safe}%</span>
+    </div>
+  );
+}
 
 type WorkspaceTab = "overview" | "forms" | "bp" | "setup" | "create";
 type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
@@ -841,25 +860,22 @@ export function PackagePage() {
 
   return (
     <div className="page package-workspace">
-      <div className="package-workspace-header">
-        <div>
-          <h1>Комплекты отчётности</h1>
-          <p className="tools-hint">
+      <PageHeader
+        title="Комплекты отчётности"
+        description={
+          <>
             Список организаций и периодов слева, карточка и действия справа.
             {auditorRo ? " Режим аудитора: только чтение." : ""}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={busy}
-          onClick={() => void refreshAll()}
-        >
-          Обновить
-        </button>
-      </div>
+          </>
+        }
+        actions={
+          <Button variant="secondary" disabled={busy} onClick={() => void refreshAll()}>
+            Обновить
+          </Button>
+        }
+      />
 
-      {status && <div className="status-bar">{status}</div>}
+      {status && <StatusBanner tone="info">{status}</StatusBanner>}
 
       <div className="package-workspace-layout">
         <aside className="tools-section package-workspace-list">
@@ -952,9 +968,8 @@ export function PackagePage() {
                 {checkedRows.length > 0 ? (
                   <div className="package-workspace-bulk-actions">
                     {canBulkStartCollection && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
+                      <Button
+                        size="sm"
                         disabled={
                           busy ||
                           bpBusy ||
@@ -967,24 +982,24 @@ export function PackagePage() {
                         onClick={() => void handleBulkStartCollection()}
                       >
                         {bpBusy ? "Запуск…" : "Запустить сбор"}
-                      </button>
+                      </Button>
                     )}
                     {canBulkRunChecks && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         disabled={busy || packageChecksBusy}
                         onClick={() => void handleBulkChecks()}
                       >
                         {packageChecksBusy
                           ? "Проверки…"
                           : "Запустить проверки"}
-                      </button>
+                      </Button>
                     )}
                     {canBulkDelete && (
-                      <button
-                        type="button"
-                        className="btn btn-danger-outline btn-sm"
+                      <Button
+                        variant="danger-outline"
+                        size="sm"
                         disabled={busy || checkedDeletableRows.length === 0}
                         onClick={() => void handleBulkDelete()}
                       >
@@ -992,16 +1007,16 @@ export function PackagePage() {
                         {checkedDeletableRows.length > 0
                           ? ` (${checkedDeletableRows.length})`
                           : ""}
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       disabled={busy}
                       onClick={clearSelection}
                     >
                       Снять выбор
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <span className="table-sub package-workspace-bulk-hint">
@@ -1058,16 +1073,16 @@ export function PackagePage() {
                     </div>
                     <div className="package-workspace-item-stats">
                       {r.bpStatus ? (
-                        <span className={`status-badge ${r.bpStatus}`} style={{ marginLeft: 0 }}>
-                          {bpStatusLabel(r.bpStatus)}
-                        </span>
+                        <StatusBadge status={r.bpStatus} label={bpStatusLabel(r.bpStatus)} />
                       ) : (
-                        <span className="status-badge not_started" style={{ marginLeft: 0 }}>
-                          Нет БП
-                        </span>
+                        <StatusBadge tone="not_started" label="Нет БП" />
                       )}
+                      <ProgressMeter
+                        percent={r.percent}
+                        label={`${r.filled}/${r.total}`}
+                      />
                       <span className="table-sub">
-                        {r.filled}/{r.total} · {r.percent}%
+                        {r.filled}/{r.total}
                         {r.periodStatus === "closed" ? " · закрыт" : ""}
                         {r.hasBlockers ? " · блокеры" : ""}
                       </span>
@@ -1082,55 +1097,51 @@ export function PackagePage() {
           </div>
 
           {canMutate && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: 8 }}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="package-workspace-create-btn"
               onClick={() => setTab("create")}
             >
               Создать комплект…
-            </button>
+            </Button>
           )}
           {admin && canMutate && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: 8 }}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="package-workspace-create-btn"
               onClick={() => setTab("setup")}
             >
               Настройка: создать орг.
-            </button>
+            </Button>
           )}
         </aside>
 
         <div className="package-workspace-detail">
           {canMutate || selectedRow ? (
-            <div className="tools-tabs" style={{ marginBottom: 12 }}>
-              {(
-                [
-                  ...(selectedRow
-                    ? ([
-                        ["overview", "Обзор"],
-                        ["forms", "Формы"],
-                        ["bp", "Бизнес-процесс"],
-                      ] as Array<[WorkspaceTab, string]>)
-                    : []),
-                  ...(canMutate ? ([["create", "Создание"]] as Array<[WorkspaceTab, string]>) : []),
-                  ...(admin && canMutate
-                    ? ([["setup", "Настройка"]] as Array<[WorkspaceTab, string]>)
-                    : []),
-                ] as Array<[WorkspaceTab, string]>
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={tab === id ? "active" : undefined}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <TabBar
+              ariaLabel="Разделы комплекта"
+              value={tab}
+              onChange={(id) => setTab(id as WorkspaceTab)}
+              items={
+                (
+                  [
+                    ...(selectedRow
+                      ? ([
+                          ["overview", "Обзор"],
+                          ["forms", "Формы"],
+                          ["bp", "Бизнес-процесс"],
+                        ] as Array<[WorkspaceTab, string]>)
+                      : []),
+                    ...(canMutate ? ([["create", "Создание"]] as Array<[WorkspaceTab, string]>) : []),
+                    ...(admin && canMutate
+                      ? ([["setup", "Настройка"]] as Array<[WorkspaceTab, string]>)
+                      : []),
+                  ] as Array<[WorkspaceTab, string]>
+                ).map(([id, label]) => ({ id, label }))
+              }
+            />
           ) : null}
 
           {tab === "create" && canMutate && (
@@ -1159,13 +1170,9 @@ export function PackagePage() {
                   : "Выберите комплект в списке слева."}
               </p>
               {canMutate && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setTab("create")}
-                >
+                <Button onClick={() => setTab("create")}>
                   Открыть конструктор
-                </button>
+                </Button>
               )}
             </section>
           ) : null}
@@ -1182,7 +1189,7 @@ export function PackagePage() {
                       {" · "}
                       {packageKindLabel(selectedRow.packageKind)}
                     </h2>
-                    <p className="tools-hint" style={{ marginBottom: 0 }}>
+                    <p className="tools-hint package-workspace-card-meta">
                       {formatPeriod(
                         selectedRow.periodStart ?? "",
                         selectedRow.periodEnd ?? ""
@@ -1200,20 +1207,15 @@ export function PackagePage() {
                     </p>
                   </div>
                   {selectedRow.bpStatus && (
-                    <span
-                      className={`status-badge ${selectedRow.bpStatus}`}
-                      style={{ marginLeft: 0 }}
-                    >
-                      {bpStatusLabel(selectedRow.bpStatus)}
-                    </span>
+                    <StatusBadge
+                      status={selectedRow.bpStatus}
+                      label={bpStatusLabel(selectedRow.bpStatus)}
+                    />
                   )}
                 </div>
 
-                <div className="completeness-bar" style={{ marginTop: 12 }}>
-                  <div
-                    className="completeness-fill"
-                    style={{ width: `${selectedRow.percent}%` }}
-                  />
+                <div className="package-workspace-card-progress">
+                  <ProgressMeter percent={selectedRow.percent} />
                 </div>
                 <p className="tools-hint">
                   Формы: <strong>{selectedRow.filled}/{selectedRow.total}</strong>
@@ -1225,20 +1227,18 @@ export function PackagePage() {
                 </p>
 
                 {bpBlockers?.blocked && (
-                  <p className="error">
+                  <StatusBanner tone="error">
                     Согласование заблокировано — нет объяснений:{" "}
                     {bpBlockers.missingExplanations
                       .map((m) => `#${m.ruleNumber}`)
                       .join(", ")}
                     . <Link to={checkExplanationsLink}>Объяснения проверок</Link>
-                  </p>
+                  </StatusBanner>
                 )}
 
                 <div className="toolbar-actions">
                   {primaryCta && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
+                    <Button
                       disabled={
                         busy ||
                         bpBusy ||
@@ -1247,20 +1247,19 @@ export function PackagePage() {
                       onClick={() => void runPrimaryCta()}
                     >
                       {busy || bpBusy ? "…" : primaryCta.label}
-                    </button>
+                    </Button>
                   )}
                   <Link to="/my" className="btn btn-secondary">
                     {formsLinkLabel}
                   </Link>
                   {backend && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
+                    <Button
+                      variant="secondary"
                       disabled={packageChecksBusy || !canMutate}
                       onClick={() => void handleRunPackageChecks()}
                     >
                       {packageChecksBusy ? "Проверки…" : "Запустить проверки"}
-                    </button>
+                    </Button>
                   )}
                   <Link to="/bp" className="btn btn-secondary">
                     Мониторинг БП
@@ -1300,22 +1299,17 @@ export function PackagePage() {
                   </ul>
                   <div className="toolbar-actions">
                     {selectedRow.filled < selectedRow.total && canMutate && !periodClosed && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
+                      <Button
+                        variant="secondary"
                         disabled={busy}
                         onClick={() => void handleCreatePackage()}
                       >
                         Завести недостающие формы
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setTab("forms")}
-                    >
+                    <Button variant="secondary" onClick={() => setTab("forms")}>
                       Открыть список форм
-                    </button>
+                    </Button>
                     <Link to={checkExplanationsLink} className="btn btn-secondary">
                       Объяснения проверок
                     </Link>
@@ -1362,15 +1356,14 @@ export function PackagePage() {
                     </label>
                   </CollapsibleFilters>
                   {canMutate && !periodClosed && (
-                    <div className="toolbar-actions" style={{ marginBottom: 12 }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
+                    <div className="toolbar-actions section-actions">
+                      <Button
+                        variant="secondary"
                         disabled={busy}
                         onClick={() => void handleCreatePackage()}
                       >
                         Завести / дозавести
-                      </button>
+                      </Button>
                     </div>
                   )}
                   <div className="table-wrap">
@@ -1393,19 +1386,12 @@ export function PackagePage() {
                             <td>{f.category || "—"}</td>
                             <td>
                               {f.filled ? (
-                                <span
-                                  className={`status-badge ${f.status ?? "draft"}`}
-                                  style={{ marginLeft: 0 }}
-                                >
-                                  {formStatusLabel(f.status)}
-                                </span>
+                                <StatusBadge
+                                  status={f.status ?? "draft"}
+                                  label={formStatusLabel(f.status)}
+                                />
                               ) : (
-                                <span
-                                  className="status-badge not_started"
-                                  style={{ marginLeft: 0 }}
-                                >
-                                  Не заведена
-                                </span>
+                                <StatusBadge tone="not_started" label="Не заведена" />
                               )}
                             </td>
                             <td>
@@ -1444,12 +1430,7 @@ export function PackagePage() {
                   {backend && bp && (
                     <>
                       <p className="tools-hint">
-                        <span
-                          className={`status-badge ${bp.status}`}
-                          style={{ marginLeft: 0 }}
-                        >
-                          {BP_STATUS_LABEL[bp.status]}
-                        </span>
+                        <StatusBadge status={bp.status} label={BP_STATUS_LABEL[bp.status]} />
                         {" · итерация "}
                         {bp.iteration}
                         {bp.curatorName ? ` · куратор: ${bp.curatorName}` : ""}

@@ -26,6 +26,7 @@ import { bpStatusLabel, packageKindLabel } from "../../uiLabels";
 import { exportPackageToExcel } from "../../engine/exportExcel";
 import { loadSchema } from "../../api";
 import type { ExchangeMode } from "./tabs";
+import { Button, StatusBadge } from "../../components/ui";
 
 function formatExchangeAt(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -168,28 +169,23 @@ function ExchangeMarksCell({
     <>
       <div className="exchange-marks">
         {row.lastImportedAt ? (
-          <span
-            className="status-badge accepted"
+          <StatusBadge
+            tone="imported"
             title={
               formatExchangeAt(row.lastImportedAt) +
               (importVersion != null ? ` · версия ${importVersion}` : "")
             }
-          >
-            Загружено
-            {importVersion != null ? ` · v${importVersion}` : ""}
-          </span>
+            label={`Загружено${importVersion != null ? ` · v${importVersion}` : ""}`}
+          />
         ) : (
-          <span className="status-badge draft" title="Файл ещё не принимали">
-            Не загружено
-          </span>
+          <StatusBadge tone="draft" title="Файл ещё не принимали" label="Не загружено" />
         )}
         {showExported && row.lastExportedAt ? (
-          <span
-            className="status-badge collecting"
+          <StatusBadge
+            tone="exported"
             title={formatExchangeAt(row.lastExportedAt)}
-          >
-            Выгружено
-          </span>
+            label="Выгружено"
+          />
         ) : null}
       </div>
       <div className="table-sub">
@@ -333,11 +329,11 @@ function WorkspacePackagesTable({
     return <p className="hint-text">Загрузка комплектов…</p>;
   }
   return (
-    <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
-      <table className="form-table" style={{ minWidth: "42rem" }}>
+    <div className="table-wrap exchange-table-wrap">
+      <table className="form-table exchange-packages-table">
         <thead>
           <tr>
-            {selectable ? <th style={{ width: "2.5rem" }} /> : null}
+            {selectable ? <th className="table-col-check" /> : null}
             <th>Организация</th>
             <th>Период</th>
             <th>Тип</th>
@@ -389,9 +385,10 @@ function WorkspacePackagesTable({
                 </td>
                 <td>
                   {r.bpStatus ? (
-                    <span className={`status-badge ${r.bpStatus}`}>
-                      {bpStatusLabel(r.bpStatus)}
-                    </span>
+                    <StatusBadge
+                      status={r.bpStatus}
+                      label={bpStatusLabel(r.bpStatus)}
+                    />
                   ) : (
                     "—"
                   )}
@@ -543,9 +540,7 @@ export function PackageExportTab({ onStatus }: PackageExportTabProps) {
           />
           Выбрать все ({list.filteredRows.length})
         </label>
-        <button
-          type="button"
-          className="btn btn-primary"
+        <Button
           disabled={busy || checkedRows.length === 0}
           onClick={() => void handleDownloadSelected()}
         >
@@ -554,19 +549,17 @@ export function PackageExportTab({ onStatus }: PackageExportTabProps) {
             : checkedRows.length <= 1
               ? `Скачать${checkedRows.length === 1 ? " комплект" : ""} (${checkedRows.length})`
               : `Скачать выбранные (${checkedRows.length})`}
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
+        </Button>
+        <Button
+          variant="secondary"
           disabled={busy || !singleSelected}
           onClick={() => void handleExcelSelected()}
           title="Excel только для одного отмеченного комплекта"
         >
           Excel
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
+        </Button>
+        <Button
+          variant="secondary"
           disabled={list.workspaceLoading || busy}
           onClick={() =>
             void list.reloadWorkspace().catch((e) => {
@@ -577,7 +570,7 @@ export function PackageExportTab({ onStatus }: PackageExportTabProps) {
           }
         >
           Обновить список
-        </button>
+        </Button>
       </div>
 
       <WorkspacePackagesTable
@@ -1002,16 +995,17 @@ export function PackageUploadTab({
                       {j.status === "parsing" && (j.detail || "разбор…")}
                       {j.status === "importing" && (j.detail || "загрузка…")}
                       {j.status === "done" && (
-                        <span className="status-badge accepted">
-                          {j.detail?.startsWith("готово к сравнению")
-                            ? j.detail
-                            : j.detail || "Загружено"}
-                        </span>
+                        <StatusBadge
+                          tone="imported"
+                          label={
+                            j.detail?.startsWith("готово к сравнению")
+                              ? j.detail
+                              : j.detail || "Загружено"
+                          }
+                        />
                       )}
                       {j.status === "error" && (
-                        <span style={{ color: "var(--danger, #b91c1c)" }}>
-                          {j.detail || "ошибка"}
-                        </span>
+                        <StatusBadge tone="error" label={j.detail || "ошибка"} />
                       )}
                     </td>
                   </tr>
@@ -1039,13 +1033,9 @@ export function PackageUploadTab({
           showUploadMarkFilter
         />
 
-        <div
-          className="toolbar-actions"
-          style={{ marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
-        >
-          <button
-            type="button"
-            className="btn btn-secondary"
+        <div className="toolbar-actions section-actions">
+          <Button
+            variant="secondary"
             disabled={list.workspaceLoading || busy}
             onClick={() =>
               void list.reloadWorkspace().catch((e) => {
@@ -1056,7 +1046,7 @@ export function PackageUploadTab({
             }
           >
             Обновить список
-          </button>
+          </Button>
         </div>
 
         <WorkspacePackagesTable
@@ -1076,13 +1066,9 @@ export function PackageUploadTab({
               период {pendingTarget.eid}
             </span>
           </h2>
-          <div
-            className="toolbar-actions"
-            style={{ marginBottom: "0.5rem", flexWrap: "wrap", gap: "0.5rem" }}
-          >
-            <button
-              type="button"
-              className="btn btn-secondary"
+          <div className="toolbar-actions section-actions">
+            <Button
+              variant="secondary"
               onClick={() =>
                 setSelectedImportIds(
                   new Set(
@@ -1098,10 +1084,9 @@ export function PackageUploadTab({
               }
             >
               Новые и изменённые
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() =>
                 setSelectedImportIds(
                   new Set(
@@ -1113,33 +1098,25 @@ export function PackageUploadTab({
               }
             >
               Все из файла
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setSelectedImportIds(new Set())}
-            >
+            </Button>
+            <Button variant="secondary" onClick={() => setSelectedImportIds(new Set())}>
               Снять все
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
+            </Button>
+            <Button
               disabled={busy || selectedImportIds.size === 0}
               onClick={() => void handleAcceptPartial()}
             >
               Принять выбранные ({selectedImportIds.size})
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               disabled={busy}
               onClick={() => void handleAcceptAllPending()}
             >
               Принять весь комплект
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               disabled={busy}
               onClick={() => {
                 setPendingPackage(null);
@@ -1149,13 +1126,13 @@ export function PackageUploadTab({
               }}
             >
               Отмена
-            </button>
+            </Button>
           </div>
           <div className="table-wrap">
-            <table className="form-table" style={{ minWidth: "36rem" }}>
+            <table className="form-table exchange-diff-table">
               <thead>
                 <tr>
-                  <th style={{ width: "2.5rem" }} />
+                  <th className="table-col-check" />
                   <th>Форма</th>
                   <th>Статус</th>
                   <th>В файле</th>
@@ -1288,14 +1265,12 @@ export function PackageUploadTab({
                     </td>
                     <td>
                       {r.ok ? (
-                        <span className="status-badge accepted">
-                          Загружено
-                          <span className="table-sub" style={{ display: "block" }}>
-                            +{r.created ?? 0} / ≈{r.updated ?? 0}
-                          </span>
-                        </span>
+                        <StatusBadge
+                          tone="imported"
+                          label={`Загружено (+${r.created ?? 0} / ≈${r.updated ?? 0})`}
+                        />
                       ) : (
-                        r.error ?? "ошибка"
+                        <StatusBadge tone="error" label={r.error ?? "ошибка"} />
                       )}
                     </td>
                   </tr>

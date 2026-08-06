@@ -18,6 +18,7 @@ import { useAuth } from "../useAuth";
 import { formatPeriod, formStatusLabel } from "../utils";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
+import { Button, PageHeader, StatusBadge } from "../components/ui";
 
 type FormsGroup = {
   key: string;
@@ -531,7 +532,9 @@ export function MyFormsPage() {
           {period.range ? <div className="table-sub">{period.range}</div> : null}
         </td>
         <td>
-          <span className={`status-badge ${status}`}>{formStatusLabel(status)}</span>
+          <span>
+            <StatusBadge status={status} label={formStatusLabel(status)} />
+          </span>
         </td>
         <td>
           <div>{formatDateTime(inst.updatedAt)}</div>
@@ -626,42 +629,58 @@ export function MyFormsPage() {
     <div className="my-forms-page">
       <section className="hero hero-compact">
         <div className="hero-compact-main">
-          <h1>{pageTitle}</h1>
-          {adminView ? (
-            <p>
-              Все экземпляры по организациям и периодам. Контекст — в{" "}
-              <Link to="/package">Комплект</Link>, проверки — в{" "}
-              <Link to="/tools">Обмен и операции</Link>.
-            </p>
-          ) : orgUser ? (
-            <p>
-              Формы вашей организации. Полный набор — в{" "}
-              <Link to="/package">Комплект</Link>.
-            </p>
-          ) : (
-            <p>
-              Заполненные формы по периодам. Новую — в{" "}
-              <Link to="/catalog">каталоге</Link> или{" "}
-              <Link to="/package">Комплект</Link>.
-            </p>
-          )}
+          <PageHeader
+            title={pageTitle}
+            description={
+              adminView ? (
+                <>
+                  Все экземпляры по организациям и периодам. Контекст — в{" "}
+                  <Link to="/package">Комплект</Link>, проверки — в{" "}
+                  <Link to="/tools">Обмен и операции</Link>.
+                </>
+              ) : orgUser ? (
+                <>
+                  Формы вашей организации. Полный набор — в{" "}
+                  <Link to="/package">Комплект</Link>.
+                </>
+              ) : (
+                <>
+                  Заполненные формы по периодам. Новую — в{" "}
+                  <Link to="/catalog">каталоге</Link> или{" "}
+                  <Link to="/package">Комплект</Link>.
+                </>
+              )
+            }
+          />
         </div>
         <div className="stats">
           <span className="stat">
-            {loading
-              ? "…"
-              : filterEid !== "" || adminView
-                ? `${filtered.length} из ${instances.length} форм`
-                : `${instances.length} сохранённых форм`}
+            <strong>
+              {loading
+                ? "…"
+                : filterEid !== "" || adminView
+                  ? `${filtered.length}`
+                  : `${instances.length}`}
+            </strong>
+            <span>
+              {loading
+                ? "загрузка"
+                : filterEid !== "" || adminView
+                  ? `из ${instances.length} форм`
+                  : "сохранённых форм"}
+            </span>
           </span>
           {(adminView || orgUser) && selectedOrg && (
             <span className="stat">
-              {selectedOrg.name}
-              {selectedPeriod ? ` · ${selectedPeriod.name}` : ""}
+              <strong>{selectedOrg.name}</strong>
+              <span>{selectedPeriod ? selectedPeriod.name : "организация"}</span>
             </span>
           )}
           {!adminView && !orgUser && selectedPeriod && (
-            <span className="stat">{selectedPeriod.name}</span>
+            <span className="stat">
+              <strong>{selectedPeriod.name}</strong>
+              <span>период</span>
+            </span>
           )}
         </div>
       </section>
@@ -752,16 +771,15 @@ export function MyFormsPage() {
           </label>
         </CollapsibleFilters>
         <div className="checks-filters-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => {
               const input = document.getElementById("import-instance") as HTMLInputElement;
               input?.click();
             }}
           >
             Импорт комплекта
-          </button>
+          </Button>
           <input
             id="import-instance"
             type="file"
@@ -771,30 +789,19 @@ export function MyFormsPage() {
           />
           {selectedCount > 0 && (
             <>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={selectionBusy}
-                onClick={handleSubmitSelected}
-              >
+              <Button disabled={selectionBusy} onClick={handleSubmitSelected}>
                 {submitting ? "Сдача…" : `Сдать выбранные (${selectedCount})`}
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger-outline"
+              </Button>
+              <Button
+                variant="danger-outline"
                 disabled={selectionBusy}
                 onClick={handleDeleteSelected}
               >
                 {deleting ? "Удаление…" : `Удалить выбранные (${selectedCount})`}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={selectionBusy}
-                onClick={clearSelection}
-              >
+              </Button>
+              <Button variant="secondary" disabled={selectionBusy} onClick={clearSelection}>
                 Снять выбор
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -848,36 +855,32 @@ export function MyFormsPage() {
             )}
             {groupRows && groups && groups.length > 0 && (
               <div className="my-forms-expand-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setExpandedGroups(new Set(groups.map((g) => g.key)))}
                 >
                   Развернуть все
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setExpandedGroups(new Set())}
-                >
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setExpandedGroups(new Set())}>
                   Свернуть все
-                </button>
+                </Button>
               </div>
             )}
           </div>
 
           <div className="table-wrap my-forms-table-wrap">
-            <table className="form-table my-forms-table" style={{ minWidth: "56rem" }}>
+            <table className="form-table my-forms-table">
               <thead>
                 <tr>
-                  <th style={{ width: "2.5rem" }} />
+                  <th className="table-col-check" />
                   <th>Форма</th>
                   <th>Шаблон</th>
                   {showOrgColumn && <th>Организация</th>}
                   <th>Период</th>
                   <th>Статус</th>
                   <th>Изменено</th>
-                  <th style={{ width: "11rem" }} />
+                  <th className="table-col-actions" />
                 </tr>
               </thead>
               <tbody>
