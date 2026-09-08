@@ -570,8 +570,10 @@ CREATE TABLE IF NOT EXISTS support_report_presets (
     name_ru TEXT NOT NULL,
     name_en TEXT,
     description TEXT,
-    query_kind TEXT NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1
+    query_kind TEXT NOT NULL DEFAULT 'package_summary',
+    params_json TEXT NOT NULL DEFAULT '{}',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS background_jobs (

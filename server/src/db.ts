@@ -47,7 +47,7 @@ import { migrateSpreadsheetTables, seedRecalcRulesFromJson } from "./spreadsheet
 import { runNumberedMigrations } from "./migrations/runner.js";
 import { startBackgroundJobWorker } from "./jobs.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
-import { DATA_DIR, DB_PATH, ROOT } from "./paths.js";
+import { DATA_DIR, ROOT } from "./paths.js";
 import { refreshUserAccountsCache } from "./auth.js";
 
 const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
@@ -145,4 +145,4 @@ export async function bootstrapDatabase(): Promise<OkoDb> {
   return database;
 }
 
-export { getDb, DB_PATH, ROOT, DATA_DIR };
+export { getDb, ROOT, DATA_DIR };

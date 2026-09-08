@@ -9,10 +9,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "selftest": "for f in src/*.selftest.ts; do npx --yes tsx \"$f\" || exit 1; done"
+    "selftest": "for f in src/*.selftest.ts; do tsx \"$f\" || exit 1; done"
   },
   "files": [
     "src",
     "fixtures"
-  ]
+  ],
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "~5.8.3"
+  }
 }

@@ -53,7 +53,6 @@
 | `checkEngine.ts` | Проверка увязок |
 | `recalcEngine.ts` | Пересчёт итогов |
 | `saldoEngine.ts` | Перенос сальдо |
-| `aggregateEngine.ts` | Агрегация экземпляров |
 | `rashEngine.ts` | Проверка расшифровок |
 | `exportExcel.ts` | Выгрузка Excel |
 | `packageExport.ts` | Экспорт комплекта JSON |

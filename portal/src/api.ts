@@ -656,17 +656,6 @@ export async function fetchEvalSnapshot(): Promise<EvalSnapshot | null> {
   return null;
 }
 
-export async function fetchInstanceStorageStats() {
-  const res = await apiFetchRaw("/api/instances/stats");
-  if (!res.ok) throw new Error("API unavailable");
-  return res.json() as Promise<{
-    instances: number;
-    cells: number;
-    legacyPayloads: number;
-    pendingMigration: number;
-  }>;
-}
-
 export interface AuditLogItem {
   id: number;
   action: string;
@@ -787,26 +776,6 @@ export async function fetchRashRule(kod: number): Promise<RashRuleBundle> {
   return res.json();
 }
 
-export async function saveRashRule(rule: RashRule) {
-  const res = await apiFetchRaw(`/api/rash/${rule.kod}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(rule),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<RashRule>;
-}
-
-export async function createRashRule(rule: RashRule) {
-  const res = await apiFetchRaw("/api/rash", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(rule),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<RashRule>;
-}
-
 export async function deleteRashRule(kod: number) {
   const res = await apiFetchRaw(`/api/rash/${kod}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
@@ -816,16 +785,6 @@ export async function reimportRashFromJson() {
   const res = await apiFetchRaw("/api/rash/reimport", { method: "POST" });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<{ reimported: number }>;
-}
-
-export async function saveRashAddsum(kod: number, items: RashAddsum[]) {
-  const res = await apiFetchRaw(`/api/rash/${kod}/addsum`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(items),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<RashAddsum[]>;
 }
 
 export interface RashPlacement {
@@ -844,19 +803,6 @@ export async function fetchRashPlacements(kod: number) {
 export async function fetchRashPlacementsByForm(formId: string) {
   const sp = new URLSearchParams({ formId });
   const res = await apiFetchRaw(`/api/rash/placements/by-form?${sp}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<RashPlacement[]>;
-}
-
-export async function saveRashPlacements(
-  kod: number,
-  items: Array<Omit<RashPlacement, "kod"> & { kod?: number }>
-) {
-  const res = await apiFetchRaw(`/api/rash/${kod}/placements`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(items),
-  });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<RashPlacement[]>;
 }

@@ -26,7 +26,7 @@ describe("refsOverlay", () => {
     expect(next.byName.a_Description).toEqual(base.byName.a_Description);
   });
 
-  it("lists used directories with Контрагент first", () => {
+  it("lists used directories with Организации then Контрагент pinned first", () => {
     const dirs = listRefDirectories(
       [
         {
@@ -38,7 +38,11 @@ describe("refsOverlay", () => {
       ],
       base
     );
-    expect(dirs[0]?.kind).toBe("Контрагент");
+    // Pin order: Организации before Контрагент, then used classifiers.
+    expect(dirs[0]?.kind).toBe("Организации");
+    expect(dirs[0]?.isOrg).toBe(true);
+    expect(dirs[1]?.kind).toBe("Контрагент");
+    expect(dirs[1]?.isKontr).toBe(true);
     const country = dirs.find((d) => d.kind === "Страна");
     expect(country?.ruleCount).toBe(1);
     expect(country?.itemCount).toBe(2);

@@ -5,6 +5,8 @@ on:
     paths:
       - "desktop/tauri/**"
       - "packages/engine/**"
+      - "packages/spreadsheet/**"
+      - "portal/src/**"
       - "portal/public/**"
       - "scripts/tauri-collab-smoke.py"
       - "scripts/acceptance-desktop.sh"
@@ -14,6 +16,8 @@ on:
     paths:
       - "desktop/tauri/**"
       - "packages/engine/**"
+      - "packages/spreadsheet/**"
+      - "portal/src/**"
       - "portal/public/**"
       - "scripts/**"
       - ".github/workflows/tauri-ci.yml"

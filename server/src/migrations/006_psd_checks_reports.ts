@@ -37,6 +37,16 @@ export const psdChecksReportsMigration: Migration = {
       );
     `);
 
+    // Older schema.postgresql.sql created this table without params_json/created_at.
+    await db.exec(`
+      ALTER TABLE support_report_presets
+        ADD COLUMN IF NOT EXISTS params_json TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE support_report_presets
+        ADD COLUMN IF NOT EXISTS created_at TEXT NOT NULL DEFAULT '';
+      ALTER TABLE support_report_presets
+        ALTER COLUMN query_kind SET DEFAULT 'package_summary';
+    `);
+
     const now = new Date().toISOString();
     await db
       .prepare(

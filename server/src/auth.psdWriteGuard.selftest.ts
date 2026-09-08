@@ -5,8 +5,12 @@
 import assert from "node:assert/strict";
 import type { Request, Response, NextFunction } from "express";
 
-process.env.OKO_ADMIN_TOKEN = process.env.OKO_ADMIN_TOKEN || "admin-test";
-process.env.OKO_USER_TOKEN = process.env.OKO_USER_TOKEN || "user-test";
+if (!process.env.OKO_ADMIN_TOKEN) {
+  process.env.OKO_ADMIN_TOKEN = "placeholder-admin";
+}
+if (!process.env.OKO_USER_TOKEN) {
+  process.env.OKO_USER_TOKEN = "placeholder-user";
+}
 
 const { userWriteGuard } = await import("./auth.js");
 

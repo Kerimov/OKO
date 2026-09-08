@@ -62,10 +62,17 @@ async function main() {
 
   const orgs = await req("GET", "/api/organizations", { token });
   assert(orgs.ok && Array.isArray(orgs.data) && orgs.data.length > 0, "no organizations");
-  const zid = orgs.data[0].zid;
-  const periods = await req("GET", `/api/periods?zid=${zid}`, { token });
-  assert(periods.ok && Array.isArray(periods.data) && periods.data.length > 0, "no periods");
-  const eid = periods.data[0].eid;
+  let zid = null;
+  let eid = null;
+  for (const org of orgs.data) {
+    const periods = await req("GET", `/api/periods?zid=${org.zid}`, { token });
+    if (periods.ok && Array.isArray(periods.data) && periods.data.length > 0) {
+      zid = org.zid;
+      eid = periods.data[0].eid;
+      break;
+    }
+  }
+  assert(zid != null && eid != null, "no periods");
   console.log(`✓ org/period zid=${zid} eid=${eid}`);
 
   const created = await req("POST", "/api/packages/create", {
@@ -79,6 +86,19 @@ async function main() {
   console.log(
     `✓ package create (created=${created.data?.created ?? "?"}, skipped=${created.data?.skipped ?? "?"})`
   );
+
+  const ensured = await req("POST", "/api/business-processes/ensure", {
+    token,
+    body: { zid, eid },
+  });
+  assert(ensured.ok && ensured.data?.id, `BP ensure failed: ${JSON.stringify(ensured.data)}`);
+  const bpId = ensured.data.id;
+  const started = await req("POST", `/api/business-processes/${encodeURIComponent(bpId)}/transition`, {
+    token,
+    body: { action: "start", note: "api-journey" },
+  });
+  assert(started.ok, `BP start failed: ${started.status} ${JSON.stringify(started.data)}`);
+  console.log(`✓ BP start → ${started.data?.status ?? "collecting"}`);
 
   const list = await req("GET", `/api/instances?zid=${zid}&eid=${eid}`, { token });
   assert(list.ok && Array.isArray(list.data) && list.data.length > 0, "no instances");
@@ -110,15 +130,19 @@ async function main() {
     `✓ run-checks (status=${checks.status}, failed=${checks.data?.failed ?? checks.data?.result?.failed ?? "n/a"})`
   );
 
-  const workflow = await req("POST", "/api/packages/workflow", {
-    token,
-    body: { zid, eid, status: "submitted", comment: "api-journey" },
-  });
+  const workflow = await req(
+    "POST",
+    `/api/business-processes/${encodeURIComponent(bpId)}/transition`,
+    {
+      token,
+      body: { action: "submit_for_approval", note: "api-journey" },
+    }
+  );
   assert(
     workflow.ok,
     `workflow failed: ${workflow.status} ${JSON.stringify(workflow.data)}`
   );
-  console.log(`✓ workflow → ${workflow.data?.status ?? "submitted"}`);
+  console.log(`✓ workflow → ${workflow.data?.status ?? "pending_curator_approval"}`);
 
   const logout = await req("POST", "/api/auth/logout", { token });
   assert(logout.ok, "logout failed");

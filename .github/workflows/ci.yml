@@ -7,6 +7,7 @@ on:
       - "server/**"
       - "server-nest/**"
       - "packages/engine/**"
+      - "packages/spreadsheet/**"
       - "desktop/tauri/**"
       - "deploy/**"
       - "data/**"
@@ -18,6 +19,7 @@ on:
       - "server/**"
       - "server-nest/**"
       - "packages/engine/**"
+      - "packages/spreadsheet/**"
       - "desktop/tauri/**"
       - "deploy/**"
       - "data/**"
@@ -71,6 +73,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/engine/package-lock.json
+      - run: npm ci
+      - run: npm run selftest
+
+  spreadsheet-selftests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/spreadsheet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/spreadsheet/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
       - run: npm run selftest
 
   tauri-security:
@@ -159,10 +180,10 @@ jobs:
           cache-dependency-path: |
             server/package-lock.json
             server-nest/package-lock.json
-            packages/engine/package.json
+            packages/engine/package-lock.json
       - name: Install dependencies
         run: |
-          cd packages/engine && npm install --ignore-scripts 2>/dev/null || true
+          cd packages/engine && npm ci
           cd ../../server && npm ci
           cd ../server-nest && npm ci
       - name: Migration dry-run
