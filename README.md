@@ -26,13 +26,13 @@
 Требуется **Node.js 22+**.
 
 ```bash
-# Postgres + API (NestJS) + портал
-cp .env.example .env
-docker compose up -d postgres
-./dev.sh
+./start.sh
 ```
 
-Откройте http://localhost:5173. Swagger: http://localhost:3001/api/docs.
+Скрипт сам создаст `.env` (если нет), поднимет Postgres в Docker, API и портал, откроет браузер.  
+Остановка: `Ctrl+C` или `./start.sh --stop`. Фон: `./start.sh --detach`.
+
+Портал: http://localhost:5173 · Swagger: http://localhost:3001/api/docs.
 
 Подробнее: [**archive/docs/DEVELOPMENT.md**](archive/docs/DEVELOPMENT.md).
 
