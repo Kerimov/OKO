@@ -289,22 +289,11 @@ export class CreateUserDto {
   role?: "admin" | "org";
 
   @ApiPropertyOptional({
-    enum: [
-      "business_process_manager",
-      "department_curator",
-      "subsidiary_specialist",
-      "support_specialist",
-      "auditor_readonly",
-    ],
+    description: "Role code from /api/roles (system or custom)",
   })
   @IsOptional()
   @IsString()
-  psdRole?:
-    | "business_process_manager"
-    | "department_curator"
-    | "subsidiary_specialist"
-    | "support_specialist"
-    | "auditor_readonly";
+  psdRole?: string;
 
   @ApiPropertyOptional({ enum: ["ru", "en"] })
   @IsOptional()
@@ -333,22 +322,11 @@ export class UpdateUserDto {
   role?: "admin" | "org";
 
   @ApiPropertyOptional({
-    enum: [
-      "business_process_manager",
-      "department_curator",
-      "subsidiary_specialist",
-      "support_specialist",
-      "auditor_readonly",
-    ],
+    description: "Role code from /api/roles (system or custom)",
   })
   @IsOptional()
   @IsString()
-  psdRole?:
-    | "business_process_manager"
-    | "department_curator"
-    | "subsidiary_specialist"
-    | "support_specialist"
-    | "auditor_readonly";
+  psdRole?: string;
 
   @ApiPropertyOptional({ enum: ["ru", "en"] })
   @IsOptional()

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   canMutateData,
+  hasPsdPermission,
   isAuditorReadonly,
-  resolveUiPsdRole,
-  type PsdRole,
 } from "../auth";
 import { PackageFormsFillPanel } from "../components/PackageFormsFillPanel";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
@@ -153,43 +152,43 @@ const BP_ACTIONS: Array<{
   action: BpAction;
   label: string;
   from: BpStatus[];
-  roles: PsdRole[];
+  permission: import("../auth").PortalPsdPermission;
 }> = [
   {
     action: "start",
     label: "Запустить",
     from: ["not_started"],
-    roles: ["business_process_manager", "support_specialist"],
+    permission: "bp.start",
   },
   {
     action: "submit_for_approval",
     label: "На согласование",
     from: ["collecting"],
-    roles: ["subsidiary_specialist", "support_specialist"],
+    permission: "bp.submit_for_approval",
   },
   {
     action: "curator_approve",
     label: "Согласовать",
     from: ["pending_curator_approval"],
-    roles: ["department_curator", "support_specialist"],
+    permission: "bp.curator_approve",
   },
   {
     action: "curator_return",
     label: "Вернуть",
     from: ["pending_curator_approval"],
-    roles: ["department_curator", "support_specialist"],
+    permission: "bp.curator_return",
   },
   {
     action: "complete",
     label: "Завершить",
     from: ["curator_approved"],
-    roles: ["business_process_manager", "support_specialist"],
+    permission: "bp.complete",
   },
   {
     action: "reopen",
     label: "Открыть снова",
     from: ["completed"],
-    roles: ["business_process_manager", "support_specialist"],
+    permission: "bp.reopen",
   },
 ];
 
@@ -202,7 +201,6 @@ export function PackagePage() {
   const admin = !auth.authRequired || auth.role === "admin";
   const canMutate = canMutateData();
   const auditorRo = isAuditorReadonly();
-  const psdRole = resolveUiPsdRole(auth.user);
   const orgZid = auth.user?.role === "org" ? auth.user.zid ?? null : null;
   const formsLinkLabel = formsListNavLabel(auth);
   const backend = isBackendMode();
@@ -426,10 +424,7 @@ export function PackagePage() {
   const canBulkSelect = !auditorRo;
   const canBulkDelete = canMutate && !auditorRo && (admin || orgZid != null);
   const canBulkStartCollection =
-    backend &&
-    canMutate &&
-    !auditorRo &&
-    (psdRole === "business_process_manager" || psdRole === "support_specialist");
+    backend && canMutate && !auditorRo && hasPsdPermission("bp.start");
   const canBulkRunChecks = backend && canMutate && !auditorRo;
 
   const syncUrl = useCallback(
@@ -696,9 +691,9 @@ export function PackagePage() {
   const bpActions = useMemo(() => {
     if (!bp) return [];
     return BP_ACTIONS.filter(
-      (a) => a.from.includes(bp.status) && a.roles.includes(psdRole)
+      (a) => a.from.includes(bp.status) && hasPsdPermission(a.permission)
     );
-  }, [bp, psdRole]);
+  }, [bp, auth.user?.permissions, auth.role]);
 
   const checkExplanationsLink =
     typeof zid === "number" && typeof eid === "number"

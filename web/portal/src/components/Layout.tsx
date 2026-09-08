@@ -122,6 +122,11 @@ export function Layout() {
   const auth = useAuth();
   const { pathname } = useLocation();
   const techNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("tech.configure"));
+  const rolesNav =
+    isBackendMode() &&
+    (!auth.authRequired ||
+      hasPsdPermission("roles.manage") ||
+      hasPsdPermission("tech.configure"));
   const nsiNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("nsi.read"));
   const reportsNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("reports.build"));
   const auditNav = isBackendMode() && (!auth.authRequired || hasPsdPermission("audit.read_only") || hasPsdPermission("tech.configure"));
@@ -283,16 +288,23 @@ export function Layout() {
       });
     }
 
-    if (nsiNav || techNav || reportsNav || auditNav) {
+    if (nsiNav || techNav || rolesNav || reportsNav || auditNav) {
       const adminItems: NavItem[] = [];
-      if (techNav) {
+      if (techNav || rolesNav) {
         adminItems.push(
           {
             to: "/admin/users",
             label: "Пользователи",
-            description: "Роли и доступ",
+            description: "Учётные записи",
             icon: "users",
             isActive: (p) => p === "/admin/users",
+          },
+          {
+            to: "/admin/roles",
+            label: "Роли",
+            description: "Права доступа",
+            icon: "users",
+            isActive: (p) => p === "/admin/roles",
           }
         );
       }

@@ -490,6 +490,22 @@ ALTER TABLE periods ADD COLUMN IF NOT EXISTS package_id TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS psd_role TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT 'ru';
 
+CREATE TABLE IF NOT EXISTS roles (
+    code TEXT PRIMARY KEY,
+    name_ru TEXT NOT NULL,
+    name_en TEXT,
+    system INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_code TEXT NOT NULL REFERENCES roles(code) ON DELETE CASCADE,
+    permission TEXT NOT NULL,
+    PRIMARY KEY (role_code, permission)
+);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_perm ON role_permissions(permission);
+
 ALTER TABLE kontragents ADD COLUMN IF NOT EXISTS guid TEXT;
 ALTER TABLE kontragents ADD COLUMN IF NOT EXISTS archived INTEGER NOT NULL DEFAULT 0;
 

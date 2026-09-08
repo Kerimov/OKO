@@ -12,6 +12,7 @@ import {
   resolvePsdRole,
   type PsdPermission,
 } from "../../../domain/src/psdRoles.js";
+import { allPermissionsSet } from "../../../domain/src/rbac.js";
 import type { OkoRequest } from "./decorators/oko-request.decorator.js";
 
 export const PSD_PERMISSIONS_KEY = "psd_permissions";
@@ -22,8 +23,6 @@ export const RequirePsdPermissions = (...permissions: PsdPermission[]) =>
 
 @Injectable()
 export class PsdPermissionGuard implements CanActivate {
-  // Avoid constructor DI for Reflector: Nest sometimes instantiates
-  // `@UseGuards(PsdPermissionGuard)` without injecting deps → 500.
   private readonly reflector = new Reflector();
 
   canActivate(context: ExecutionContext): boolean {
@@ -35,8 +34,14 @@ export class PsdPermissionGuard implements CanActivate {
     if (!isAuthEnabled()) return true;
 
     const req = context.switchToHttp().getRequest<OkoRequest>();
+    const legacyRole = req.apiUser?.role ?? (req.apiRole === "admin" ? "admin" : "org");
+    // Platform admin has full catalog
+    if (legacyRole === "admin" || req.apiRole === "admin") {
+      const full = allPermissionsSet();
+      if (required.some((p) => full.has(p))) return true;
+    }
     const role = resolvePsdRole({
-      legacyRole: req.apiUser?.role ?? (req.apiRole === "admin" ? "admin" : "org"),
+      legacyRole,
       psdRole: req.apiUser?.psdRole,
     });
     const ok = required.some((p) => hasPermission(role, p));

@@ -46,6 +46,9 @@ const PackagesDashboardPage = lazy(() =>
 const UsersAdminPage = lazy(() =>
   import("./pages/UsersAdminPage").then((m) => ({ default: m.UsersAdminPage }))
 );
+const RolesAdminPage = lazy(() =>
+  import("./pages/RolesAdminPage").then((m) => ({ default: m.RolesAdminPage }))
+);
 const RefsAdminPage = lazy(() =>
   import("./pages/RefsAdminPage").then((m) => ({ default: m.RefsAdminPage }))
 );
@@ -127,6 +130,7 @@ export default function App() {
             />
             <Route path="admin/audit" element={<Lazy><AuditLogPage /></Lazy>} />
             <Route path="admin/users" element={<Lazy><UsersAdminPage /></Lazy>} />
+            <Route path="admin/roles" element={<Lazy><RolesAdminPage /></Lazy>} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="instructions" element={<InstructionsPage />} />
           </Route>

@@ -2,12 +2,28 @@ import { apiFetch, clearApiToken, getApiToken, setApiToken } from "./apiClient";
 
 export type ApiRole = "admin" | "user";
 export type UserAccountRole = "admin" | "org";
-export type PsdRole =
-  | "business_process_manager"
-  | "department_curator"
-  | "subsidiary_specialist"
-  | "support_specialist"
-  | "auditor_readonly";
+/** System or custom role code from /api/roles. */
+export type PsdRole = string;
+
+export type PortalPsdPermission =
+  | "bp.view"
+  | "bp.start"
+  | "bp.assign_curator"
+  | "bp.submit_for_approval"
+  | "bp.curator_approve"
+  | "bp.curator_return"
+  | "bp.complete"
+  | "bp.reopen"
+  | "forms.read"
+  | "forms.write"
+  | "nsi.read"
+  | "nsi.write"
+  | "approval.explain"
+  | "tech.configure"
+  | "reports.build"
+  | "audit.read_only"
+  | "roles.manage"
+  | "users.manage";
 
 export interface UserProfile {
   id: number;
@@ -15,9 +31,12 @@ export interface UserProfile {
   displayName: string | null;
   role: UserAccountRole;
   psdRole?: PsdRole;
+  roleCode?: string;
+  roleLabel?: string;
   locale?: "ru" | "en";
   zid: number | null;
   organizationName: string | null;
+  permissions?: PortalPsdPermission[];
 }
 
 export interface UserDto extends UserProfile {
@@ -107,103 +126,52 @@ export function isOrgUser(): boolean {
   return currentUser?.role === "org";
 }
 
-export function isAuditorReadonly(): boolean {
-  return currentUser?.psdRole === "auditor_readonly";
-}
-
-export function canMutateData(): boolean {
-  if (!authRequired) return true;
-  return !isAuditorReadonly();
-}
-
-export type PortalPsdPermission =
-  | "bp.view"
-  | "bp.start"
-  | "bp.assign_curator"
-  | "bp.submit_for_approval"
-  | "bp.curator_approve"
-  | "bp.curator_return"
-  | "bp.complete"
-  | "bp.reopen"
-  | "forms.read"
-  | "forms.write"
-  | "nsi.read"
-  | "nsi.write"
-  | "approval.explain"
-  | "tech.configure"
-  | "reports.build"
-  | "audit.read_only";
-
-const ROLE_PERMS: Record<PsdRole, readonly PortalPsdPermission[]> = {
-  business_process_manager: [
-    "bp.view",
-    "bp.start",
-    "bp.assign_curator",
-    "bp.complete",
-    "bp.reopen",
-    "forms.read",
-    "nsi.read",
-    "tech.configure",
-    "reports.build",
-  ],
-  department_curator: [
-    "bp.view",
-    "bp.curator_approve",
-    "bp.curator_return",
-    "forms.read",
-    "nsi.read",
-    "approval.explain",
-  ],
-  subsidiary_specialist: [
-    "bp.view",
-    "bp.submit_for_approval",
-    "forms.read",
-    "forms.write",
-    "nsi.read",
-    "nsi.write",
-    "approval.explain",
-  ],
-  support_specialist: [
-    "bp.view",
-    "bp.start",
-    "bp.assign_curator",
-    "bp.submit_for_approval",
-    "bp.curator_approve",
-    "bp.curator_return",
-    "bp.complete",
-    "bp.reopen",
-    "forms.read",
-    "forms.write",
-    "nsi.read",
-    "nsi.write",
-    "approval.explain",
-    "tech.configure",
-    "reports.build",
-  ],
-  auditor_readonly: ["bp.view", "forms.read", "nsi.read", "audit.read_only"],
-};
-
 export function resolveUiPsdRole(user: UserProfile | null | undefined): PsdRole {
   if (user?.psdRole) return user.psdRole;
+  if (user?.roleCode) return user.roleCode;
   if (user?.role === "admin") return "support_specialist";
   return "subsidiary_specialist";
 }
 
-export function hasPsdPermission(permission: PortalPsdPermission): boolean {
-  if (!authRequired) return true;
-  const role = resolveUiPsdRole(currentUser);
-  return ROLE_PERMS[role].includes(permission);
+function currentPermissions(): PortalPsdPermission[] | null {
+  if (!authRequired) return null; // all allowed
+  if (currentRole === "admin" && !currentUser) return null; // legacy admin token
+  return currentUser?.permissions ?? [];
 }
 
+export function hasPsdPermission(permission: PortalPsdPermission): boolean {
+  const perms = currentPermissions();
+  if (perms == null) return true;
+  return perms.includes(permission);
+}
+
+export function canMutateData(): boolean {
+  if (!authRequired) return true;
+  return hasPsdPermission("forms.write");
+}
+
+export function isAuditorReadonly(): boolean {
+  if (!authRequired) return false;
+  if (hasPsdPermission("forms.write")) return false;
+  return (
+    resolveUiPsdRole(currentUser) === "auditor_readonly" ||
+    hasPsdPermission("audit.read_only")
+  );
+}
+
+const FALLBACK_ROLE_LABELS: Record<string, string> = {
+  business_process_manager: "Руководитель БП",
+  department_curator: "Куратор",
+  subsidiary_specialist: "Специалист ДО",
+  support_specialist: "Сопровождение",
+  auditor_readonly: "Аудитор",
+};
+
 export function psdRoleLabelRu(role: PsdRole): string {
-  const labels: Record<PsdRole, string> = {
-    business_process_manager: "Руководитель БП",
-    department_curator: "Куратор",
-    subsidiary_specialist: "Специалист ДО",
-    support_specialist: "Сопровождение",
-    auditor_readonly: "Аудитор",
-  };
-  return labels[role];
+  if (currentUser?.roleLabel && resolveUiPsdRole(currentUser) === role) {
+    return currentUser.roleLabel;
+  }
+  return FALLBACK_ROLE_LABELS[role] ?? role;
 }
 
 export async function initAuth(): Promise<void> {

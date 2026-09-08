@@ -49,6 +49,7 @@ import { startBackgroundJobWorker } from "./jobs.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
 import { DATA_DIR, ROOT } from "./paths.js";
 import { refreshUserAccountsCache } from "./auth.js";
+import { loadRolePermissionCache } from "./rbac.js";
 
 const KONTR_PATH = path.join(ROOT, "web", "portal", "public", "data", "kontr.json");
 
@@ -70,6 +71,7 @@ async function initSchema(database: OkoDb): Promise<void> {
   await migrateMethodologyHistory(database);
   await migrateSpreadsheetTables(database);
   await runNumberedMigrations(database);
+  await loadRolePermissionCache(database);
 
   const seededRecalc = await seedRecalcRulesFromJson(database);
   if (seededRecalc > 0) {

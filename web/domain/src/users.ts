@@ -4,7 +4,9 @@ import {
   legacyToPsdRole,
   resolvePsdRole,
   type PsdRole,
+  type RoleCode,
 } from "./psdRoles.js";
+import { assertRoleExists } from "./rbac.js";
 
 export type UserRole = "admin" | "org";
 
@@ -27,7 +29,7 @@ export interface UserDto {
   username: string;
   displayName: string | null;
   role: UserRole;
-  psdRole: PsdRole;
+  psdRole: RoleCode;
   locale: string;
   zid: number | null;
   organizationName?: string | null;
@@ -41,7 +43,7 @@ export interface SessionUser {
   username: string;
   displayName: string | null;
   role: UserRole;
-  psdRole: PsdRole;
+  psdRole: RoleCode;
   locale: string;
   zid: number | null;
 }
@@ -188,6 +190,7 @@ export async function createUser(
 
   const now = new Date().toISOString();
   const psdRole = input.psdRole ?? legacyToPsdRole(input.role);
+  await assertRoleExists(db, psdRole);
   const locale = input.locale === "en" ? "en" : "ru";
   const inserted = (await db
     .prepare(
@@ -247,6 +250,7 @@ export async function updateUser(
     values.push(patch.role);
   }
   if (patch.psdRole !== undefined) {
+    await assertRoleExists(db, patch.psdRole);
     fields.push("psd_role = ?");
     values.push(patch.psdRole);
   }

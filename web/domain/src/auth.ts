@@ -10,6 +10,13 @@ import {
   verifyPassword,
   type SessionUser,
 } from "./users.js";
+import { allPermissionsSet, permissionsForRoleCode } from "./rbac.js";
+import type { PsdPermission } from "./psdRoles.js";
+
+function sessionPermissions(legacyRole: string, psdRole: string): PsdPermission[] {
+  if (legacyRole === "admin") return [...allPermissionsSet()];
+  return [...permissionsForRoleCode(psdRole)];
+}
 
 export type ApiRole = "admin" | "user";
 
@@ -320,17 +327,22 @@ export async function buildAuthMePayload(req: Request): Promise<AuthMePayload> {
   let user: Record<string, unknown> | null = null;
   if (req.apiUser) {
     const { getUserById } = await import("./users.js");
+    const { getRole } = await import("./rbac.js");
     const dto = await getUserById(await getDb(), req.apiUser.id);
     if (dto) {
+      const roleMeta = await getRole(await getDb(), dto.psdRole);
       user = {
         id: dto.id,
         username: dto.username,
         displayName: dto.displayName,
         role: dto.role,
         psdRole: dto.psdRole,
+        roleCode: dto.psdRole,
+        roleLabel: roleMeta?.nameRu ?? dto.psdRole,
         locale: dto.locale,
         zid: dto.zid,
         organizationName: dto.organizationName ?? null,
+        permissions: sessionPermissions(dto.role, dto.psdRole),
       };
     }
   }
@@ -350,9 +362,11 @@ export interface LoginResult {
     displayName: string | null;
     role: string;
     psdRole?: string;
+    roleCode?: string;
     locale?: string;
     zid: number | null;
     organizationName: string | null;
+    permissions?: string[];
   };
 }
 
@@ -390,9 +404,11 @@ export async function loginWithCredentials(
       displayName: sessionUser.displayName,
       role: sessionUser.role,
       psdRole: sessionUser.psdRole,
+      roleCode: sessionUser.psdRole,
       locale: sessionUser.locale,
       zid: sessionUser.zid,
       organizationName: org?.name ?? null,
+      permissions: sessionPermissions(sessionUser.role, sessionUser.psdRole),
     },
   };
 }

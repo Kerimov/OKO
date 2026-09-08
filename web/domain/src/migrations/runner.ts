@@ -12,6 +12,7 @@ import { psdImportTransferSvodMigration } from "./010_psd_import_transfer_svod.j
 import { backgroundJobsMigration } from "./011_background_jobs.js";
 import { checkRuleFormsMigration } from "./012_check_rule_forms.js";
 import { scaleIndexesMigration } from "./013_scale_indexes.js";
+import { rbacRolesMigration } from "./014_rbac_roles.js";
 import type { Migration } from "./types.js";
 
 export const NUMBERED_MIGRATIONS: Migration[] = [
@@ -28,6 +29,7 @@ export const NUMBERED_MIGRATIONS: Migration[] = [
   backgroundJobsMigration,
   checkRuleFormsMigration,
   scaleIndexesMigration,
+  rbacRolesMigration,
 ];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {

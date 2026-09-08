@@ -1,20 +1,14 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../apiClient";
-import { psdRoleLabelRu, type PsdRole, type UserDto } from "../auth";
+import { type UserDto } from "../auth";
 import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
 import { roleLabel } from "../uiLabels";
 import { useAuth } from "../useAuth";
 
-const PSD_ROLES: Array<{ value: PsdRole; label: string }> = [
-  { value: "business_process_manager", label: "Руководитель БП" },
-  { value: "department_curator", label: "Куратор" },
-  { value: "subsidiary_specialist", label: "Специалист ДО" },
-  { value: "support_specialist", label: "Сопровождение" },
-  { value: "auditor_readonly", label: "Аудитор (чтение)" },
-];
+type RoleOption = { code: string; nameRu: string; active: boolean };
 
 export function UsersAdminPage() {
   const backend = isBackendMode();
@@ -22,6 +16,7 @@ export function UsersAdminPage() {
   const admin = !auth.authRequired || auth.role === "admin";
   const [users, setUsers] = useState<UserDto[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
@@ -31,7 +26,7 @@ export function UsersAdminPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<"admin" | "org">("org");
-  const [psdRole, setPsdRole] = useState<PsdRole>("subsidiary_specialist");
+  const [psdRole, setPsdRole] = useState("subsidiary_specialist");
   const [locale, setLocale] = useState<"ru" | "en">("ru");
   const [zid, setZid] = useState<number | "">("");
 
@@ -39,7 +34,7 @@ export function UsersAdminPage() {
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editRole, setEditRole] = useState<"admin" | "org">("org");
-  const [editPsdRole, setEditPsdRole] = useState<PsdRole>("subsidiary_specialist");
+  const [editPsdRole, setEditPsdRole] = useState("subsidiary_specialist");
   const [editLocale, setEditLocale] = useState<"ru" | "en">("ru");
   const [editZid, setEditZid] = useState<number | "">("");
   const [editActive, setEditActive] = useState(true);
@@ -49,7 +44,9 @@ export function UsersAdminPage() {
     setEditDisplayName(user.displayName ?? "");
     setEditPassword("");
     setEditRole(user.role);
-    setEditPsdRole(user.psdRole ?? (user.role === "admin" ? "support_specialist" : "subsidiary_specialist"));
+    setEditPsdRole(
+      user.psdRole ?? (user.role === "admin" ? "support_specialist" : "subsidiary_specialist")
+    );
     setEditLocale(user.locale === "en" ? "en" : "ru");
     setEditZid(user.zid ?? "");
     setEditActive(user.active);
@@ -62,12 +59,16 @@ export function UsersAdminPage() {
     setLoading(true);
     setError("");
     try {
-      const [userList, orgList] = await Promise.all([
+      const [userList, orgList, roles] = await Promise.all([
         apiFetch<UserDto[]>("/api/users"),
         listOrganizations(),
+        apiFetch<Array<{ code: string; nameRu: string; active: boolean }>>("/api/roles").catch(
+          () => [] as RoleOption[]
+        ),
       ]);
       setUsers(userList);
       setOrgs(orgList);
+      setRoleOptions(roles.filter((r) => r.active));
       setZid((prev) => (prev === "" && orgList[0] ? orgList[0].zid : prev));
       if (keepSelectedId != null) {
         const updated = userList.find((u) => u.id === keepSelectedId);
@@ -218,11 +219,11 @@ export function UsersAdminPage() {
             </select>
           </label>
           <label>
-            Роль ПСД
-            <select value={psdRole} onChange={(e) => setPsdRole(e.target.value as PsdRole)}>
-              {PSD_ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
+            Роль (процесс)
+            <select value={psdRole} onChange={(e) => setPsdRole(e.target.value)}>
+              {roleOptions.map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.nameRu}
                 </option>
               ))}
             </select>
@@ -297,7 +298,11 @@ export function UsersAdminPage() {
                     <td>{u.username}</td>
                     <td>{u.displayName ?? "—"}</td>
                     <td>{roleLabel(u.role)}</td>
-                    <td>{u.psdRole ? psdRoleLabelRu(u.psdRole) : "—"}</td>
+                    <td>
+                      {u.psdRole
+                        ? roleOptions.find((r) => r.code === u.psdRole)?.nameRu ?? u.psdRole
+                        : "—"}
+                    </td>
                     <td>{u.organizationName ?? (u.role === "admin" ? "—" : "?")}</td>
                     <td>{u.active ? "активен" : "отключён"}</td>
                   </tr>
@@ -344,14 +349,14 @@ export function UsersAdminPage() {
                   </select>
                 </label>
                 <label>
-                  Роль ПСД
+                  Роль (процесс)
                   <select
                     value={editPsdRole}
-                    onChange={(e) => setEditPsdRole(e.target.value as PsdRole)}
+                    onChange={(e) => setEditPsdRole(e.target.value)}
                   >
-                    {PSD_ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
+                    {roleOptions.map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.nameRu}
                       </option>
                     ))}
                   </select>

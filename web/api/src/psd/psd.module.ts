@@ -15,10 +15,12 @@ import {
 } from "./psd-resources.controller.js";
 import { PsdPermissionGuard } from "./psd-permission.guard.js";
 import { RejectReadOnlyGuard } from "../auth/reject-readonly.guard.js";
+import { RolesController } from "./roles.controller.js";
 
 @Module({
   imports: [AuthModule],
   controllers: [
+    RolesController,
     BusinessProcessesController,
     CollectionUnitsController,
     KontrVersionsController,

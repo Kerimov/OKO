@@ -11,6 +11,7 @@ const ADMIN_LABELS: Record<string, string> = {
   aggregation: "Агрегация",
   packages: "Комплекты",
   users: "Пользователи",
+  roles: "Роли",
   audit: "Аудит",
 };
 
@@ -81,7 +82,10 @@ export function breadcrumbsForPath(
     const section = parts[1] ?? "";
     const label = ADMIN_LABELS[section] ?? (section || "Админ");
     const group =
-      section === "packages" || section === "users" || section === "audit"
+      section === "packages" ||
+      section === "users" ||
+      section === "roles" ||
+      section === "audit"
         ? "Администрирование"
         : "Редакторы";
     return [home, { label: group }, { label }];

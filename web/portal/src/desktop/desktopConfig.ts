@@ -26,10 +26,8 @@ export type DesktopKpiId =
 export type DesktopQuickAction = {
   to: string;
   label: string;
-  /** Require this PSD permission when auth is on. */
   permission?: PortalPsdPermission;
   backendOnly?: boolean;
-  /** Hide for auditor_readonly. */
   mutateOnly?: boolean;
 };
 
@@ -39,7 +37,7 @@ export type DesktopRoleConfig = {
   actions: DesktopQuickAction[];
 };
 
-const CONFIG: Record<PsdRole, DesktopRoleConfig> = {
+const CONFIG: Record<string, DesktopRoleConfig> = {
   subsidiary_specialist: {
     kpis: ["drafts", "submitted", "completenessPct"],
     widgets: ["myForms", "packageCompleteness"],
@@ -96,7 +94,8 @@ const CONFIG: Record<PsdRole, DesktopRoleConfig> = {
     widgets: ["packagesSummary", "integrations", "bpQueue"],
     actions: [
       { to: "/package", label: "Комплекты" },
-      { to: "/admin/users", label: "Пользователи", backendOnly: true, permission: "tech.configure" },
+      { to: "/admin/users", label: "Пользователи", backendOnly: true, permission: "users.manage" },
+      { to: "/admin/roles", label: "Роли", backendOnly: true, permission: "roles.manage" },
       {
         to: "/admin/forms",
         label: "Редакторы",
@@ -140,6 +139,31 @@ const CONFIG: Record<PsdRole, DesktopRoleConfig> = {
   },
 };
 
+const GENERIC_CONFIG: DesktopRoleConfig = {
+  kpis: ["packagesCount", "drafts", "submitted", "openBp"],
+  widgets: ["myForms", "packagesSummary", "bpQueue"],
+  actions: [
+    { to: "/my", label: "Мои формы" },
+    { to: "/package", label: "Комплекты" },
+    { to: "/catalog", label: "Каталог" },
+    { to: "/bp", label: "Бизнес-процесс", backendOnly: true, permission: "bp.view" },
+    { to: "/admin/roles", label: "Роли", backendOnly: true, permission: "roles.manage" },
+    { to: "/admin/users", label: "Пользователи", backendOnly: true, permission: "users.manage" },
+    {
+      to: "/admin/forms",
+      label: "Редакторы",
+      backendOnly: true,
+      permission: "tech.configure",
+    },
+    {
+      to: "/psd-reports",
+      label: "Отчёты",
+      backendOnly: true,
+      permission: "reports.build",
+    },
+  ],
+};
+
 const OFFLINE_CONFIG: DesktopRoleConfig = {
   kpis: ["drafts", "submitted"],
   widgets: ["myForms"],
@@ -152,7 +176,7 @@ const OFFLINE_CONFIG: DesktopRoleConfig = {
 
 export function getDesktopConfig(role: PsdRole): DesktopRoleConfig {
   if (!isBackendMode()) return OFFLINE_CONFIG;
-  return CONFIG[role];
+  return CONFIG[role] ?? GENERIC_CONFIG;
 }
 
 export function filterDesktopActions(
