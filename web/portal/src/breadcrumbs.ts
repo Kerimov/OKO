@@ -8,7 +8,7 @@ const ADMIN_LABELS: Record<string, string> = {
   rash: "Расшифровки",
   refs: "Справочники",
   kontr: "Контрагенты",
-  aggregation: "Агрегация",
+  aggregation: "Правила агрегации",
   packages: "Комплекты",
   users: "Пользователи",
   roles: "Роли",
@@ -39,7 +39,7 @@ export function breadcrumbsForPath(
   }
 
   if (parts[0] === "package") {
-    return [home, { label: "Комплекты" }];
+    return [home, { label: "Кампании и периметр" }];
   }
 
   if (parts[0] === "bp") {
@@ -55,7 +55,7 @@ export function breadcrumbsForPath(
   }
 
   if (parts[0] === "perimeter") {
-    return [home, { label: "Периметр сбора" }];
+    return [home, { label: "Реестр НСИ" }];
   }
 
   if (parts[0] === "psd-reports") {

@@ -453,13 +453,13 @@ export function PackageUploadTab({
 
       <section className="tools-section">
         <h2>
-          Комплекты периода{" "}
+          Комплекты кампании{" "}
           <span className="cat-count">
             загружено {importedCount} · ждут {pendingCount}
           </span>
         </h2>
         <p className="hint-text">
-          Выберите период слева — видно, какие комплекты уже приняты обратно.
+          Выберите кампанию слева — видно, какие комплекты уже приняты обратно.
         </p>
         {list.workspaceError ? (
           <p className="error-box">{list.workspaceError}</p>

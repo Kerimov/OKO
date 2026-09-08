@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "../../components/ui";
-import type { PackageWorkspaceRow } from "../../types";
+import type { Organization, PackageWorkspaceRow } from "../../types";
 import type { VirtualRowsState } from "../../hooks/useVirtualRows";
 import { BP_STATUS_LABEL, packageKindLabel, bpStatusLabel } from "../../uiLabels";
 import { formatPeriod } from "../../utils";
@@ -30,6 +31,9 @@ type Props = {
   checkedKeys: Set<string>;
   checkedRows: PackageWorkspaceRow[];
   checkedDeletableRows: PackageWorkspaceRow[];
+  orgsMissingFromCampaign: Organization[];
+  addOrgSearch: string;
+  addOrgZids: number[];
   packageVirt: VirtualRowsState;
   scrollRef: RefObject<HTMLDivElement | null>;
   onOpenSettings: () => void;
@@ -39,6 +43,9 @@ type Props = {
   onToggleChecked: (key: string, checked: boolean) => void;
   onClearSelection: () => void;
   onSelectAll: () => void;
+  onAddOrgSearchChange: (value: string) => void;
+  onAddOrgZidsChange: (value: number[] | ((prev: number[]) => number[])) => void;
+  onAddOrgsToPeriod: () => void;
   onFillForms: (rows: PackageWorkspaceRow[]) => void;
   onBulkStartCollection: () => void;
   onBulkChecks: () => void;
@@ -70,6 +77,9 @@ export function PackageCampaignPackagesPanel({
   checkedKeys,
   checkedRows,
   checkedDeletableRows,
+  orgsMissingFromCampaign,
+  addOrgSearch,
+  addOrgZids,
   packageVirt,
   scrollRef,
   onOpenSettings,
@@ -79,6 +89,9 @@ export function PackageCampaignPackagesPanel({
   onToggleChecked,
   onClearSelection,
   onSelectAll,
+  onAddOrgSearchChange,
+  onAddOrgZidsChange,
+  onAddOrgsToPeriod,
   onFillForms,
   onBulkStartCollection,
   onBulkChecks,
@@ -91,13 +104,28 @@ export function PackageCampaignPackagesPanel({
   const fillableChecked = checkedRows.filter(
     (r) => r.periodStatus !== "closed" && r.filled < r.total
   );
+  const draftCount = campaignPackages.reduce((sum, r) => sum + r.draft, 0);
+  const submittedCount = campaignPackages.reduce((sum, r) => sum + r.submitted, 0);
+  const notStartedCount = campaignPackages.filter(
+    (r) => (r.bpStatus ?? "not_started") === "not_started"
+  ).length;
+  const collectingCount = campaignPackages.filter(
+    (r) =>
+      r.bpStatus === "collecting" ||
+      r.bpStatus === "pending_curator_approval" ||
+      r.bpStatus === "curator_approved"
+  ).length;
+  const completedCount = campaignPackages.filter((r) => r.bpStatus === "completed").length;
+  const blockersCount = campaignPackages.filter((r) => r.hasBlockers).length;
+  const openCount = campaign.openCount;
+  const closedCount = campaign.closedCount;
 
   return (
     <section className="tools-section package-workspace-card">
       <div className="package-workspace-card-head">
         <div>
           <h2>
-            {campaign.periodName}
+            Периметр кампании: {campaign.periodName}
             {" · "}
             {packageKindLabel(campaign.packageKind)}
           </h2>
@@ -120,11 +148,49 @@ export function PackageCampaignPackagesPanel({
         <div className="toolbar-actions">
           {canMutate && (
             <Button variant="secondary" onClick={onOpenSettings}>
-              Настройки периода
+              Настройки кампании
             </Button>
           )}
+          <Link to="/tools?tab=aggregation" className="btn btn-secondary">
+            К своду
+          </Link>
         </div>
       </div>
+
+      <ul className="package-workspace-overview">
+        <li>
+          Организаций в периметре: <strong>{campaign.orgCount}</strong>
+          {campaign.withoutForms ? (
+            <>
+              {" · без форм: "}
+              <strong>{campaign.withoutForms}</strong>
+            </>
+          ) : null}
+        </li>
+        <li>
+          Формы: черновиков <strong>{draftCount}</strong>
+          {" · сдано "}
+          <strong>{submittedCount}</strong>
+        </li>
+        <li>
+          БП: не начат <strong>{notStartedCount}</strong>
+          {" · в работе "}
+          <strong>{collectingCount}</strong>
+          {" · завершён "}
+          <strong>{completedCount}</strong>
+        </li>
+        <li>
+          Периоды: открыто <strong>{openCount}</strong>
+          {" · закрыто "}
+          <strong>{closedCount}</strong>
+          {blockersCount ? (
+            <>
+              {" · с блокерами "}
+              <strong>{blockersCount}</strong>
+            </>
+          ) : null}
+        </li>
+      </ul>
 
       {periodLocked ? (
         <p className="tools-hint" style={{ marginBottom: 12 }}>
@@ -165,6 +231,79 @@ export function PackageCampaignPackagesPanel({
           </label>
         </div>
       </div>
+
+      {canMutate && !periodLocked ? (
+        <section className="package-workspace-inline-section" aria-label="Добавить организации">
+          <h3>Добавить организации в периметр</h3>
+          <p className="tools-hint">
+            Выберите организации из справочника, у которых ещё нет комплекта в этой кампании.
+          </p>
+          <label className="package-workspace-search">
+            Поиск
+            <input
+              type="search"
+              className="search-input"
+              value={addOrgSearch}
+              onChange={(e) => onAddOrgSearchChange(e.target.value)}
+              placeholder="Название, код, ZID…"
+            />
+          </label>
+          {orgsMissingFromCampaign.length > 0 ? (
+            <>
+              <div className="toolbar-actions" style={{ marginBottom: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    onAddOrgZidsChange(orgsMissingFromCampaign.map((o) => o.zid))
+                  }
+                >
+                  Выбрать все ({orgsMissingFromCampaign.length})
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onAddOrgZidsChange([])}
+                >
+                  Снять выбор
+                </button>
+                <span className="tools-hint">Выбрано: {addOrgZids.length}</span>
+              </div>
+              <div className="aggr-list package-constructor-org-list">
+                {orgsMissingFromCampaign.map((o) => (
+                  <label key={o.zid} className="package-constructor-check-row">
+                    <input
+                      type="checkbox"
+                      checked={addOrgZids.includes(o.zid)}
+                      onChange={() => {
+                        onAddOrgZidsChange((prev) =>
+                          prev.includes(o.zid)
+                            ? prev.filter((z) => z !== o.zid)
+                            : [...prev, o.zid]
+                        );
+                      }}
+                    />
+                    <span>
+                      {o.name}
+                      {o.code ? <span className="table-sub"> · {o.code}</span> : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <Button disabled={busy || addOrgZids.length === 0} onClick={onAddOrgsToPeriod}>
+                Добавить в периметр
+                {addOrgZids.length ? ` (${addOrgZids.length})` : ""}
+              </Button>
+            </>
+          ) : (
+            <p className="tools-hint">
+              {addOrgSearch.trim()
+                ? "По поиску ничего не найдено среди организаций вне кампании."
+                : "Все организации справочника уже входят в кампанию."}
+            </p>
+          )}
+        </section>
+      ) : null}
 
       {canBulkSelect && (
         <div className="package-workspace-bulk-bar" style={{ marginBottom: 12 }}>

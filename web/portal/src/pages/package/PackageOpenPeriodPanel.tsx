@@ -37,10 +37,10 @@ export function PackageOpenPeriodPanel({
   const range = quarterDateRange(newPeriodQuarter, newPeriodYear);
   return (
     <section className="tools-section">
-      <h2>{admin ? "Открыть период для всех организаций" : "Открыть период"}</h2>
+      <h2>{admin ? "Открыть кампанию для всех организаций" : "Открыть кампанию"}</h2>
       <p className="tools-hint">
-        Период — верхний уровень. После открытия внутри периода создаются комплекты по
-        организациям.
+        Кампания — это отчётный период и тип комплекта. После открытия внутри кампании
+        появляется периметр организаций.
       </p>
       <div className="tools-grid">
         {!admin ? (
@@ -95,7 +95,7 @@ export function PackageOpenPeriodPanel({
         </label>
       </div>
       <p className="tools-hint">
-        Будет открыт <strong>{quarterPeriodName(newPeriodQuarter, newPeriodYear)}</strong>
+        Будет открыта кампания <strong>{quarterPeriodName(newPeriodQuarter, newPeriodYear)}</strong>
         {" · "}
         {formatPeriod(range.periodStart, range.periodEnd)}
         {admin ? ` · для ${orgsCount} организаций` : ""}
@@ -107,7 +107,7 @@ export function PackageOpenPeriodPanel({
         disabled={busy || (!admin && typeof periodsCreateZid !== "number")}
         onClick={onCreatePeriod}
       >
-        Открыть период
+        Открыть кампанию
       </button>
     </section>
   );

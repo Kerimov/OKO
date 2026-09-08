@@ -202,7 +202,7 @@ export function Layout() {
           {
             to: "/package",
             label: "Комплекты",
-            description: "Периоды, БП и контроль",
+            description: "Кампании и периметр сбора",
             icon: "packages",
             isActive: (p) => p === "/package" || p === "/admin/packages",
           },
@@ -279,8 +279,8 @@ export function Layout() {
           },
           {
             to: "/admin/aggregation",
-            label: "Агрегация",
-            description: "Сборные отчёты",
+            label: "Правила агрегации",
+            description: "Состав участников свода",
             icon: "aggregation",
             isActive: (p) => p === "/admin/aggregation",
           },
@@ -329,7 +329,7 @@ export function Layout() {
           {
             to: "/perimeter",
             label: t("nav.perimeter"),
-            description: "Периметр организаций",
+            description: "Организации и контрагенты",
             icon: "perimeter",
             isActive: (p) => p === "/perimeter",
           },

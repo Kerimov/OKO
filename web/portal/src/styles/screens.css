@@ -375,6 +375,27 @@
   margin-bottom: 0.35rem;
 }
 
+.package-workspace-inline-section {
+  margin: 0 0 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.package-workspace-inline-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.package-workspace-search {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 34rem;
+  margin-bottom: 0.75rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
 .package-constructor-org-list,
 .package-constructor-form-list {
   max-height: 260px;

@@ -31,7 +31,7 @@ export function PerimeterPage() {
         setKontr(await listPerimeterKontragents({ q: q.trim() || undefined }));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки периметра");
+      setError(e instanceof Error ? e.message : "Ошибка загрузки реестра");
     }
   }, [backend, tab, q]);
 
@@ -52,15 +52,17 @@ export function PerimeterPage() {
   };
 
   if (!backend) {
-    return <div className="page">Периметр доступен только в backend-режиме.</div>;
+    return <div className="page">Реестр НСИ доступен только в backend-режиме.</div>;
   }
 
   return (
     <div className="page">
-      <h1>Периметр сбора данных</h1>
+      <h1>Реестр НСИ: организации и контрагенты</h1>
       <p className="tools-hint">
-        Реестр организаций и контрагентов. Переход по GUID открывает карточку в{" "}
-        <Link to="/admin/refs">справочниках</Link>.
+        Это справочные данные, а не рабочий периметр отчётной кампании. Состав
+        организаций конкретного периода настраивается в{" "}
+        <Link to="/package">комплектах отчётности</Link>; карточки контрагентов
+        открываются в <Link to="/admin/refs">справочниках</Link>.
       </p>
       {error && <div className="error-box">{error}</div>}
       <div className="tools-tabs">

@@ -40,7 +40,7 @@ export function PackagePeriodSettingsPanel({
   return (
     <section className="tools-section package-workspace-card">
       <h2>
-        Настройки периода · {campaign.periodName} · {packageKindLabel(campaign.packageKind)}
+        Настройки кампании · {campaign.periodName} · {packageKindLabel(campaign.packageKind)}
       </h2>
       <p className="tools-hint">
         {campaign.periodStart && campaign.periodEnd
@@ -78,8 +78,8 @@ export function PackagePeriodSettingsPanel({
 
       {periodLocked ? (
         <p className="tools-hint" style={{ marginBottom: 16 }}>
-          Период закрыт — нельзя добавлять организации и заводить формы. Можно только
-          переоткрыть период.
+          Кампания закрыта — нельзя добавлять организации и заводить формы. Можно только
+          переоткрыть кампанию.
         </p>
       ) : null}
 
@@ -89,8 +89,8 @@ export function PackagePeriodSettingsPanel({
       ) : (
         <>
           <p className="tools-hint">
-            Организации из справочника, у которых ещё нет комплекта в этом периоде. После
-            добавления заведите формы в списке комплектов.
+            Та же операция доступна на экране «Периметр кампании». Здесь она оставлена
+            как настройка состава периода.
           </p>
           {orgsMissingFromCampaign.length === 0 ? (
             <p className="tools-hint">
@@ -148,7 +148,7 @@ export function PackagePeriodSettingsPanel({
               </div>
               <div className="toolbar-actions" style={{ marginTop: 12 }}>
                 <Button disabled={busy || addOrgZids.length === 0} onClick={onAddOrgsToPeriod}>
-                  Добавить в период
+                  Добавить в кампанию
                   {addOrgZids.length ? ` (${addOrgZids.length})` : ""}
                 </Button>
               </div>

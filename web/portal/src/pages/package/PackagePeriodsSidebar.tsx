@@ -37,7 +37,7 @@ export function PackagePeriodsSidebar({
 }: Props) {
   return (
     <aside className="tools-section package-workspace-list">
-      <h2>Периоды</h2>
+      <h2>Кампании</h2>
       <CollapsibleFilters
         activeCount={countActiveFilters(
           listSearch.trim().length > 0,
@@ -49,7 +49,7 @@ export function PackagePeriodsSidebar({
         <input
           type="search"
           className="search-input"
-          placeholder="Поиск периода…"
+          placeholder="Поиск кампании…"
           value={listSearch}
           onChange={(e) => onListSearchChange(e.target.value)}
         />
@@ -75,7 +75,9 @@ export function PackagePeriodsSidebar({
           </label>
         </div>
       </CollapsibleFilters>
-      <p className="package-workspace-list-totals table-sub">Периодов: {campaigns.length}</p>
+      <p className="package-workspace-list-totals table-sub">
+        Кампаний: {campaigns.length}
+      </p>
 
       <div className="package-workspace-list-scroll">
         {campaigns.map((c) => {
@@ -131,7 +133,7 @@ export function PackagePeriodsSidebar({
           className="package-workspace-create-btn"
           onClick={onOpenPeriod}
         >
-          Открыть период…
+          Открыть кампанию…
         </Button>
       )}
       {admin && canMutate && (

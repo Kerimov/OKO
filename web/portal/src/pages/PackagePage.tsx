@@ -6,6 +6,7 @@ import {
   isAuditorReadonly,
 } from "../auth";
 import { PackageFormsFillPanel } from "../components/PackageFormsFillPanel";
+import { CampaignAggregationFlow } from "../components/CampaignAggregationFlow";
 import {
   Button,
   PageHeader,
@@ -1467,10 +1468,10 @@ export function PackagePage() {
   return (
     <div className="page package-workspace">
       <PageHeader
-        title="Комплекты отчётности"
+        title="Кампании отчётности"
         description={
           <>
-            Сначала период, внутри — комплекты по организациям.
+            Сначала кампания, внутри — периметр организаций, формы и бизнес-процесс.
             {auditorRo ? " Режим аудитора: только чтение." : ""}
           </>
         }
@@ -1480,6 +1481,8 @@ export function PackagePage() {
           </Button>
         }
       />
+
+      <CampaignAggregationFlow current="campaign" />
 
       {status && <StatusBanner tone="info">{status}</StatusBanner>}
 
@@ -1540,9 +1543,9 @@ export function PackagePage() {
                             tab === "forms" ||
                             tab === "bp"
                               ? "← К периоду"
-                              : "Комплекты периода",
+                              : "Периметр кампании",
                           ],
-                          ["period-settings", "Настройки периода"],
+                          ["period-settings", "Настройки кампании"],
                         ] as Array<[WorkspaceTab, string]>)
                       : []),
                     ...(selectedRow &&
@@ -1557,7 +1560,7 @@ export function PackagePage() {
                     tab !== "overview" &&
                     tab !== "forms" &&
                     tab !== "bp"
-                      ? ([["open-period", "Открыть период"]] as Array<
+                      ? ([["open-period", "Открыть кампанию"]] as Array<
                           [WorkspaceTab, string]
                         >)
                       : []),
@@ -1653,6 +1656,9 @@ export function PackagePage() {
               checkedKeys={checkedKeys}
               checkedRows={checkedRows}
               checkedDeletableRows={checkedDeletableRows}
+              orgsMissingFromCampaign={orgsMissingFromCampaign}
+              addOrgSearch={addOrgSearch}
+              addOrgZids={addOrgZids}
               packageVirt={packageVirt}
               scrollRef={packageTableScrollRef}
               onOpenSettings={() => setTab("period-settings")}
@@ -1664,6 +1670,9 @@ export function PackagePage() {
               onSelectAll={() =>
                 setCheckedKeys(new Set(campaignPackages.map((r) => rowKey(r))))
               }
+              onAddOrgSearchChange={setAddOrgSearch}
+              onAddOrgZidsChange={setAddOrgZids}
+              onAddOrgsToPeriod={() => void handleAddOrgsToPeriod()}
               onFillForms={openFillForms}
               onBulkStartCollection={() => void handleBulkStartCollection()}
               onBulkChecks={() => void handleBulkChecks()}
@@ -1685,17 +1694,17 @@ export function PackagePage() {
           tab !== "fill-forms" &&
           tab !== "period-settings" ? (
             <section className="tools-section">
-              <h2>Период не выбран</h2>
+              <h2>Кампания не выбрана</h2>
               <p className="tools-hint">
                 {allCampaigns.length === 0
                   ? admin
-                    ? "Сначала откройте период для организаций, затем создайте комплекты внутри периода."
-                    : "Нет доступных периодов. Обратитесь к сопровождению."
-                  : "Выберите период в списке слева."}
+                    ? "Сначала откройте кампанию для организаций, затем заведите формы внутри её периметра."
+                    : "Нет доступных кампаний. Обратитесь к сопровождению."
+                  : "Выберите кампанию в списке слева."}
               </p>
               {canMutate && (
                 <Button onClick={() => setTab("open-period")}>
-                  Открыть период…
+                  Открыть кампанию…
                 </Button>
               )}
             </section>

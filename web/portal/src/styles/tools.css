@@ -184,6 +184,125 @@
   margin-bottom: 1rem;
 }
 
+.campaign-agg-flow {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
+}
+
+.campaign-agg-flow-lead {
+  margin: 0 0 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--muted, #5c6570);
+}
+
+.campaign-agg-flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.15rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  align-items: stretch;
+}
+
+.campaign-agg-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.campaign-agg-flow-arrow {
+  color: var(--muted, #5c6570);
+  font-size: 0.95rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.campaign-agg-flow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: inherit;
+  text-decoration: none;
+}
+
+.campaign-agg-flow-link:hover {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--surface) 80%, var(--accent-soft));
+  border-color: var(--border);
+}
+
+.campaign-agg-flow-link.is-current {
+  background: var(--surface, #fff);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.campaign-agg-flow-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent);
+}
+
+.campaign-agg-flow-step.is-current .campaign-agg-flow-n {
+  background: var(--accent);
+  color: #fff;
+}
+
+.campaign-agg-flow-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.campaign-agg-flow-text strong {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.campaign-agg-flow-text span {
+  font-size: 0.72rem;
+  color: var(--muted, #5c6570);
+}
+
+.aggregation-steps {
+  display: grid;
+  gap: 1rem;
+}
+
+.aggregation-step {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--accent-soft));
+  padding: 1rem;
+}
+
+.aggregation-step h3 {
+  margin: 0 0 0.35rem;
+  color: var(--text);
+  font-size: 1rem;
+}
+
 .tools-grid label,
 .tools-section > label {
   display: flex;

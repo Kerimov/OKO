@@ -116,7 +116,7 @@ const CONFIG: Record<string, DesktopRoleConfig> = {
       },
       {
         to: "/admin/aggregation",
-        label: "Агрегация",
+        label: "Правила агрегации",
         backendOnly: true,
         permission: "tech.configure",
       },

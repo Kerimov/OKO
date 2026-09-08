@@ -36,8 +36,8 @@ export const TOOLS_TABS: Array<{
   },
   {
     id: "aggregation",
-    label: "Свод",
-    hint: "Агрегация участников в сводную организацию",
+    label: "Свод кампании",
+    hint: "Пошаговая агрегация участников в сводную организацию",
   },
   {
     id: "references",

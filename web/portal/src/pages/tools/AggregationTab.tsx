@@ -8,6 +8,7 @@ import {
   type FillBalanceApiResult,
   type RelationsAccRowsApiResult,
 } from "../../aggregationApi";
+import { CampaignAggregationFlow } from "../../components/CampaignAggregationFlow";
 import { CheckResultsPanel } from "../../components/CheckResultsPanel";
 import type { CheckRunResult } from "../../engine/checkEngine";
 
@@ -67,6 +68,15 @@ export interface AggregationTabProps {
   workContext?: { zid: number | null; eid: number | null };
 }
 
+function skippedReasonLabel(reason: AggregationPreview["forms"][number]["skippedReason"]): string {
+  if (reason === "no-color-spec") return "нет маски цвета";
+  if (reason === "reorg-update-blocked") return "нет разрешения на обновление";
+  if (reason === "no-existing-corr") return "нет корр. набора";
+  if (reason === "draft-only-sources") return "только черновики";
+  if (reason === "target-submitted") return "цель уже сдана";
+  return "нет данных";
+}
+
 export function AggregationTab({
   backend,
   busy,
@@ -123,14 +133,44 @@ export function AggregationTab({
     parentZid !== "" &&
     eid !== "" &&
     (workContext.zid !== parentZid || workContext.eid !== eid);
+  const selectedSet = new Set(selectedChildren);
+  const previewByChild = new Map<
+    number,
+    { present: number; missing: number; draftOnly: number }
+  >();
+  if (preview) {
+    for (const childZid of preview.children) {
+      previewByChild.set(childZid, { present: 0, missing: 0, draftOnly: 0 });
+    }
+    for (const form of preview.forms) {
+      for (const childZid of form.presentChildZids) {
+        const stat = previewByChild.get(childZid);
+        if (stat) stat.present += 1;
+      }
+      for (const childZid of form.missingChildZids) {
+        const stat = previewByChild.get(childZid);
+        if (stat) stat.missing += 1;
+      }
+      for (const childZid of form.draftChildZids ?? []) {
+        const stat = previewByChild.get(childZid);
+        if (stat) stat.draftOnly += 1;
+      }
+    }
+  }
+  const emptyPreview =
+    preview != null &&
+    preview.children.length > 0 &&
+    preview.forms.every((form) => form.presentChildZids.length === 0);
 
   return (
     <section className="tools-section">
-      <h2>Свод комплекта</h2>
+      <CampaignAggregationFlow current="svod" />
+      <h2>Мастер свода кампании</h2>
       <p className="tools-hint">
-        Сумма форм участников в сводную организацию за период. Список участников настраивается
-        в <Link to="/admin/aggregation">конфигурации агрегации</Link>. Приём данных — вкладка
-        «Обмен → Выгрузить». По умолчанию в свод входят только <strong>сданные</strong> формы участников.
+        Сценарий: выбрать кампанию, проверить участников, указать цель и выполнить свод.
+        Правила parent → child настраиваются в{" "}
+        <Link to="/admin/aggregation">правилах агрегации</Link>. По умолчанию в свод
+        входят только <strong>сданные</strong> формы участников.
       </p>
       {contextMismatch && (
         <p className="warn-bar">
@@ -148,6 +188,13 @@ export function AggregationTab({
       )}
       {backend ? (
         <>
+          <div className="aggregation-steps">
+          <div className="aggregation-step">
+            <h3>1. Кампания и сводная организация</h3>
+            <p className="tools-hint">
+              Выберите сводную организацию и её период. Если вы пришли из рабочего
+              комплекта, используйте синхронизацию выше.
+            </p>
           <div className="tools-grid">
             <label>
               Сводная организация
@@ -182,78 +229,45 @@ export function AggregationTab({
                 ))}
               </select>
             </label>
-            <label>
-              Куда писать свод
-              <select
-                value={targetZid === "" ? parentZid || "" : targetZid}
-                disabled={parentZid === ""}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  onTargetZidChange(
-                    parentZid !== "" && v === parentZid ? "" : v
-                  );
-                  onClearPreview();
-                }}
-                title="Целевой комплект / корректирующий набор"
-              >
-                <option value={parentZid === "" ? "" : parentZid}>
-                  Сводная организация (как есть)
-                </option>
-                {corrSets.map((s) => (
-                  <option key={s.id} value={s.corrZid}>
-                    {s.kind === "mirror" ? "Зеркало" : "Корр."}:{" "}
-                    {s.corrName ?? `ZID ${s.corrZid}`}
-                    {s.corrCode ? ` (${s.corrCode})` : ""} · форм {s.formCount ?? 0}
-                  </option>
-                ))}
-              </select>
-            </label>
+          </div>
           </div>
 
-          {parentZid !== "" && eid !== "" && (
-            <div className="toolbar-actions" style={{ marginTop: "0.5rem", gap: "0.5rem" }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy}
-                onClick={() => void onCreateCorrSet("correct")}
-                title="Пустой корректирующий набор"
-              >
-                Создать корр. набор
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy}
-                onClick={() => void onCreateCorrSet("mirror")}
-                title="Копия форм сводной"
-              >
-                Создать зеркало
-              </button>
-            </div>
-          )}
-
-          {childEntries.length > 0 && (
-            <div style={{ marginTop: "0.75rem" }}>
+          <div className="aggregation-step">
+            <h3>2. Участники свода</h3>
+            {childEntries.length > 0 ? (
+            <div>
               <p className="tools-hint">
-                Участники свода (галочка — участвует в этом прогоне; в конфиге «включено» ={" "}
-                {childEntries.filter((e) => e.included).length}):
+                Галочка задаёт участников текущего прогона. По умолчанию выбраны связи,
+                где в правилах агрегации стоит «включено» (
+                {childEntries.filter((e) => e.included).length}).
               </p>
               <ul className="aggr-list">
-                {childEntries.map((e) => (
+                {childEntries.map((e) => {
+                  const stat = previewByChild.get(e.childZid);
+                  return (
                   <li key={e.id}>
                     <label>
                       <input
                         type="checkbox"
-                        checked={selectedChildren.includes(e.childZid)}
+                        checked={selectedSet.has(e.childZid)}
                         onChange={() => onToggleChild(e.childZid)}
                       />
-                      {e.childName ?? `Организация ${e.childZid}`}
-                      {e.childCode ? ` (${e.childCode})` : ""}
-                      {!e.included ? " — по умолчанию выкл." : ""}
+                      <span>
+                        {e.childName ?? `Организация ${e.childZid}`}
+                        {e.childCode ? ` (${e.childCode})` : ""}
+                        {!e.included ? " — по умолчанию выкл." : ""}
+                        {stat ? (
+                          <span className="table-sub">
+                            {" "}
+                            · найдено {stat.present}, нет {stat.missing}
+                            {stat.draftOnly ? `, только черновики ${stat.draftOnly}` : ""}
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               <div className="toolbar-actions" style={{ gap: "0.5rem", marginBottom: "0.5rem" }}>
                 <button
@@ -279,9 +293,45 @@ export function AggregationTab({
                 </button>
               </div>
             </div>
-          )}
+            ) : (
+              <p className="tools-hint">
+                Для выбранной сводной организации нет участников. Добавьте связи в{" "}
+                <Link to="/admin/aggregation">правилах агрегации</Link>.
+              </p>
+            )}
+          </div>
 
+          <div className="aggregation-step">
+            <h3>3. Цель и режим</h3>
+            <p className="tools-hint">
+              Обычный свод пишет результат в сводную организацию. Для реорганизации или
+              масочных обновлений выберите корректирующий набор или зеркало.
+            </p>
           <div className="tools-grid" style={{ marginTop: "0.5rem" }}>
+            <label>
+              Куда писать свод
+              <select
+                value={targetZid === "" ? parentZid || "" : targetZid}
+                disabled={parentZid === ""}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  onTargetZidChange(parentZid !== "" && v === parentZid ? "" : v);
+                  onClearPreview();
+                }}
+                title="Целевой комплект / корректирующий набор"
+              >
+                <option value={parentZid === "" ? "" : parentZid}>
+                  Сводная организация (как есть)
+                </option>
+                {corrSets.map((s) => (
+                  <option key={s.id} value={s.corrZid}>
+                    {s.kind === "mirror" ? "Зеркало" : "Корр."}:{" "}
+                    {s.corrName ?? `ZID ${s.corrZid}`}
+                    {s.corrCode ? ` (${s.corrCode})` : ""} · форм {s.formCount ?? 0}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               Режим свода
               <select
@@ -347,7 +397,36 @@ export function AggregationTab({
               Обновить корректирующий набор
             </label>
           </div>
+          {parentZid !== "" && eid !== "" && (
+            <div className="toolbar-actions" style={{ marginTop: "0.5rem", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => void onCreateCorrSet("correct")}
+                title="Пустой корректирующий набор"
+              >
+                Создать корр. набор
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => void onCreateCorrSet("mirror")}
+                title="Копия форм сводной"
+              >
+                Создать зеркало
+              </button>
+            </div>
+          )}
+          </div>
 
+          <div className="aggregation-step">
+            <h3>4. Превью и запуск</h3>
+            <p className="tools-hint">
+              Сначала запустите превью: оно покажет, какие формы будут сведены и почему
+              часть данных может быть пропущена.
+            </p>
           <div className="toolbar-actions" style={{ marginTop: "0.75rem", gap: "0.5rem" }}>
             <button
               type="button"
@@ -373,6 +452,13 @@ export function AggregationTab({
                 Готовность: сведётся <strong>{preview.willAggregate}</strong>, пропуск{" "}
                 <strong>{preview.willSkip}</strong> (участников: {preview.children.length})
               </p>
+              {emptyPreview ? (
+                <p className="warn-bar">
+                  По выбранному коду периода данные участников не найдены. Если комплекты
+                  открывались массово, у организаций может быть тот же квартал, но другой
+                  внутренний EID; проверьте кампанию в «Комплектах».
+                </p>
+              ) : null}
               <table className="checks-table">
                 <thead>
                   <tr>
@@ -399,19 +485,7 @@ export function AggregationTab({
                         <td>{f.missingChildZids.length || "—"}</td>
                         <td>{f.willAggregate ? "да" : "нет"}</td>
                         <td>
-                          {f.skippedReason === "no-color-spec"
-                            ? "нет маски цвета"
-                            : f.skippedReason === "reorg-update-blocked"
-                              ? "нет разрешения на обновление"
-                              : f.skippedReason === "no-existing-corr"
-                                ? "нет корр. набора"
-                                : f.skippedReason === "draft-only-sources"
-                                  ? "только черновики"
-                                  : f.skippedReason === "target-submitted"
-                                    ? "цель уже сдана"
-                                    : f.willAggregate
-                                      ? "—"
-                                      : "нет данных"}
+                          {f.willAggregate ? "—" : skippedReasonLabel(f.skippedReason)}
                         </td>
                       </tr>
                     ))}
@@ -422,6 +496,14 @@ export function AggregationTab({
               )}
             </div>
           )}
+          </div>
+
+          <div className="aggregation-step">
+            <h3>После свода: проверки</h3>
+            <p className="tools-hint">
+              Эти действия не запускают новый свод: они помогают проверить результат и
+              дозаполнить балансные строки.
+            </p>
 
           {aggrChecks && (
             <div style={{ marginTop: "0.75rem" }}>
@@ -586,6 +668,8 @@ export function AggregationTab({
               )}
             </div>
           )}
+          </div>
+          </div>
         </>
       ) : (
         <p className="tools-hint">Требуется API-сервер.</p>

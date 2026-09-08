@@ -4,7 +4,7 @@ export type LocaleCode = "ru" | "en";
 
 const DICT: Record<string, { ru: string; en: string }> = {
   "nav.bpMonitor": { ru: "Мониторинг БП", en: "BP monitoring" },
-  "nav.perimeter": { ru: "Периметр сбора", en: "Collection perimeter" },
+  "nav.perimeter": { ru: "Реестр НСИ", en: "Reference registry" },
   "nav.integrations": { ru: "Интеграции / своды", en: "Integrations / svods" },
   "nav.psdReports": { ru: "Отчёты ПСД", en: "PSD reports" },
   "bp.status.not_started": { ru: "Не начат", en: "Not started" },

@@ -13,6 +13,7 @@ import { listOrganizations } from "../packagesApi";
 import type { Organization } from "../types";
 import { isBackendMode } from "../storage";
 import { AdminAccessGate, useAdminAccess } from "../components/AdminAccessGate";
+import { CampaignAggregationFlow } from "../components/CampaignAggregationFlow";
 import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 
 export function AggregationEditorPage() {
@@ -115,13 +116,13 @@ export function AggregationEditorPage() {
   };
 
   if (!access.ok) {
-    return <AdminAccessGate title="Агрегация" />;
+    return <AdminAccessGate title="Правила агрегации" />;
   }
 
   if (!backend) {
     return (
       <div className="admin-page">
-        <h1>Агрегация</h1>
+        <h1>Правила агрегации</h1>
         <div className="error-box">Требуется API-сервер.</div>
       </div>
     );
@@ -129,13 +130,15 @@ export function AggregationEditorPage() {
 
   return (
     <div className="admin-page checks-editor">
+      <CampaignAggregationFlow current="rules" />
       <header className="admin-header">
         <div>
-          <h1>Конфигурация агрегации</h1>
+          <h1>Правила агрегации</h1>
           <p className="admin-desc">
             Аналог Access <code>frmAggrCfg</code> / таблица <code>a_tblAgg_List</code>: какие
-            организации входят в свод головной. Флаг «включено» = Include?. Запуск свода — в{" "}
-            <Link to="/tools?tab=aggregation">Сводка → Свод</Link>.
+            организации входят в свод головной. Флаг «включено» задаёт состав по умолчанию;
+            разовый выбор участников делается при запуске в{" "}
+            <Link to="/tools?tab=aggregation">Обмене → Свод кампании</Link>.
           </p>
         </div>
         <div className="toolbar-actions">
@@ -143,7 +146,7 @@ export function AggregationEditorPage() {
             Импорт из файла
           </button>
           <Link to="/tools?tab=aggregation" className="btn btn-primary">
-            Запустить свод
+            Перейти к своду
           </Link>
         </div>
       </header>
@@ -182,7 +185,7 @@ export function AggregationEditorPage() {
       </section>
 
       <section className="admin-section">
-        <h2>Добавить связь</h2>
+        <h2>Добавить правило</h2>
         <form className="settings-form" onSubmit={handleAdd}>
           <label>
             Сводная организация
@@ -219,7 +222,7 @@ export function AggregationEditorPage() {
       </section>
 
       <section className="admin-section">
-        <h2>Список ({entries.length})</h2>
+        <h2>Правила ({entries.length})</h2>
         {loading ? (
           <p>Загрузка…</p>
         ) : entries.length === 0 ? (
