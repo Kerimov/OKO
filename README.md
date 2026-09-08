@@ -81,7 +81,7 @@ OKO/
 
 ```bash
 cp .env.example .env   # DATABASE_URL, OKO_BOOTSTRAP_ADMIN_*
-docker compose up -d --build   # API + SQLite volume
+docker compose up -d --build   # API + PostgreSQL
 ```
 
 Портал на Vercel: Root Directory = `web/portal`, переменная `VITE_API_URL` → URL API.

@@ -19,7 +19,7 @@ function asyncRoute(handler: AsyncHandler): express.RequestHandler {
 
 /**
  * Shared Express shell for NestJS: CORS, JSON body, auth, audit, write guard.
- * All REST handlers live in server-nest modules.
+ * All REST handlers live in Nest modules under web/api.
  */
 export function mountLegacyApi(app: express.Application): void {
   app.use(cors());

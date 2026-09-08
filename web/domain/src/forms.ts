@@ -109,63 +109,6 @@ export function buildInitialRowsFromSchema(
   return [row];
 }
 
-export async function migrateFormTables(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("form_templates", "pdf_file"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN pdf_file TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "allow_add_rows"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN allow_add_rows INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_templates", "kontr_form"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN kontr_form INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_templates", "signatures_json"))) {
-    await db.exec(
-      `ALTER TABLE form_templates ADD COLUMN signatures_json TEXT DEFAULT '["Руководитель","Главный бухгалтер"]'`
-    );
-  }
-  if (!(await db.columnExists("form_templates", "unit"))) {
-    await db.exec(`ALTER TABLE form_templates ADD COLUMN unit TEXT DEFAULT 'тыс.руб.'`);
-  }
-  if (!(await db.columnExists("form_templates", "archived"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN archived INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_templates", "schema_version"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN schema_version INTEGER DEFAULT 1");
-  }
-
-  if (!(await db.columnExists("form_template_columns", "f_total"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN f_total INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_template_columns", "help_text"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN help_text TEXT");
-  }
-  if (!(await db.columnExists("form_template_columns", "align"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN align TEXT");
-  }
-  if (!(await db.columnExists("form_template_columns", "decimals"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN decimals INTEGER");
-  }
-  if (!(await db.columnExists("form_template_columns", "hidden"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN hidden INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_template_columns", "formula"))) {
-    await db.exec("ALTER TABLE form_template_columns ADD COLUMN formula TEXT");
-  }
-
-  if (!(await db.columnExists("form_template_rows", "row_kind"))) {
-    await db.exec(`ALTER TABLE form_template_rows ADD COLUMN row_kind TEXT DEFAULT 'data'`);
-  }
-  if (!(await db.columnExists("form_template_rows", "row_level"))) {
-    await db.exec("ALTER TABLE form_template_rows ADD COLUMN row_level INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_template_rows", "readonly"))) {
-    await db.exec("ALTER TABLE form_template_rows ADD COLUMN readonly INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("form_template_rows", "formula"))) {
-    await db.exec("ALTER TABLE form_template_rows ADD COLUMN formula TEXT");
-  }
-}
 
 async function upsertFormFromSchema(
   db: OkoDb,

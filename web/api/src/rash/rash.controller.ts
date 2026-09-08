@@ -51,6 +51,7 @@ import {
 } from "../../../domain/src/rash.js";
 import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { RashBundleDto, RashBundlePreviewDto } from "./dto/rash.dto.js";
 
 @ApiTags("rash")
 @ApiBearerAuth()
@@ -175,17 +176,7 @@ export class RashController {
   @HttpCode(200)
   @ApiOperation({ summary: "Сохранить правило + addsum + placements атомарно" })
   async saveBundle(
-    @Body()
-    body: {
-      rule: RashRuleDto;
-      addsum?: RashAddsumDto[];
-      placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
-      modalSettings?: RashModalSettingsDto;
-      modalRows?: RashModalRowDto[];
-      formAdditions?: RashFormAdditionDto[];
-      createMissingFormParts?: boolean;
-      forceConflicts?: boolean;
-    }
+    @Body() body: RashBundleDto
   ) {
     try {
       return await saveRashBundle(await getDb(), body);
@@ -215,11 +206,7 @@ export class RashController {
   @HttpCode(200)
   @ApiOperation({ summary: "Проверить отсутствующие строки/графы перед сохранением" })
   async previewBundle(
-    @Body()
-    body: {
-      placements?: Array<Omit<RashPlacementDto, "kod"> & { kod?: number }>;
-      formAdditions?: RashFormAdditionDto[];
-    }
+    @Body() body: RashBundlePreviewDto
   ) {
     return previewRashBundleStructure(
       await getDb(),

@@ -243,6 +243,8 @@
   background: var(--warning-soft);
   border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border));
   color: #6b5600;
+
+  border-color: #e6c200;
 }
 
 /* ── Cards / panels ── */
@@ -259,6 +261,11 @@
 .tools-section {
   padding: 1.15rem 1.25rem;
   margin-bottom: 1rem;
+
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .tools-section:hover {
@@ -677,6 +684,8 @@
 .exchange-dropzone.is-dragover {
   border-color: var(--primary);
   background: var(--accent-soft);
+
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .empty-state {

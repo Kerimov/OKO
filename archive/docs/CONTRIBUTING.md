@@ -11,13 +11,13 @@
   - `Add user edit panel on admin Users page`
   - `Fix PostgreSQL date errors when period fields are empty`
 - Один коммит — одна логическая задача.
-- Не коммитить: `.env`, `*.mdb`, `*.mde`, `data/oko.db`, `portal/public/pdf/*.pdf`, папку `12345/`.
+- Не коммитить: `.env`, `*.mdb`, `*.mde`, `data/oko.db`, `web/portal/public/pdf/*.pdf`, папку `archive/kits/12345/`.
 
 ---
 
 ## Структура кода
 
-### Фронтенд (`portal/src/`)
+### Фронтенд (`web/portal/src/`)
 
 - **pages/** — страницы; один React-компонент на файл, имя = `*Page.tsx`.
 - **components/** — переиспользуемые части UI без привязки к маршруту.
@@ -26,18 +26,20 @@
 
 Новый экран: файл в `pages/` + маршрут в `App.tsx` + пункт в `Layout.tsx` (если нужен в меню).
 
-### Бэкенд (`server/src/`)
+### API (`web/api/src/`) и домен (`web/domain/src/`)
 
-- Один домен — один файл (`checks.ts`, `users.ts`).
-- Регистрация маршрутов — в `index.ts`.
-- SQL через `OkoDb` (`oko-db.ts`), не напрямую к драйверу.
+- Nest-контроллеры и DTO — в `web/api/src/**`.
+- Доменная логика — в `web/domain/src/*.ts` (один домен — один файл или модуль).
+- SQL через `OkoDb` (`oko-db.ts`); контроллеры не пишут SQL напрямую.
+- Новые изменения схемы — numbered migrations в `web/domain/src/migrations/`.
 
 ### Схема БД
 
-При изменении таблиц обновляйте **оба** файла:
+При изменении таблиц обновляйте:
 
-- `data/schema.sql` (SQLite)
-- `data/schema.postgresql.sql` (PostgreSQL)
+- `data/schema.postgresql.sql` (API / PostgreSQL)
+- `data/schema.sql` (справочная схема для desktop kit / SQLite)
+- numbered migration в `web/domain/src/migrations/`
 
 ---
 
@@ -45,9 +47,9 @@
 
 | Что изменили | Куда обновить |
 |--------------|---------------|
-| Новый раздел UI | **пока не обновлять** инструкцию (`instructions-*.md`, `docs/PORTAL-GUIDE.md`) — рано |
-| Новый API-эндпоинт | `server/README.md` |
-| Архитектурное решение | `docs/ARCHITECTURE.md` |
+| Новый раздел UI | **пока не обновлять** инструкцию (`instructions-*.md`, `PORTAL-GUIDE.md`) — рано |
+| Новый API-эндпоинт | `web/api/README.md` / `web/domain/README.md` |
+| Архитектурное решение | `archive/docs/ARCHITECTURE.md` |
 | Завершённый этап | `CHANGELOG.md`, при необходимости `PHASE*-PLAN.md` |
 
 Инструкция в портале и `PORTAL-GUIDE.md` заморожены: не дополнять при обычных доработках, только по явной просьбе.

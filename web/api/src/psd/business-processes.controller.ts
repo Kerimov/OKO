@@ -37,6 +37,11 @@ import {
   ReqUser,
 } from "../auth/decorators/oko-request.decorator.js";
 import { PsdPermissionGuard, RequirePsdPermissions } from "./psd-permission.guard.js";
+import {
+  AssignCuratorDto,
+  EnsureBusinessProcessDto,
+  TransitionBusinessProcessDto,
+} from "./dto/business-processes.dto.js";
 import type { SessionUser } from "../../../domain/src/users.js";
 import type { ApiRole } from "../../../domain/src/auth.js";
 
@@ -84,8 +89,7 @@ export class BusinessProcessesController {
   @HttpCode(200)
   @RequirePsdPermissions("bp.view")
   async ensure(
-    @Body()
-    body: { zid: number; eid: number; packageKind?: string },
+    @Body() body: EnsureBusinessProcessDto,
     @ReqUser() user?: SessionUser
   ) {
     let parsed: { zid: number; eid: number; packageKind?: string };
@@ -179,7 +183,7 @@ export class BusinessProcessesController {
   @ApiOperation({ summary: "Переход статуса БП" })
   async transition(
     @Param("id") id: string,
-    @Body() body: { action: BpAction; note?: string },
+    @Body() body: TransitionBusinessProcessDto,
     @ReqUser() user?: SessionUser,
     @ApiRoleParam() apiRole?: ApiRole
   ) {
@@ -217,7 +221,7 @@ export class BusinessProcessesController {
   @RequirePsdPermissions("bp.assign_curator")
   async assignCurator(
     @Param("id") id: string,
-    @Body() body: { curatorUserId: number | null; deadlineAt?: string | null },
+    @Body() body: AssignCuratorDto,
     @ReqUser() user?: SessionUser,
     @ApiRoleParam() apiRole?: ApiRole
   ) {

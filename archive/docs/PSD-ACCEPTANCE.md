@@ -25,7 +25,7 @@
 2. Назначить PSD-роли в `/admin/users`.
 3. Импорт приложений ТЗ:
    ```bash
-   cd server
+   cd web/domain
    DATABASE_URL=... npx tsx src/scripts/importTzAppendices.ts --preview
    DATABASE_URL=... npx tsx src/scripts/importTzAppendices.ts --apply
    ```

@@ -88,6 +88,29 @@ import {
   RequirePsdPermissions,
 } from "./psd-permission.guard.js";
 
+import {
+  AppendCheckJournalDto,
+  ArchiveKontrDto,
+  BulkItemsDto,
+  CalculateSvodDto,
+  CopySvodPreviousDto,
+  CreateKontrVersionDto,
+  CreateSvodDefinitionDto,
+  EdsSignDto,
+  MinfinExportDto,
+  PackageZidEidKindDto,
+  ParseCheckDslDto,
+  ReceiveDoInboxDto,
+  RunSupportReportDto,
+  SapConsolidateDto,
+  TransferApplyDto,
+  UpdateKontrCardDto,
+  UpsertCellCommentDto,
+  UpsertCheckDslRuleDto,
+  UpsertCheckExplanationDto,
+  UpsertCollectionUnitDto,
+} from "./dto/psd-resources.dto.js";
+
 async function assertCellCommentAccess(
   db: OkoDb,
   instanceId: string,
@@ -122,24 +145,17 @@ export class CollectionUnitsController {
   @RequirePsdPermissions("tech.configure")
   async upsert(
     @Param("zid") zidRaw: string,
-    @Body()
-    body: {
-      name: string;
-      code?: string | null;
-      parentZid?: number | null;
-      unitKind?: CollectionUnitKind;
-      headZid?: number | null;
-      branchCode?: string | null;
-      unitCode?: string | null;
-      guid?: string | null;
-      headCode?: string | null;
-    }
+    @Body() body: UpsertCollectionUnitDto
   ) {
     const zid = Number(zidRaw);
     if (!Number.isFinite(zid) || !body?.name) {
       throw new BadRequestException({ error: "zid and name required" });
     }
-    return upsertCollectionUnit(await getDb(), { zid, ...body });
+    return upsertCollectionUnit(await getDb(), {
+      zid,
+      ...body,
+      unitKind: body.unitKind as CollectionUnitKind | undefined,
+    });
   }
 }
 
@@ -166,25 +182,7 @@ export class KontrVersionsController {
   @RequirePsdPermissions("nsi.write")
   async createVersion(
     @Param("id") idRaw: string,
-    @Body()
-    body: {
-      validFrom?: string | null;
-      validTo?: string | null;
-      fields: {
-        name: string;
-        oldName?: string | null;
-        inn?: string | null;
-        kpp?: string | null;
-        ogrn?: string | null;
-        orgForm?: string | null;
-        orgType?: number | null;
-        mandatoryRash?: boolean;
-        country?: string | null;
-        city?: string | null;
-        idObdnsi?: string | null;
-        card?: Record<string, unknown>;
-      };
-    },
+    @Body() body: CreateKontrVersionDto,
     @ReqUser() user?: SessionUser
   ) {
     if (!body?.fields?.name) throw new BadRequestException({ error: "fields.name required" });
@@ -206,7 +204,7 @@ export class KontrVersionsController {
   @Post(":id/archive")
   @HttpCode(200)
   @RequirePsdPermissions("nsi.write")
-  async archive(@Param("id") idRaw: string, @Body() body: { force?: boolean }) {
+  async archive(@Param("id") idRaw: string, @Body() body: ArchiveKontrDto) {
     return archiveKontragent(await getDb(), Number(idRaw), !!body?.force);
   }
 
@@ -221,7 +219,7 @@ export class KontrVersionsController {
   async updateCard(
     @Param("id") idRaw: string,
     @Param("section") section: string,
-    @Body() body: { data: Record<string, unknown> },
+    @Body() body: UpdateKontrCardDto,
     @ReqUser() user?: SessionUser
   ) {
     if (!["basic", "requisites", "perimeter"].includes(section)) {
@@ -301,12 +299,9 @@ export class PsdChecksController {
   @HttpCode(200)
   @RequirePsdPermissions("forms.read")
   async runPackage(
-    @Body() body: { zid: number; eid: number; packageKind?: string },
+    @Body() body: PackageZidEidKindDto,
     @ReqUser() user?: SessionUser
   ) {
-    if (!Number.isFinite(Number(body?.zid)) || !Number.isFinite(Number(body?.eid))) {
-      throw new BadRequestException({ error: "zid and eid required" });
-    }
     return runPackageChecks(await getDb(), {
       zid: Number(body.zid),
       eid: Number(body.eid),
@@ -318,8 +313,8 @@ export class PsdChecksController {
   @Post("dsl/parse")
   @HttpCode(200)
   @RequirePsdPermissions("forms.read")
-  parse(@Body() body: { expression: string }) {
-    return parseCheckDsl(body?.expression ?? "");
+  parse(@Body() body: ParseCheckDslDto) {
+    return parseCheckDsl(body.expression ?? "");
   }
 
   @Get("explanations")
@@ -341,15 +336,7 @@ export class PsdChecksController {
   @HttpCode(201)
   @RequirePsdPermissions("approval.explain")
   async upsertExplanation(
-    @Body()
-    body: {
-      zid: number;
-      eid: number;
-      packageKind?: string;
-      ruleNumber: number;
-      formId?: string | null;
-      explanation: string;
-    },
+    @Body() body: UpsertCheckExplanationDto,
     @ReqUser() user?: SessionUser
   ) {
     return upsertCheckExplanation(await getDb(), {
@@ -363,22 +350,7 @@ export class PsdChecksController {
   @HttpCode(201)
   @RequirePsdPermissions("forms.read")
   async journal(
-    @Body()
-    body: {
-      zid: number;
-      eid: number;
-      packageKind?: string;
-      results: Array<{
-        ruleNumber?: number | null;
-        checkType?: string | null;
-        passed: boolean;
-        leftValue?: number | null;
-        rightValue?: number | null;
-        message?: string | null;
-        formId?: string | null;
-        requiresExplanation?: boolean;
-      }>;
-    },
+    @Body() body: AppendCheckJournalDto,
     @ReqUser() user?: SessionUser
   ) {
     return appendCheckRunJournal(await getDb(), {
@@ -386,7 +358,7 @@ export class PsdChecksController {
       eid: body.eid,
       packageKind: normalizePackageKind(body.packageKind),
       actor: user?.username ?? null,
-      results: body.results ?? [],
+      results: (body.results ?? []) as Parameters<typeof appendCheckRunJournal>[1]["results"],
     });
   }
 
@@ -432,16 +404,7 @@ export class PsdChecksController {
   @HttpCode(201)
   @RequirePsdPermissions("tech.configure")
   async upsertDslRule(
-    @Body()
-    body: {
-      code: string;
-      expression: string;
-      packageKind?: string;
-      requiresExplanation?: boolean;
-      active?: boolean;
-      note?: string | null;
-      sortOrder?: number;
-    }
+    @Body() body: UpsertCheckDslRuleDto
   ) {
     const { upsertCheckDslRule } = await import("../../../domain/src/checkDslRules.js");
     return upsertCheckDslRule(await getDb(), {
@@ -454,7 +417,7 @@ export class PsdChecksController {
   @HttpCode(200)
   @RequirePsdPermissions("forms.read")
   async runDsl(
-    @Body() body: { zid: number; eid: number; packageKind?: string },
+    @Body() body: PackageZidEidKindDto,
     @ReqUser() user?: SessionUser
   ) {
     const { runPackageDslChecks } = await import("../../../domain/src/checkDslRules.js");
@@ -483,7 +446,7 @@ export class SupportReportsController {
   @HttpCode(200)
   @RequirePsdPermissions("reports.build", "forms.read")
   async run(
-    @Body() body: { code: string; zid?: number; eid?: number; locale?: "ru" | "en" }
+    @Body() body: RunSupportReportDto
   ) {
     const { runSupportReport } = await import("../../../domain/src/supportReports.js");
     try {
@@ -511,14 +474,7 @@ export class SvodsController {
   @HttpCode(201)
   @RequirePsdPermissions("tech.configure")
   async create(
-    @Body()
-    body: {
-      eid: number;
-      packageKind?: string;
-      code: string;
-      name: string;
-      members?: Array<Record<string, unknown>>;
-    },
+    @Body() body: CreateSvodDefinitionDto,
     @ReqUser() user?: SessionUser
   ) {
     return createSvodDefinition(await getDb(), {
@@ -547,13 +503,13 @@ export class SvodsController {
 
   @Post(":id/copy-previous")
   @RequirePsdPermissions("tech.configure")
-  async copyPrevious(@Param("id") sourceSvodId: string, @Body() body: { targetEid: number }, @ReqUser() user?: SessionUser) {
+  async copyPrevious(@Param("id") sourceSvodId: string, @Body() body: CopySvodPreviousDto, @ReqUser() user?: SessionUser) {
     return copySvodFromPreviousPeriod(await getDb(), { sourceSvodId, targetEid: Number(body.targetEid), createdBy: user?.username ?? null });
   }
 
   @Post(":id/calculate")
   @RequirePsdPermissions("reports.build", "forms.read")
-  async calculate(@Param("id") svodId: string, @Body() body: { eid: number; packageKind?: string }) {
+  async calculate(@Param("id") svodId: string, @Body() body: CalculateSvodDto) {
     return calculateSvod(await getDb(), { svodId, eid: Number(body.eid), packageKind: normalizePackageKind(body.packageKind) });
   }
 
@@ -579,7 +535,7 @@ export class TransfersController {
   @HttpCode(201)
   @UseGuards(AdminGuard)
   @RequirePsdPermissions("tech.configure")
-  async bulk(@Body() body: { items: Array<Record<string, unknown>> }) {
+  async bulk(@Body() body: BulkItemsDto) {
     return bulkUpsertTransferMaps(await getDb(), (body.items ?? []) as never);
   }
 
@@ -588,13 +544,12 @@ export class TransfersController {
   @RequirePsdPermissions("tech.configure", "forms.write")
   @ApiOperation({ summary: "Применить transfer_maps: копирование числовых ячеек между пакетами" })
   async apply(
-    @Body()
-    body: Record<string, unknown>,
+    @Body() body: TransferApplyDto,
     @ReqUser() user?: SessionUser
   ) {
     let parsed: ReturnType<typeof parseTransferApplyBody>;
     try {
-      parsed = parseTransferApplyBody(body);
+      parsed = parseTransferApplyBody(body as unknown as Record<string, unknown>);
     } catch (e) {
       if (e instanceof DtoValidationError) {
         throw new BadRequestException({ error: e.message, issues: e.issues });
@@ -634,14 +589,14 @@ export class MinfinController {
   @Post("mappings/bulk")
   @HttpCode(201)
   @RequirePsdPermissions("tech.configure")
-  async bulk(@Body() body: { items: Array<Record<string, unknown>> }) {
+  async bulk(@Body() body: BulkItemsDto) {
     return bulkUpsertMinfinMappings(await getDb(), (body.items ?? []) as never);
   }
 
   @Post("export")
   @HttpCode(200)
   @RequirePsdPermissions("reports.build")
-  async export(@Body() body: { eid: number; zid: number; templateName?: string }) {
+  async export(@Body() body: MinfinExportDto) {
     if (body?.eid == null || body?.zid == null) {
       throw new BadRequestException({ error: "zid and eid required" });
     }
@@ -679,17 +634,7 @@ export class CellCommentsController {
   @HttpCode(201)
   @RequirePsdPermissions("forms.write")
   async upsert(
-    @Body()
-    body: {
-      instanceId: string;
-      formId: string;
-      rowNo: number;
-      columnKey: string;
-      amount?: number | null;
-      articleCode?: string | null;
-      kontrId?: number | null;
-      freeText?: string | null;
-    },
+    @Body() body: UpsertCellCommentDto,
     @ReqUser() user?: SessionUser,
     @ApiRoleParam() apiRole?: ApiRole
   ) {
@@ -740,7 +685,7 @@ export class IntegrationsController {
   @HttpCode(201)
   @RequirePsdPermissions("forms.write")
   async receiveDo(
-    @Body() body: { filename: string; payload: string; sha256?: string },
+    @Body() body: ReceiveDoInboxDto,
     @ReqUser() user?: SessionUser
   ) {
     const adapter = new StubDoXmlTransport(await getDb());
@@ -755,7 +700,7 @@ export class IntegrationsController {
   @Post("sap/consolidate")
   @HttpCode(200)
   @RequirePsdPermissions("tech.configure")
-  async sap(@Body() body: { eid: number; svodId: string; packageKind?: string }) {
+  async sap(@Body() body: SapConsolidateDto) {
     const adapter = new StubSapConsolidationAdapter();
     return adapter.consolidate({
       eid: body.eid,
@@ -767,7 +712,7 @@ export class IntegrationsController {
   @Post("eds/sign")
   @HttpCode(200)
   @RequirePsdPermissions("tech.configure")
-  async eds(@Body() body: { filename: string; payloadBase64: string }, @ReqUser() user?: SessionUser) {
+  async eds(@Body() body: EdsSignDto, @ReqUser() user?: SessionUser) {
     const adapter = new StubEdsSigningAdapter();
     return adapter.sign({
       filename: body.filename,

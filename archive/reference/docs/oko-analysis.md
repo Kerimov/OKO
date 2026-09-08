@@ -2,7 +2,7 @@
 
 > Документ создан по результатам анализа исходного комплекта (июнь 2026).
 
-См. также: [docs/AUDIT-OVERVIEW.md](../../docs/AUDIT-OVERVIEW.md) · [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
+См. также: [archive/docs/AUDIT-OVERVIEW.md](../../docs/AUDIT-OVERVIEW.md) · [archive/docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
 
 ---
 
@@ -34,7 +34,7 @@
 
 ```
 oko-project/
-├── docs/
+├── archive/docs/
 │   └── oko-analysis.md      ← этот файл
 ├── src/                     ← ваш код (аналог ОКО)
 └── reference/               ← файлы ОКО (не коммитить в git)

@@ -1,12 +1,13 @@
 {
-  "name": "oko-server-nest",
+  "name": "oko-api",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "tsx --test src/common/domain-error.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",

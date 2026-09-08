@@ -13,7 +13,7 @@ cp .env.prod.example .env.prod
 | Сервис | Назначение |
 |--------|------------|
 | `postgres` | PostgreSQL 16 — единственное хранилище prod |
-| `api` | NestJS API (`server-nest`, Swagger `/api/docs`) |
+| `api` | NestJS API (`web/api`, Swagger `/api/docs`) |
 | `web` | Статика портала + прокси `/api` → `api:3001` |
 
 Порт по умолчанию: **8080** (`OKO_HTTP_PORT` в `.env.prod`).
@@ -42,10 +42,10 @@ TLS: терминируйте на внешнем Angie/Nginx или добав�
 
 | Компонент | Где хостить | Примечание |
 |-----------|-------------|------------|
-| **Портал** (`portal/`) | Vercel, Netlify, nginx | Статика, Root Directory: `portal` |
-| **API** (`server-nest` + домен `server/`) | Render, Railway, Docker | PostgreSQL (prod) или SQLite (dev) |
+| **Портал** (`web/portal/`) | Vercel, Netlify, nginx | Статика, Root Directory: `web/portal` |
+| **API** (`web/api` + домен `web/domain/`) | Render, Railway, Docker | PostgreSQL (prod) или SQLite (dev) |
 
-Портал на Vercel **не** запускает API. Нужен отдельный хост с `docker compose` или `npm start` в `server/`.
+Портал на Vercel **не** запускает API. Нужен отдельный хост с `docker compose` или `npm start` в `web/domain/`.
 
 ---
 
@@ -74,14 +74,14 @@ curl -s https://your-api.onrender.com/api/health
 ```bash
 docker compose --profile postgres up -d
 export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
-cd server-nest && npm run dev
+cd web/api && npm run dev
 ```
 
 ---
 
 ## Desktop kits
 
-`desktop/tauri` хранит комплект в **отдельном** `oko.db` сетевой папки — это не API SoT.
+`desktop` хранит комплект в **отдельном** `oko.db` сетевой папки — это не API SoT.
 
 ---
 
@@ -135,7 +135,7 @@ VITE_API_URL=https://oko-api.example.com npm run build
 ```
 
 3. На Vercel: Environment Variable `VITE_API_URL` = URL API.
-4. CORS на API уже включён в Nest/`legacy-routes`. При необходимости ограничьте origin в `server/src/legacy-routes.ts` или `server-nest/src/main.ts`.
+4. CORS на API уже включён в Nest/`legacy-routes`. При необходимости ограничьте origin в `web/domain/src/legacy-routes.ts` или `web/api/src/main.ts`.
 
 Локально без `VITE_API_URL` прокси Vite направляет `/api` → `localhost:3001`.
 
@@ -154,7 +154,7 @@ VITE_API_URL=https://oko-api.example.com npm run build
 
 ```bash
 # Node 22+
-cd server-nest && npm ci && npm start
+cd web/api && npm ci && npm start
 # (доменный пакет: npm ci в server/ тоже, если ставите вручную)
 ```
 

@@ -1,6 +1,6 @@
 # Access `txt2026-1KV.TXT` → портал / Tauri
 
-Опора: руководство пользователя из `12345/txt2026-1KV.TXT` (cp1251) и анализ `reference/docs/oko-analysis.md`.
+Опора: руководство пользователя из `12345/txt2026-1KV.TXT` (cp1251) и анализ `archive/reference/docs/oko-analysis.md`.
 
 Легенда статуса: **есть** · **partial** · **нет** · **иначе** (другая модель, не клон Access).
 
@@ -11,7 +11,7 @@
 | Портал (организация) | `/package`, `/my`, `/catalog`, `/my/:id`, `/settings`, `/instructions` |
 | Портал (ЦО / admin) | `/tools`, `/admin/*`, `/admin/packages`, `/admin/users` |
 | Десктоп Tauri | Welcome → Package → Form; Admin; Assignments; PIN/backup/export |
-| API | Nest `server-nest` + домен `server/` |
+| API | Nest `web/api` + домен `web/domain/` |
 
 ---
 
@@ -48,7 +48,7 @@
 | C2 | Пороги расшифровки (1 тыс / 5 млн / 50 млн, ПРОЧИЕ, обяз.расшифровка) | rash-rules + проверка расшифровок на форме | rash + «Проверить расшифровки» | **есть** (логика из MDB; методика в инструкции) |
 | C3 | Многоколоночные расшифровки → итог в графу/строку | rash modal / t_ras sync | то же | **есть** |
 | C4 | Справочник контрагентов `[...]`, фильтры ВГ/assoc | KontrInput + `kontr.json`; админ `/admin/kontr` | bundled kontr (read-only); корпус из sample `z261.m_b` (~13) без полного production refs | **partial** (корпус < Access refs) |
-| C5 | Кнопка «Справка» / руководство | `/instructions` (+ `docs/PORTAL-GUIDE.md`) | `/help` + ссылка на Welcome/sidebar; user-guide MD | **есть** (не Access F1 per-form) |
+| C5 | Кнопка «Справка» / руководство | `/instructions` (+ `archive/docs/PORTAL-GUIDE.md`) | `/help` + ссылка на Welcome/sidebar; user-guide MD | **есть** (не Access F1 per-form) |
 | C6 | F1 — увязки текущей формы | «Проверить форму» + панель увязок | «Проверить форму» | **есть** (не горячая F1) |
 | C7 | F11 — меню формы | toolbar формы (Excel, PDF, пересчёт, сдать…) | toolbar: Excel + **PDF** + проверки / сдача | **есть** |
 | C8 | Суммы филиалов на головную (методика) | методика в инструкции; движок не меняет юр.модель | то же | **есть** как правило заполнения |

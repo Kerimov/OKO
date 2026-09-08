@@ -1,0 +1,309 @@
+/* Settings + login (from index.css) */
+
+/* Settings */
+.settings-page {
+  max-width: 560px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow-card);
+}
+
+.settings-page h1 {
+  font-size: 1.25rem;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.settings-desc {
+  color: var(--muted);
+  margin-bottom: 1.25rem;
+}
+
+/* Login */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 440px);
+  align-items: stretch;
+  padding: 0;
+  background: var(--bg);
+}
+
+.login-brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3.5rem 4rem;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 70% 20%, rgba(255, 255, 255, 0.18), transparent 55%),
+    linear-gradient(160deg, #0b6eaa 0%, #074a74 55%, #0b1f33 100%);
+  color: #fff;
+}
+
+.login-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: 18% 12% auto auto;
+  width: min(380px, 50vw);
+  height: min(380px, 50vw);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 40% 60% 55% 45%;
+  pointer-events: none;
+}
+
+.login-brand-mark {
+  font-family: var(--font-display);
+  font-size: clamp(3.5rem, 8vw, 5.25rem);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.login-brand-tagline {
+  font-size: 1.15rem;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 18rem;
+  line-height: 1.4;
+  font-weight: 500;
+  position: relative;
+}
+
+.login-brand-note {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 22rem;
+  position: relative;
+}
+
+.login-card {
+  width: 100%;
+  max-width: none;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  padding: 2.75rem 2.5rem;
+  box-shadow: none;
+}
+
+.login-card h1 {
+  display: none;
+}
+
+.login-card-heading {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.35rem;
+  letter-spacing: -0.02em;
+}
+
+.login-desc {
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+  font-size: 0.92rem;
+}
+
+.login-form label {
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.login-form input {
+  width: 100%;
+  margin-top: 0.4rem;
+  height: 2.7rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.login-form .btn-primary {
+  width: 100%;
+  height: 2.75rem;
+  margin-top: 0.35rem;
+  border-radius: 12px;
+}
+
+.login-dev-hint {
+  margin-top: 1.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.login-dev-hint summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.login-dev-hint p {
+  margin-top: 0.65rem;
+  line-height: 1.45;
+}
+
+.login-dev-hint code {
+  font-size: 0.78rem;
+  background: var(--accent-soft);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+@media (max-width: 820px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-brand-panel {
+    padding: 2.5rem 1.5rem 1.5rem;
+    min-height: auto;
+  }
+
+  .login-brand-mark {
+    font-size: 3rem;
+  }
+
+  .login-card {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 2rem 1.5rem 2.5rem;
+  }
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.saved-msg {
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.loading,
+.empty {
+  text-align: center;
+  padding: 3rem;
+  color: var(--muted);
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-color: #e8eef5;
+  }
+  50% {
+    background-color: #f3f6fa;
+  }
+  100% {
+    background-color: #e8eef5;
+  }
+}
+
+.skeleton-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.skeleton-hero,
+.skeleton-hero-compact,
+.skeleton-toolbar,
+.skeleton-card,
+.skeleton-row {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+.skeleton-hero {
+  height: 5.5rem;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-hero-compact {
+  height: 3.5rem;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-toolbar {
+  height: 3.25rem;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.skeleton-card {
+  height: 8.5rem;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  box-shadow: var(--shadow-card);
+}
+
+.skeleton-row {
+  height: 2.4rem;
+}
+
+.page {
+  max-width: 100%;
+}
+
+.page > h1 {
+  margin-bottom: 0.35rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.ok {
+  color: var(--success);
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}

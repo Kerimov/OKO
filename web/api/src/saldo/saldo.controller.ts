@@ -17,18 +17,20 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { getDb } from "../../../domain/src/db.js";
 import {
-  dtoToRow as saldoDtoToRow,
+  createSaldoRule,
+  deleteSaldoRule,
   exportFormCorrespondencePayload,
   exportSaldoPayload,
   getFormCorrespondence,
+  getSaldoRule,
   getSaldoStats,
+  listSaldoRules,
   reimportFormCorrespondenceFromJson,
   reimportSaldoRulesFromJson,
-  rowToDto as saldoRowToDto,
   updateFormCorrespondence,
+  updateSaldoRule,
   type FormCorrespondenceDto,
   type SaldoRuleDto,
-  type SaldoRuleRow,
 } from "../../../domain/src/saldo.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
@@ -36,7 +38,6 @@ import { AdminGuard } from "../auth/admin.guard.js";
 @ApiBearerAuth()
 @Controller()
 export class SaldoController {
-  // -------- saldo rules --------
   @Get("saldo/stats")
   @ApiOperation({ summary: "Статистика правил сальдо" })
   async stats() {
@@ -57,86 +58,27 @@ export class SaldoController {
   @ApiQuery({ name: "formId", required: false })
   @ApiQuery({ name: "saldoType", required: false, description: "t|s|g" })
   async list(
-    @Query("limit") limitRaw?: string,
-    @Query("offset") offsetRaw?: string,
-    @Query("q") qRaw?: string,
-    @Query("formId") formIdRaw?: string,
-    @Query("saldoType") saldoTypeRaw?: string
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+    @Query("q") q?: string,
+    @Query("formId") formId?: string,
+    @Query("saldoType") saldoType?: string
   ) {
-    const db = await getDb();
-    const limit = Math.min(Number(limitRaw) || 50, 500);
-    const offset = Number(offsetRaw) || 0;
-    const q = String(qRaw ?? "").trim();
-    const formId = String(formIdRaw ?? "").trim();
-    const saldoType = String(saldoTypeRaw ?? "").trim();
-
-    const conditions: string[] = [];
-    const params: (string | number)[] = [];
-
-    if (q) {
-      conditions.push(
-        "(CAST(number AS TEXT) LIKE ? OR name LIKE ? OR target_form LIKE ? OR source_form LIKE ?)"
-      );
-      const like = `%${q}%`;
-      params.push(like, like, like, like);
-    }
-    if (formId) {
-      conditions.push("(target_form = ? OR source_form = ?)");
-      params.push(formId, formId);
-    }
-    if (saldoType === "t") {
-      conditions.push(
-        "(saldo_t = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
-      );
-    }
-    if (saldoType === "s") {
-      conditions.push(
-        "(saldo_s = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
-      );
-    }
-    if (saldoType === "g") {
-      conditions.push(
-        "(saldo_g = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND end_column IS NOT NULL AND end_row IS NOT NULL))"
-      );
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const total = (
-      (await db.prepare(`SELECT COUNT(*) AS c FROM saldo_rules ${where}`).get(...params)) as {
-        c: number;
-      }
-    ).c;
-
-    const rows = (await db
-      .prepare(
-        `SELECT number, target_form, target_column, target_row,
-                source_form, source_column, source_row,
-                end_form, end_column, end_row,
-                saldo_t, saldo_s, saldo_g, name, conditional
-         FROM saldo_rules ${where}
-         ORDER BY number
-         LIMIT ? OFFSET ?`
-      )
-      .all(...params, limit, offset)) as SaldoRuleRow[];
-
-    return { total, limit, offset, items: rows.map(saldoRowToDto) };
+    return listSaldoRules(await getDb(), {
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      q,
+      formId,
+      saldoType,
+    });
   }
 
   @Get("saldo/:number")
   @ApiOperation({ summary: "Правило сальдо по номеру" })
   async getOne(@Param("number") numberRaw: string) {
-    const db = await getDb();
-    const row = (await db
-      .prepare(
-        `SELECT number, target_form, target_column, target_row,
-                source_form, source_column, source_row,
-                end_form, end_column, end_row,
-                saldo_t, saldo_s, saldo_g, name, conditional
-         FROM saldo_rules WHERE number = ?`
-      )
-      .get(Number(numberRaw))) as SaldoRuleRow | undefined;
-    if (!row) throw new NotFoundException({ error: "Not found" });
-    return saldoRowToDto(row);
+    const item = await getSaldoRule(await getDb(), Number(numberRaw));
+    if (!item) throw new NotFoundException({ error: "Not found" });
+    return item;
   }
 
   @Post("saldo")
@@ -144,41 +86,12 @@ export class SaldoController {
   @HttpCode(201)
   @ApiOperation({ summary: "Создать правило сальдо (admin)" })
   async createSaldo(@Body() dto: SaldoRuleDto) {
-    if (!dto.number || !dto.targetForm?.trim()) {
-      throw new BadRequestException({ error: "number and targetForm required" });
-    }
-    const db = await getDb();
-    const r = saldoDtoToRow(dto);
     try {
-      await db
-        .prepare(
-          `INSERT INTO saldo_rules (
-            number, target_form, target_column, target_row,
-            source_form, source_column, source_row,
-            end_form, end_column, end_row,
-            saldo_t, saldo_s, saldo_g, name, conditional
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          r.number,
-          r.target_form,
-          r.target_column,
-          r.target_row,
-          r.source_form,
-          r.source_column,
-          r.source_row,
-          r.end_form,
-          r.end_column,
-          r.end_row,
-          r.saldo_t,
-          r.saldo_s,
-          r.saldo_g,
-          r.name,
-          r.conditional
-        );
-      return saldoRowToDto(r);
+      return await createSaldoRule(await getDb(), dto);
     } catch (e) {
-      throw new ConflictException({ error: e instanceof Error ? e.message : "insert failed" });
+      const msg = e instanceof Error ? e.message : "insert failed";
+      if (msg.includes("required")) throw new BadRequestException({ error: msg });
+      throw new ConflictException({ error: msg });
     }
   }
 
@@ -186,48 +99,17 @@ export class SaldoController {
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить правило сальдо (admin)" })
   async updateSaldo(@Param("number") numberRaw: string, @Body() dto: SaldoRuleDto) {
-    const number = Number(numberRaw);
-    const db = await getDb();
-    const r = saldoDtoToRow({ ...dto, number });
-    const result = await db
-      .prepare(
-        `UPDATE saldo_rules SET
-          target_form = ?, target_column = ?, target_row = ?,
-          source_form = ?, source_column = ?, source_row = ?,
-          end_form = ?, end_column = ?, end_row = ?,
-          saldo_t = ?, saldo_s = ?, saldo_g = ?, name = ?, conditional = ?
-         WHERE number = ?`
-      )
-      .run(
-        r.target_form,
-        r.target_column,
-        r.target_row,
-        r.source_form,
-        r.source_column,
-        r.source_row,
-        r.end_form,
-        r.end_column,
-        r.end_row,
-        r.saldo_t,
-        r.saldo_s,
-        r.saldo_g,
-        r.name,
-        r.conditional,
-        number
-      );
-    if (result.changes === 0) throw new NotFoundException({ error: "Not found" });
-    return saldoRowToDto(r);
+    const updated = await updateSaldoRule(await getDb(), Number(numberRaw), dto);
+    if (!updated) throw new NotFoundException({ error: "Not found" });
+    return updated;
   }
 
   @Delete("saldo/:number")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Удалить правило сальдо (admin)" })
   async deleteSaldo(@Param("number") numberRaw: string) {
-    const db = await getDb();
-    const result = await db
-      .prepare("DELETE FROM saldo_rules WHERE number = ?")
-      .run(Number(numberRaw));
-    if (result.changes === 0) throw new NotFoundException({ error: "Not found" });
+    const ok = await deleteSaldoRule(await getDb(), Number(numberRaw));
+    if (!ok) throw new NotFoundException({ error: "Not found" });
     return { ok: true as const };
   }
 
@@ -245,7 +127,6 @@ export class SaldoController {
     }
   }
 
-  // -------- form correspondence --------
   @Get("correspondence/export")
   @ApiOperation({ summary: "Экспорт form-correspondence" })
   async exportCorrespondence() {
@@ -283,4 +164,3 @@ export class SaldoController {
     }
   }
 }
-

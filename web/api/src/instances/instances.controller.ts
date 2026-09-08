@@ -21,6 +21,9 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger"
 import type { Request } from "express";
 import { getDb } from "../../../domain/src/db.js";
 import {
+  upsertPublicAppSettings,
+} from "../../../domain/src/appSettings.js";
+import {
   assertInstanceWritable,
   buildEvalSnapshotFromDb,
   deleteInstanceFromDb,
@@ -55,6 +58,7 @@ import {
   RequirePsdPermissions,
 } from "../auth/psd-permission.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
+import { InstancesBatchDto } from "./dto/batch.dto.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
   InstanceBulkStatusDto,
@@ -148,18 +152,11 @@ export class InstancesController {
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Пакетный импорт экземпляров (admin)" })
   async migrate(@Body() body: InstanceMigrateDto) {
+    const db = await getDb();
     if (body.settings) {
-      const db = await getDb();
-      const upsert = db.prepare(
-        "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-      );
-      for (const [key, value] of Object.entries(body.settings)) {
-        const stored = typeof value === "string" ? value : JSON.stringify(value);
-        await upsert.run(key, stored);
-      }
+      await upsertPublicAppSettings(db, body.settings);
     }
     let count = 0;
-    const db = await getDb();
     for (const inst of (body.instances ?? []) as unknown as OkoFormInstance[]) {
       await upsertInstance(db, inst);
       count++;
@@ -226,7 +223,7 @@ export class InstancesController {
   })
   async batch(
     @Req() req: OkoRequest,
-    @Body() body: { instances?: OkoFormInstance[] }
+    @Body() body: InstancesBatchDto
   ) {
     if (!Array.isArray(body?.instances) || body.instances.length === 0) {
       throw new BadRequestException({ error: "instances required" });

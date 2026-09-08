@@ -15,7 +15,7 @@
 
 ### Added
 - Встроенная страница **Инструкция** (`/instructions`) с вкладками по ролям.
-- Полное руководство `docs/PORTAL-GUIDE.md`.
+- Полное руководство `archive/docs/PORTAL-GUIDE.md`.
 - Массовое удаление форм на **Мои формы**.
 - Панель редактирования пользователя в админке.
 
@@ -36,7 +36,7 @@
 
 ### Added
 - Поддержка **PostgreSQL** (`data/schema.postgresql.sql`, `OkoDb` abstraction).
-- Деплой API на Render, портал на Vercel (`docs/DEPLOY.md`).
+- Деплой API на Render, портал на Vercel (`archive/docs/DEPLOY.md`).
 - Docker Compose с профилем `postgres`.
 
 ### Changed

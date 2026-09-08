@@ -342,3 +342,81 @@ export class UpdateUserDto {
   @IsBoolean()
   active?: boolean;
 }
+
+export class ClosePeriodDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  requireAccepted?: boolean;
+}
+
+export class DistributeDto {
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Type(() => Number)
+  parentZid!: number;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Type(() => Number)
+  sourceEid!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  createEmptyPackages?: boolean;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  childZids?: number[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  fallbackAllOthers?: boolean;
+}
+
+export class CreatePeriodsBulkDto {
+  @ApiPropertyOptional({ type: [Number], description: "Организации; пусто = все" })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  zids?: number[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Type(() => Number)
+  quarter!: number;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Type(() => Number)
+  year!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  periodStart?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  periodEnd?: string;
+
+  @ApiPropertyOptional({ enum: ["OKO", "BALANCE"] })
+  @IsOptional()
+  @IsString()
+  packageKind?: "OKO" | "BALANCE";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  reuseExisting?: boolean;
+}

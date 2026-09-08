@@ -32,65 +32,10 @@ import {
   RequirePsdPermissions,
 } from "../auth/psd-permission.guard.js";
 import {
-  IsArray,
-  IsBoolean,
-  IsInt,
-  IsOptional,
-  IsString,
-  MaxLength,
-  ValidateNested,
-  ArrayMaxSize,
-  ArrayMinSize,
-} from "class-validator";
-import { Type } from "class-transformer";
-
-class KontrBulkItemDto {
-  @IsOptional()
-  @IsInt()
-  id?: number | null;
-
-  @IsString()
-  @MaxLength(500)
-  name!: string;
-
-  @IsOptional()
-  @IsString()
-  oldName?: string | null;
-
-  @IsOptional()
-  @IsString()
-  inn?: string | null;
-
-  @IsOptional()
-  @IsString()
-  kpp?: string | null;
-
-  @IsOptional()
-  @IsInt()
-  orgType?: number | null;
-
-  @IsOptional()
-  @IsString()
-  idObdnsi?: string | null;
-
-  @IsOptional()
-  @IsString()
-  orgForm?: string | null;
-
-  @IsOptional()
-  @IsBoolean()
-  mandatoryRash?: boolean;
-}
-
-class KontrBulkBodyDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(5000)
-  @ValidateNested({ each: true })
-  @Type(() => KontrBulkItemDto)
-  items!: KontrBulkItemDto[];
-}
-
+  KontrBulkBodyDto,
+  RenameKontrAgentDto,
+  UpdateKontrAgentDto,
+} from "./dto/kontr.dto.js";
 @ApiTags("kontr")
 @ApiBearerAuth()
 @UseGuards(PsdPermissionGuard)
@@ -186,7 +131,7 @@ export class KontrController {
   @ApiOperation({ summary: "Обновить контрагента" })
   async update(
     @Param("id", ParseIntPipe) id: number,
-    @Body() body: Partial<Omit<KontrAgentDto, "id">>
+    @Body() body: UpdateKontrAgentDto
   ) {
     try {
       return await updateKontrAgent(await getDb(), id, body);
@@ -202,7 +147,7 @@ export class KontrController {
   @ApiOperation({ summary: "Переименовать: имя → oldName, новое имя (N99)" })
   async rename(
     @Param("id", ParseIntPipe) id: number,
-    @Body() body: { name?: string }
+    @Body() body: RenameKontrAgentDto
   ) {
     if (!body.name?.trim()) {
       throw new BadRequestException({ error: "name required" });

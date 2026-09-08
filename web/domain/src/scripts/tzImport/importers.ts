@@ -14,7 +14,9 @@ export type Reject = { sheet: string; row?: number; reason: string };
 export type Preview = { accepted: number; rejects: Reject[]; byKind: Record<string, number> };
 const text = (v: unknown) => String(v ?? "").trim();
 const yes = (v: unknown) => ["да", "+", "true", "1", "x", "х"].includes(text(v).toLowerCase());
-function excel() { return require("../../../../web/portal/node_modules/exceljs") as { Workbook: new () => any }; }
+function excel() {
+  return require("exceljs") as { Workbook: new () => any };
+}
 function assertHeaders(ws: any, row: number, expected: string[], rejects: Reject[]) {
   const got = expected.map((_, i) => text(ws.getRow(row).getCell(i + 1).value));
   if (expected.some((x, i) => got[i] !== x)) { rejects.push({ sheet: ws.name, row, reason: `header mismatch: expected ${expected.join(" | ")}, got ${got.join(" | ")}` }); return false; }

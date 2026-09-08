@@ -83,27 +83,6 @@ export async function backfillCheckRuleForms(db: OkoDb): Promise<number> {
   return n;
 }
 
-export async function migrateCheckRulesTable(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("check_rules", "first_level"))) {
-    await db.exec("ALTER TABLE check_rules ADD COLUMN first_level INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("check_rules", "period"))) {
-    await db.exec("ALTER TABLE check_rules ADD COLUMN period TEXT");
-  }
-  if (!(await db.columnExists("check_rules", "info"))) {
-    await db.exec("ALTER TABLE check_rules ADD COLUMN info TEXT");
-  }
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS check_rule_forms (
-      rule_number INTEGER NOT NULL REFERENCES check_rules(number) ON DELETE CASCADE,
-      form_id TEXT NOT NULL,
-      PRIMARY KEY (rule_number, form_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_check_rule_forms_form ON check_rule_forms(form_id);
-    CREATE INDEX IF NOT EXISTS idx_check_rules_active_period
-      ON check_rules(active, period_active, number);
-  `);
-}
 
 export function rowToDto(row: CheckRuleRow): CheckRuleDto {
   return {
@@ -297,6 +276,73 @@ export async function getCheckRuleByNumber(
     )
     .get(number)) as CheckRuleRow | undefined;
   return row ? rowToDto(row) : null;
+}
+
+export async function createCheckRule(db: OkoDb, dto: CheckRuleDto): Promise<CheckRuleDto> {
+  if (!dto.number || !dto.expression?.trim()) {
+    throw Object.assign(new Error("number and expression required"), { status: 400 });
+  }
+  const r = dtoToRow(dto);
+  await db
+    .prepare(
+      `INSERT INTO check_rules (
+        number, expression, expression_alt, message,
+        for_aggr_only, first_level, active, period_active, period, info
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      r.number,
+      r.expression,
+      r.expression_alt,
+      r.message,
+      r.for_aggr_only,
+      r.first_level,
+      r.active,
+      r.period_active,
+      r.period,
+      r.info
+    );
+  await syncCheckRuleForms(db, r.number, r.expression, r.expression_alt);
+  return rowToDto(r);
+}
+
+export async function updateCheckRule(
+  db: OkoDb,
+  number: number,
+  dto: CheckRuleDto
+): Promise<CheckRuleDto | null> {
+  if (dto.number !== number) {
+    throw Object.assign(new Error("number mismatch"), { status: 400 });
+  }
+  const r = dtoToRow(dto);
+  const result = await db
+    .prepare(
+      `UPDATE check_rules SET
+        expression = ?, expression_alt = ?, message = ?,
+        for_aggr_only = ?, first_level = ?, active = ?, period_active = ?,
+        period = ?, info = ?
+       WHERE number = ?`
+    )
+    .run(
+      r.expression,
+      r.expression_alt,
+      r.message,
+      r.for_aggr_only,
+      r.first_level,
+      r.active,
+      r.period_active,
+      r.period,
+      r.info,
+      number
+    );
+  if (result.changes === 0) return null;
+  await syncCheckRuleForms(db, number, r.expression, r.expression_alt);
+  return rowToDto(r);
+}
+
+export async function deleteCheckRule(db: OkoDb, number: number): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM check_rules WHERE number = ?").run(number);
+  return result.changes > 0;
 }
 
 export async function exportChecksPayload(db: OkoDb) {

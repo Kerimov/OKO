@@ -38,8 +38,8 @@ docker compose up -d postgres
 
 ```bash
 export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
-cd server-nest && npm install && npm run dev
-cd portal && npm install && npm run dev
+cd web/api && npm install && npm run dev
+cd web/portal && npm install && npm run dev
 ```
 
 Vite проксирует `/api` на `localhost:3001` (см. `portal/vite.config.ts`).
@@ -62,10 +62,10 @@ OKO_BOOTSTRAP_ADMIN_PASSWORD=admin123
 ## Структура работы
 
 ```
-portal/src/pages/     — экраны + маршрут в App.tsx
-portal/src/engine/    — UI-обёртки; ядро увязок в packages/engine (@oko/engine)
-server-nest/src/      — Nest-контроллеры / модули
-server/src/           — домен (БД, проверки, instances) — без новых Express-роутов
+web/portal/src/pages/     — экраны + маршрут в App.tsx
+web/portal/src/engine/    — UI-обёртки; ядро увязок в packages/engine (@oko/engine)
+web/api/src/      — Nest-контроллеры / модули
+web/domain/src/           — домен (БД, проверки, instances) — без новых Express-роутов
 packages/engine/      — общий движок увязок
 data/                 — схема БД (postgresql; schema.sql — справка)
 ```
@@ -74,7 +74,7 @@ data/                 — схема БД (postgresql; schema.sql — справ
 
 - TypeScript strict, ES modules (`"type": "module"`).
 - Имена файлов: `PascalCase` для React-компонентов, `camelCase` для утилит.
-- API: HTTP в `server-nest`, домен в `server/src/*.ts`.
+- API: HTTP в `web/api`, домен в `web/domain/src/*.ts`.
 - Коммиты на английском, повелительное наклонение: `Add …`, `Fix …`.
 
 Подробнее: [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -95,7 +95,7 @@ data/                 — схема БД (postgresql; schema.sql — справ
 ```bash
 docker compose up -d postgres
 export DATABASE_URL=postgresql://oko:oko@localhost:5432/oko
-cd server-nest && npm run dev
+cd web/api && npm run dev
 ```
 
 API требует PostgreSQL. Offline desktop kits используют файл `oko.db` в папке комплекта (Tauri).
@@ -134,7 +134,7 @@ docker compose up -d --build
 ### Десктоп Tauri (пилот)
 
 ```bash
-cd desktop/tauri
+cd desktop
 npm ci
 npm run build:tauri          # установщик текущей ОС
 # macOS: npm run build:tauri:dmg
@@ -180,5 +180,5 @@ python3 scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seconds 20
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [DEPLOY.md](DEPLOY.md)
 - [portal/README.md](../portal/README.md)
-- [server-nest/README.md](../server-nest/README.md)
+- [web/api/README.md](../web/api/README.md)
 - [server/README.md](../server/README.md)

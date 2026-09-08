@@ -130,6 +130,9 @@ jobs:
       - name: Typecheck Nest
         working-directory: web/api
         run: npm run build
+      - name: API unit tests
+        working-directory: web/api
+        run: npm test
 
   corpus-and-secrets:
     runs-on: ubuntu-latest

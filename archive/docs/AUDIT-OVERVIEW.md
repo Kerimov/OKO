@@ -37,7 +37,7 @@
 
 ## 2. Этапы разработки
 
-Разработка велась **поэтапно** с фиксацией планов в `docs/PHASE2-PLAN.md` и `docs/PHASE3-PLAN.md`.
+Разработка велась **поэтапно** с фиксацией планов в `archive/docs/PHASE2-PLAN.md` и `archive/docs/PHASE3-PLAN.md`.
 
 ### Phase 1 — MVP портала (начало)
 
@@ -54,9 +54,9 @@
 
 | Результат | Описание |
 |-----------|----------|
-| Express API | `server/` — REST, SQLite |
+| Express API | `web/domain/` — REST, SQLite |
 | Редакторы | Увязки, формы, сальдо, Excel — `/admin/*` |
-| Движок проверок | `portal/src/engine/checkEngine.ts` — 3600+ правил |
+| Движок проверок | `web/portal/src/engine/checkEngine.ts` — 3600+ правил |
 | Fallback | Портал работает без API (JSON + localStorage) |
 
 **Коммит:** `63483af` — SQLite API, checks engine, admin tools.
@@ -80,7 +80,7 @@
 |-----------|----------|
 | PostgreSQL | Постоянное хранение на Render (`14b6761`) |
 | Docker | `Dockerfile`, `docker-compose.yml` |
-| Деплой | Vercel (портал) + Render (API) — `docs/DEPLOY.md` |
+| Деплой | Vercel (портал) + Render (API) — `archive/docs/DEPLOY.md` |
 | UI | Боковое меню, страница входа на `/` |
 
 ### Доработки UX и документации (2026)
@@ -90,7 +90,7 @@
 | Авторизация | Единый `useAuth`, исправление рассинхрона UI |
 | Админка | Редактирование пользователей, массовое удаление форм |
 | Инструкция | Встроенная в портал (`/instructions`), роль-based |
-| Документация | Полное руководство `docs/PORTAL-GUIDE.md` |
+| Документация | Полное руководство `archive/docs/PORTAL-GUIDE.md` |
 
 ---
 
@@ -100,9 +100,9 @@
 
 | Компонент | Технологии | Назначение |
 |-----------|------------|------------|
-| `portal/` | React 19, Vite, TypeScript | Пользовательский интерфейс |
-| `server/` | Express, TypeScript, pg / SQLite | API, авторизация, БД |
-| `portal/src/engine/` | TypeScript | Бизнес-логика на клиенте (проверки, пересчёт, сальдо) |
+| `web/portal/` | React 19, Vite, TypeScript | Пользовательский интерфейс |
+| `web/domain/` | Express, TypeScript, pg / SQLite | API, авторизация, БД |
+| `web/portal/src/engine/` | TypeScript | Бизнес-логика на клиенте (проверки, пересчёт, сальдо) |
 | `portal/public/schemas/` | JSON | 76 шаблонов форм |
 | `portal/public/data/` | JSON | Правила (fallback без API) |
 | `data/schema.*.sql` | SQL | Схема БД |
@@ -132,11 +132,11 @@
 1. **Учётные записи** — логин/пароль, сессия 7 дней (`OKO_BOOTSTRAP_ADMIN_*` при первом запуске).
 2. **Bearer-токены** (legacy) — `OKO_ADMIN_TOKEN`, `OKO_USER_TOKEN` для сервисных сценариев.
 
-Разграничение на API: `server/src/orgScope.ts` — фильтрация по ZID пользователя.
+Разграничение на API: `web/domain/src/orgScope.ts` — фильтрация по ZID пользователя.
 
 ### Аудит
 
-Журнал изменений **метаданных** (шаблоны, правила, пользователи): `server/src/audit.ts`, UI `/admin/audit`.  
+Журнал изменений **метаданных** (шаблоны, правила, пользователи): `web/domain/src/audit.ts`, UI `/admin/audit`.
 Изменения ячеек форм логируются через `updated_at` экземпляра.
 
 ---
@@ -156,7 +156,7 @@
 | Сохранить на диск | `/tools` — JSON / Excel комплекта |
 | Статус сдано | `submitted_at` на экземпляре |
 
-Детальное сопоставление таблиц MDB — в [reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md).
+Детальное сопоставление таблиц MDB — в [archive/reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md).
 
 ---
 
@@ -194,4 +194,4 @@
 | Как устроен код | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Как запустить локально | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | История изменений | [CHANGELOG.md](../CHANGELOG.md) |
-| Исходный Access | [reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) |
+| Исходный Access | [archive/reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md) |

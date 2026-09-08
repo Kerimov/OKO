@@ -137,7 +137,7 @@
 | Токены admin / user (`OKO_ADMIN_TOKEN`, `OKO_USER_TOKEN`) | ✅ |
 | Журнал `report_log` + `/admin/audit` | ✅ |
 | `VITE_API_URL` для портала на Vercel | ✅ |
-| Документация [docs/DEPLOY.md](DEPLOY.md) | ✅ |
+| Документация [archive/docs/DEPLOY.md](DEPLOY.md) | ✅ |
 
 PostgreSQL — опционально, не в MVP.
 

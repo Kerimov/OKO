@@ -1,49 +1,29 @@
 import fs from "fs";
 import path from "path";
+import { seedCheckRulesFromJson } from "./checks.js";
+import { seedExcelMappingsFromJson } from "./excel.js";
+import { migratePortalPayloadsToCells } from "./instances.js";
+import { seedFormsFromJson } from "./forms.js";
 import {
-  migrateCheckRulesTable,
-  seedCheckRulesFromJson,
-} from "./checks.js";
-import {
-  migrateExcelTables,
-  seedExcelMappingsFromJson,
-} from "./excel.js";
-import {
-  migrateInstanceTables,
-  migratePortalPayloadsToCells,
-} from "./instances.js";
-import {
-  migrateFormTables,
-  seedFormsFromJson,
-} from "./forms.js";
-import {
-  migrateSaldoTables,
   seedFormCorrespondenceFromJson,
   seedSaldoRulesFromJson,
 } from "./saldo.js";
-import { migrateAuditTable } from "./audit.js";
 import {
-  migrateOrgTables,
   seedDefaultPeriodIfMissing,
   seedOrganizationsFromSettings,
 } from "./packages.js";
-import { migrateRashTables, seedRashFromJson, seedPlacementsFromJson } from "./rash.js";
-import { migrateRashDataTables } from "./rash-data.js";
+import { seedRashFromJson, seedPlacementsFromJson } from "./rash.js";
 import {
-  migrateKontrTable,
   reimportKontrFromJson,
   seedKontrFromJson,
 } from "./kontr.js";
-import { migrateUserTables, seedBootstrapAdmin } from "./users.js";
+import { seedBootstrapAdmin } from "./users.js";
 import {
-  migrateAggTables,
   seedAggFromJson,
   seedOrganizationsFromAggCodes,
 } from "./aggregation.js";
-import { migratePackageInbox } from "./packageInbox.js";
 import { migratePackageExchange } from "./packageExchange.js";
-import { migrateMethodologyHistory } from "./methodology.js";
-import { migrateSpreadsheetTables, seedRecalcRulesFromJson } from "./spreadsheet.js";
+import { seedRecalcRulesFromJson } from "./spreadsheet.js";
 import { runNumberedMigrations } from "./migrations/runner.js";
 import { startBackgroundJobWorker } from "./jobs.js";
 import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
@@ -54,23 +34,10 @@ import { loadRolePermissionCache } from "./rbac.js";
 const KONTR_PATH = path.join(ROOT, "web", "portal", "public", "data", "kontr.json");
 
 async function initSchema(database: OkoDb): Promise<void> {
-  await migrateCheckRulesTable(database);
-  await migrateFormTables(database);
-  await migrateSaldoTables(database);
-  await migrateExcelTables(database);
-  await migrateInstanceTables(database);
-  await migrateRashTables(database);
-  await migrateRashDataTables(database);
-  await migrateKontrTable(database);
-  await migrateAuditTable(database);
-  await migrateOrgTables(database);
-  await migrateUserTables(database);
-  await migrateAggTables(database);
-  await migratePackageInbox(database);
-  await migratePackageExchange(database);
-  await migrateMethodologyHistory(database);
-  await migrateSpreadsheetTables(database);
+  // Schema changes: numbered migrations only (015 absorbs former migrate*Tables DDL).
   await runNumberedMigrations(database);
+  // Data transform: legacy zid/eid exchange → GUID PK (idempotent).
+  await migratePackageExchange(database);
   await loadRolePermissionCache(database);
 
   const seededRecalc = await seedRecalcRulesFromJson(database);

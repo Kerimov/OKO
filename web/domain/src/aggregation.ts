@@ -259,60 +259,6 @@ function resolveColorMask(
   return cellMaskIsEmpty(mask) ? undefined : mask;
 }
 
-export async function migrateAggTables(db: OkoDb): Promise<void> {
-  if (db.dialect !== "postgres") {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS agg_list (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        parent_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-        child_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-        included INTEGER NOT NULL DEFAULT 1,
-        UNIQUE(parent_zid, child_zid)
-      );
-      CREATE INDEX IF NOT EXISTS idx_agg_parent ON agg_list(parent_zid);
-      CREATE INDEX IF NOT EXISTS idx_agg_child ON agg_list(child_zid);
-      CREATE TABLE IF NOT EXISTS agg_corr_sets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        parent_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-        corr_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-        kind TEXT NOT NULL,
-        source_eid INTEGER NOT NULL REFERENCES periods(eid),
-        label TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        UNIQUE(corr_zid)
-      );
-      CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
-      CREATE TABLE IF NOT EXISTS agg_run_locks (
-        parent_zid INTEGER NOT NULL,
-        eid INTEGER NOT NULL,
-        locked_by TEXT NOT NULL,
-        locked_at TEXT NOT NULL,
-        PRIMARY KEY (parent_zid, eid)
-      );
-    `);
-    return;
-  }
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS agg_corr_sets (
-      id SERIAL PRIMARY KEY,
-      parent_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-      corr_zid INTEGER NOT NULL REFERENCES organizations(zid) ON DELETE CASCADE,
-      kind TEXT NOT NULL,
-      source_eid INTEGER NOT NULL REFERENCES periods(eid),
-      label TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(corr_zid)
-    );
-    CREATE INDEX IF NOT EXISTS idx_agg_corr_parent ON agg_corr_sets(parent_zid);
-    CREATE TABLE IF NOT EXISTS agg_run_locks (
-      parent_zid INTEGER NOT NULL,
-      eid INTEGER NOT NULL,
-      locked_by TEXT NOT NULL,
-      locked_at TIMESTAMPTZ NOT NULL,
-      PRIMARY KEY (parent_zid, eid)
-    );
-  `);
-}
 
 async function orgName(db: OkoDb, zid: number): Promise<string | null> {
   const row = (await db.prepare("SELECT name, code FROM organizations WHERE zid = ?").get(zid)) as

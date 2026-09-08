@@ -68,4 +68,4 @@ python3 ../../scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seco
 | M3 | `get/save_assignments`, `*_coordinator_pin`, `set_instance_status`, `set_restrict_executors` |
 | M4 | `backup_database`, `force_unlock`, `export_package_json`, `import_package_json` |
 
-См. [docs/DESKTOP-FILLER-TZ.md](../archive/docs/DESKTOP-FILLER-TZ.md), [docs/DESKTOP-TAURI-PILOT.md](../archive/docs/DESKTOP-TAURI-PILOT.md).
+См. [archive/docs/DESKTOP-FILLER-TZ.md](../archive/docs/DESKTOP-FILLER-TZ.md), [archive/docs/DESKTOP-TAURI-PILOT.md](../archive/docs/DESKTOP-TAURI-PILOT.md).

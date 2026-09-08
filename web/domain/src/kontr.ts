@@ -66,28 +66,6 @@ export function loadKontrJsonPayload(): KontrJsonPayload {
   return JSON.parse(fs.readFileSync(KONTR_PATH, "utf-8")) as KontrJsonPayload;
 }
 
-export async function migrateKontrTable(db: OkoDb): Promise<void> {
-  const cols: Array<[string, string]> = [
-    ["org_type", "INTEGER"],
-    ["mandatory_rash", "INTEGER DEFAULT 0"],
-    ["country", "TEXT"],
-    ["city", "TEXT"],
-    ["ogrn", "TEXT"],
-    ["old_name", "TEXT"],
-    ["id_obdnsi", "TEXT"],
-  ];
-  for (const [name, ddl] of cols) {
-    if (!(await db.columnExists("kontragents", name))) {
-      await db.exec(`ALTER TABLE kontragents ADD COLUMN ${name} ${ddl}`);
-    }
-  }
-  await db.exec(
-    "CREATE INDEX IF NOT EXISTS idx_kontragents_name ON kontragents(name)"
-  );
-  await db.exec(
-    "CREATE INDEX IF NOT EXISTS idx_kontragents_org_type ON kontragents(org_type)"
-  );
-}
 
 export async function importKontrPayload(
   db: OkoDb,

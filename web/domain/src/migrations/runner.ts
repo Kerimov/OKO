@@ -5,14 +5,15 @@ import { rashConstructorLayoutMigration } from "./003_rash_constructor_layout.js
 import { rashAddsumRequiredMigration } from "./004_rash_addsum_required.js";
 import { psdFoundationMigration } from "./005_psd_foundation.js";
 import { psdChecksReportsMigration } from "./006_psd_checks_reports.js";
-import { psdAppendix12ChecksMigration } from "./008_psd_appendix12_checks.js";
 import { packageContextMigration } from "./007_package_context.js";
+import { psdAppendix12ChecksMigration } from "./008_psd_appendix12_checks.js";
 import { psdNsiCardMigration } from "./009_psd_nsi_card.js";
 import { psdImportTransferSvodMigration } from "./010_psd_import_transfer_svod.js";
 import { backgroundJobsMigration } from "./011_background_jobs.js";
 import { checkRuleFormsMigration } from "./012_check_rule_forms.js";
 import { scaleIndexesMigration } from "./013_scale_indexes.js";
 import { rbacRolesMigration } from "./014_rbac_roles.js";
+import { legacyBootSchemaMigration } from "./015_legacy_boot_schema.js";
 import type { Migration } from "./types.js";
 
 export const NUMBERED_MIGRATIONS: Migration[] = [
@@ -30,6 +31,7 @@ export const NUMBERED_MIGRATIONS: Migration[] = [
   checkRuleFormsMigration,
   scaleIndexesMigration,
   rbacRolesMigration,
+  legacyBootSchemaMigration,
 ];
 
 export async function migrateSchemaMigrationsTable(db: OkoDb): Promise<void> {

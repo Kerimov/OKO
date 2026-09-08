@@ -1,0 +1,26 @@
+/* Business process monitor (from index.css). Status badge tones: design-system.css */
+
+.packages-dashboard-table .table-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.completeness-inline {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+  max-width: 120px;
+}
+
+.completeness-inline .completeness-fill {
+  height: 100%;
+}

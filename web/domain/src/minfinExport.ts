@@ -35,18 +35,11 @@ function loadExcelJS(): {
     worksheets: any[];
   };
 } {
-  const candidates = [
-    path.join(ROOT, "web/portal/node_modules/exceljs"),
-    path.join(ROOT, "node_modules/exceljs"),
-  ];
-  for (const c of candidates) {
-    try {
-      return require(c) as ReturnType<typeof loadExcelJS>;
-    } catch {
-      /* next */
-    }
+  try {
+    return require("exceljs") as ReturnType<typeof loadExcelJS>;
+  } catch {
+    throw new Error("exceljs not found — run npm install in web/domain");
   }
-  throw new Error("exceljs not found (install portal dependencies)");
 }
 
 function colToNumber(col: number | string | null | undefined): number | null {

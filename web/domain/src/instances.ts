@@ -6,28 +6,6 @@ import type { OkoFormInstance } from "./types.js";
 
 const META_KEYS = new Set(["num", "code", "name", "account"]);
 
-export async function migrateInstanceTables(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("form_instances", "template_title"))) {
-    await db.exec("ALTER TABLE form_instances ADD COLUMN template_title TEXT");
-  }
-  if (!(await db.columnExists("form_instances", "enterprise_code"))) {
-    await db.exec("ALTER TABLE form_instances ADD COLUMN enterprise_code TEXT");
-  }
-  if (!(await db.columnExists("form_instances", "signatures_json"))) {
-    await db.exec("ALTER TABLE form_instances ADD COLUMN signatures_json TEXT DEFAULT '{}'");
-  }
-  if (!(await db.columnExists("form_instances", "status"))) {
-    await db.exec("ALTER TABLE form_instances ADD COLUMN status TEXT DEFAULT 'draft'");
-  }
-  if (!(await db.columnExists("form_instances", "template_schema_version"))) {
-    await db.exec(
-      "ALTER TABLE form_instances ADD COLUMN template_schema_version INTEGER DEFAULT 1"
-    );
-  }
-  if (!(await db.columnExists("form_instances", "revision"))) {
-    await db.exec("ALTER TABLE form_instances ADD COLUMN revision INTEGER DEFAULT 1");
-  }
-}
 
 function resolveRowNo(row: Record<string, string | number>, index: number): number {
   const parsed = parseInt(String(row.num ?? "").trim(), 10);

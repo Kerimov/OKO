@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   canMutateData,
   hasPsdPermission,
   isAuditorReadonly,
 } from "../auth";
 import { PackageFormsFillPanel } from "../components/PackageFormsFillPanel";
-import { CollapsibleFilters, countActiveFilters } from "../components/CollapsibleFilters";
 import {
   Button,
   PageHeader,
-  StatusBadge,
   StatusBanner,
   TabBar,
 } from "../components/ui";
@@ -43,7 +41,6 @@ import {
   transitionBusinessProcess,
   type ApprovalBlockers,
   type BpAction,
-  type BpStatus,
   type BusinessProcessDto,
   type PackageKind,
 } from "../psdApi";
@@ -51,9 +48,6 @@ import { isBackendMode } from "../storage";
 import {
   packageKindLabel,
   BP_STATUS_LABEL,
-  formatDateTimeRu,
-  orgOptionLabel,
-  bpStatusLabel,
 } from "../uiLabels";
 import type {
   Organization,
@@ -62,139 +56,33 @@ import type {
   PackageWorkspaceRow,
 } from "../types";
 import {
-  formatPeriod,
-  formStatusLabel,
   currentReportingQuarter,
   quarterDateRange,
   quarterPeriodName,
 } from "../utils";
 import { useAuth } from "../useAuth";
 import { formsListNavLabel } from "../formsListLabels";
-
-function ProgressMeter({ percent, label }: { percent: number; label?: string }) {
-  const safe = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
-  return (
-    <div className="progress-meter" title={label ?? `${safe}%`}>
-      <div className="progress-meter-track">
-        <div className="progress-meter-fill" style={{ width: `${safe}%` }} />
-      </div>
-      <span className="progress-meter-label">{safe}%</span>
-    </div>
-  );
-}
-
-type WorkspaceTab =
-  | "period"
-  | "period-settings"
-  | "overview"
-  | "forms"
-  | "bp"
-  | "open-period"
-  | "setup"
-  | "fill-forms";
-type FormFilter = "all" | "filled" | "draft" | "submitted" | "missing";
-
-type PeriodCampaign = {
-  key: string;
-  periodName: string;
-  packageKind: PackageKind;
-  periodStart: string | null;
-  periodEnd: string | null;
-  orgCount: number;
-  withoutForms: number;
-  openCount: number;
-  closedCount: number;
-  /** closed = all closed; open = none closed; mixed = both */
-  status: "open" | "closed" | "mixed";
-  /** Open packages with BP completed — can close without force. */
-  closableCount: number;
-  /** Open packages still waiting on BP. */
-  blockedCloseCount: number;
-};
-
-function campaignKeyOf(r: {
-  periodName: string;
-  packageKind: string;
-}): string {
-  return `${r.periodName}||${r.packageKind}`;
-}
-
-function quarterYearFromPeriodName(
-  periodName: string
-): { quarter: number; year: number } | null {
-  const m = periodName.trim().match(/^(\d)\s*квартал\s+(\d{4})$/i);
-  if (!m) return null;
-  const quarter = Number(m[1]);
-  const year = Number(m[2]);
-  if (!(quarter >= 1 && quarter <= 4) || !(year >= 2000)) return null;
-  return { quarter, year };
-}
-
-function quarterYearFromCampaign(c: {
-  periodName: string;
-  periodStart: string | null;
-}): { quarter: number; year: number } | null {
-  const fromName = quarterYearFromPeriodName(c.periodName);
-  if (fromName) return fromName;
-  if (c.periodStart) {
-    const d = new Date(c.periodStart);
-    if (!Number.isNaN(d.getTime())) {
-      return {
-        quarter: Math.floor(d.getMonth() / 3) + 1,
-        year: d.getFullYear(),
-      };
-    }
-  }
-  return null;
-}
-
-const BP_ACTIONS: Array<{
-  action: BpAction;
-  label: string;
-  from: BpStatus[];
-  permission: import("../auth").PortalPsdPermission;
-}> = [
-  {
-    action: "start",
-    label: "Запустить",
-    from: ["not_started"],
-    permission: "bp.start",
-  },
-  {
-    action: "submit_for_approval",
-    label: "На согласование",
-    from: ["collecting"],
-    permission: "bp.submit_for_approval",
-  },
-  {
-    action: "curator_approve",
-    label: "Согласовать",
-    from: ["pending_curator_approval"],
-    permission: "bp.curator_approve",
-  },
-  {
-    action: "curator_return",
-    label: "Вернуть",
-    from: ["pending_curator_approval"],
-    permission: "bp.curator_return",
-  },
-  {
-    action: "complete",
-    label: "Завершить",
-    from: ["curator_approved"],
-    permission: "bp.complete",
-  },
-  {
-    action: "reopen",
-    label: "Открыть снова",
-    from: ["completed"],
-    permission: "bp.reopen",
-  },
-];
-
-function rowKey(r: { zid: number; eid: number }): string {
-  return `${r.zid}:${r.eid}`;
-}
+import { PackageSelectedPackageCard } from "./package/PackageSelectedPackageCard";
+import { PackagePeriodsSidebar } from "./package/PackagePeriodsSidebar";
+import {
+  PACKAGE_ROW_HEIGHT,
+  PackageCampaignPackagesPanel,
+} from "./package/PackageCampaignPackagesPanel";
+import { PackageOpenPeriodPanel } from "./package/PackageOpenPeriodPanel";
+import { PackagePeriodSettingsPanel } from "./package/PackagePeriodSettingsPanel";
+import { PackageOverviewPanel } from "./package/PackageOverviewPanel";
+import { PackageFormsTabPanel } from "./package/PackageFormsTabPanel";
+import { PackageBpPanel } from "./package/PackageBpPanel";
+import { PackageSetupPanel } from "./package/PackageSetupPanel";
+import {
+  BP_ACTIONS,
+  campaignKeyOf,
+  quarterYearFromCampaign,
+  rowKey,
+  type FormFilter,
+  type PeriodCampaign,
+  type WorkspaceTab,
+} from "./package/packageWorkspaceModel";
 
 export function PackagePage() {
   const auth = useAuth();
@@ -367,7 +255,6 @@ export function PackagePage() {
     orgZid,
   ]);
 
-  const PACKAGE_ROW_HEIGHT = 56;
   const packageVirt = useVirtualRows(
     packageTableScrollRef,
     campaignPackages.length,
@@ -1597,121 +1484,21 @@ export function PackagePage() {
       {status && <StatusBanner tone="info">{status}</StatusBanner>}
 
       <div className="package-workspace-layout">
-        <aside className="tools-section package-workspace-list">
-          <h2>Периоды</h2>
-          <CollapsibleFilters
-            activeCount={countActiveFilters(
-              listSearch.trim().length > 0,
-              filterKind !== "",
-              filterPeriod !== ""
-            )}
-            bodyClassName="package-workspace-filters"
-          >
-            <input
-              type="search"
-              className="search-input"
-              placeholder="Поиск периода…"
-              value={listSearch}
-              onChange={(e) => setListSearch(e.target.value)}
-            />
-            <div className="tools-grid package-workspace-filter-grid">
-              <label>
-                Тип
-                <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}>
-                  <option value="">Все</option>
-                  <option value="OKO">ОКО</option>
-                  <option value="BALANCE">Баланс</option>
-                </select>
-              </label>
-              <label>
-                Статус
-                <select
-                  value={filterPeriod}
-                  onChange={(e) => setFilterPeriod(e.target.value)}
-                >
-                  <option value="">Все</option>
-                  <option value="open">Открыт</option>
-                  <option value="closed">Закрыт</option>
-                </select>
-              </label>
-            </div>
-          </CollapsibleFilters>
-          <p className="package-workspace-list-totals table-sub">
-            Периодов: {allCampaigns.length}
-          </p>
-
-          <div className="package-workspace-list-scroll">
-            {allCampaigns.map((c) => {
-              const selected = c.key === selectedCampaignKey;
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={`package-workspace-item${selected ? " is-selected" : ""}`}
-                  onClick={() => selectCampaign(c.key)}
-                >
-                  <div className="package-workspace-item-body">
-                    <div className="package-workspace-item-title">
-                      {c.periodName}
-                    </div>
-                    <div className="package-workspace-item-meta">
-                      {packageKindLabel(c.packageKind)}
-                      {c.periodStart && c.periodEnd
-                        ? ` · ${formatPeriod(c.periodStart, c.periodEnd)}`
-                        : ""}
-                    </div>
-                    <div className="package-workspace-item-stats">
-                      <StatusBadge
-                        tone={
-                          c.status === "closed"
-                            ? "returned"
-                            : c.status === "mixed"
-                              ? "draft"
-                              : "accepted"
-                        }
-                        label={
-                          c.status === "closed"
-                            ? "закрыт"
-                            : c.status === "mixed"
-                              ? "частично закрыт"
-                              : "открыт"
-                        }
-                      />
-                      <span className="table-sub">
-                        {c.orgCount} орг.
-                        {c.withoutForms ? ` · без форм: ${c.withoutForms}` : ""}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-            {!allCampaigns.length && (
-              <p className="tools-hint">Периодов пока нет</p>
-            )}
-          </div>
-
-          {canMutate && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="package-workspace-create-btn"
-              onClick={() => setTab("open-period")}
-            >
-              Открыть период…
-            </Button>
-          )}
-          {admin && canMutate && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="package-workspace-create-btn"
-              onClick={() => setTab("setup")}
-            >
-              Настройка
-            </Button>
-          )}
-        </aside>
+        <PackagePeriodsSidebar
+          campaigns={allCampaigns}
+          selectedCampaignKey={selectedCampaignKey}
+          listSearch={listSearch}
+          filterKind={filterKind}
+          filterPeriod={filterPeriod}
+          canMutate={canMutate}
+          admin={admin}
+          onListSearchChange={setListSearch}
+          onFilterKindChange={setFilterKind}
+          onFilterPeriodChange={setFilterPeriod}
+          onSelectCampaign={selectCampaign}
+          onOpenPeriod={() => setTab("open-period")}
+          onOpenSetup={() => setTab("setup")}
+        />
 
         <div className="package-workspace-detail">
           {(selectedCampaign ||
@@ -1790,94 +1577,21 @@ export function PackagePage() {
           )}
 
           {tab === "open-period" && canMutate && (
-            <section className="tools-section">
-              <h2>
-                {admin
-                  ? "Открыть период для всех организаций"
-                  : "Открыть период"}
-              </h2>
-              <p className="tools-hint">
-                Период — верхний уровень. После открытия внутри периода создаются
-                комплекты по организациям.
-              </p>
-              <div className="tools-grid">
-                {!admin ? (
-                  <label>
-                    Организация
-                    <select
-                      value={periodsCreateZid}
-                      onChange={(e) =>
-                        setPeriodsCreateZid(
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        )
-                      }
-                    >
-                      <option value="">— выберите —</option>
-                      {periodsCreateOrgs.map((o) => (
-                        <option key={o.zid} value={o.zid}>
-                          {orgOptionLabel(o)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                <label>
-                  Квартал
-                  <select
-                    value={newPeriodQuarter}
-                    onChange={(e) => setNewPeriodQuarter(Number(e.target.value))}
-                  >
-                    <option value={1}>1 квартал</option>
-                    <option value={2}>2 квартал</option>
-                    <option value={3}>3 квартал</option>
-                    <option value={4}>4 квартал</option>
-                  </select>
-                </label>
-                <label>
-                  Год
-                  <input
-                    type="number"
-                    min={2000}
-                    max={2100}
-                    value={newPeriodYear}
-                    onChange={(e) => setNewPeriodYear(Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  Тип комплекта
-                  <select
-                    value={newPackageKind}
-                    onChange={(e) =>
-                      setNewPackageKind(e.target.value as PackageKind)
-                    }
-                  >
-                    <option value="OKO">ОКО</option>
-                    <option value="BALANCE">Баланс</option>
-                  </select>
-                </label>
-              </div>
-              <p className="tools-hint">
-                Будет открыт{" "}
-                <strong>
-                  {quarterPeriodName(newPeriodQuarter, newPeriodYear)}
-                </strong>
-                {" · "}
-                {formatPeriod(
-                  quarterDateRange(newPeriodQuarter, newPeriodYear).periodStart,
-                  quarterDateRange(newPeriodQuarter, newPeriodYear).periodEnd
-                )}
-                {admin ? ` · для ${orgs.length} организаций` : ""}
-              </p>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ marginTop: 8 }}
-                disabled={busy || (!admin && typeof periodsCreateZid !== "number")}
-                onClick={() => void handleCreatePeriod()}
-              >
-                Открыть период
-              </button>
-            </section>
+            <PackageOpenPeriodPanel
+              admin={admin}
+              busy={busy}
+              orgsCount={orgs.length}
+              periodsCreateOrgs={periodsCreateOrgs}
+              periodsCreateZid={periodsCreateZid}
+              newPeriodQuarter={newPeriodQuarter}
+              newPeriodYear={newPeriodYear}
+              newPackageKind={newPackageKind}
+              onPeriodsCreateZidChange={setPeriodsCreateZid}
+              onQuarterChange={setNewPeriodQuarter}
+              onYearChange={setNewPeriodYear}
+              onPackageKindChange={setNewPackageKind}
+              onCreatePeriod={() => void handleCreatePeriod()}
+            />
           )}
 
           {tab === "fill-forms" && canMutate && fillTargets && fillTargets.length > 0 ? (
@@ -1893,205 +1607,22 @@ export function PackagePage() {
           ) : null}
 
           {tab === "period-settings" && selectedCampaign && (
-            <section className="tools-section package-workspace-card">
-              <h2>
-                Настройки периода · {selectedCampaign.periodName} ·{" "}
-                {packageKindLabel(selectedCampaign.packageKind)}
-              </h2>
-              <p className="tools-hint">
-                {selectedCampaign.periodStart && selectedCampaign.periodEnd
-                  ? formatPeriod(
-                      selectedCampaign.periodStart,
-                      selectedCampaign.periodEnd
-                    )
-                  : ""}
-                {" · статус "}
-                <strong>
-                  {selectedCampaign.status === "closed"
-                    ? "закрыт"
-                    : selectedCampaign.status === "mixed"
-                      ? "частично закрыт"
-                      : "открыт"}
-                </strong>
-              </p>
-
-              <ul className="package-workspace-overview">
-                <li>
-                  Организаций: <strong>{selectedCampaign.orgCount}</strong>
-                </li>
-                <li>
-                  Открыто: <strong>{selectedCampaign.openCount}</strong>
-                  {" · закрыто: "}
-                  <strong>{selectedCampaign.closedCount}</strong>
-                </li>
-                <li>
-                  Готовы к закрытию (БП завершён):{" "}
-                  <strong>{selectedCampaign.closableCount}</strong>
-                </li>
-                <li>
-                  Ещё нельзя закрыть (БП не завершён):{" "}
-                  <strong>{selectedCampaign.blockedCloseCount}</strong>
-                </li>
-                <li>
-                  Без форм: <strong>{selectedCampaign.withoutForms}</strong>
-                </li>
-              </ul>
-
-              {periodLocked ? (
-                <p className="tools-hint" style={{ marginBottom: 16 }}>
-                  Период закрыт — нельзя добавлять организации и заводить формы.
-                  Можно только переоткрыть период.
-                </p>
-              ) : null}
-
-              <h3>Добавить организации</h3>
-              {periodLocked ? (
-                <p className="tools-hint">
-                  Справочник недоступен для дополнения: период закрыт.
-                </p>
-              ) : (
-                <>
-                  <p className="tools-hint">
-                    Организации из справочника, у которых ещё нет комплекта в этом
-                    периоде. После добавления заведите формы в списке комплектов.
-                  </p>
-                  {orgsMissingFromCampaign.length === 0 ? (
-                    <p className="tools-hint">
-                      {addOrgSearch.trim()
-                        ? "По поиску ничего не найдено среди организаций вне периода."
-                        : "Все организации справочника уже в периоде."}
-                    </p>
-                  ) : (
-                    <>
-                      <label style={{ display: "block", marginBottom: 8 }}>
-                        Поиск
-                        <input
-                          type="search"
-                          className="search-input"
-                          value={addOrgSearch}
-                          onChange={(e) => setAddOrgSearch(e.target.value)}
-                          placeholder="Название, код, ZID…"
-                          style={{ display: "block", marginTop: 4, minWidth: 240 }}
-                        />
-                      </label>
-                      <div className="toolbar-actions" style={{ marginBottom: 8 }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() =>
-                            setAddOrgZids(
-                              orgsMissingFromCampaign.map((o) => o.zid)
-                            )
-                          }
-                        >
-                          Выбрать все ({orgsMissingFromCampaign.length})
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setAddOrgZids([])}
-                        >
-                          Снять выбор
-                        </button>
-                        <span className="tools-hint">
-                          Выбрано: {addOrgZids.length}
-                        </span>
-                      </div>
-                      <div className="aggr-list package-constructor-org-list">
-                        {orgsMissingFromCampaign.map((o) => (
-                          <label
-                            key={o.zid}
-                            className="package-constructor-check-row"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={addOrgZids.includes(o.zid)}
-                              onChange={() => {
-                                setAddOrgZids((prev) =>
-                                  prev.includes(o.zid)
-                                    ? prev.filter((z) => z !== o.zid)
-                                    : [...prev, o.zid]
-                                );
-                              }}
-                            />
-                            <span>{orgOptionLabel(o)}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="toolbar-actions" style={{ marginTop: 12 }}>
-                        <Button
-                          disabled={busy || addOrgZids.length === 0}
-                          onClick={() => void handleAddOrgsToPeriod()}
-                        >
-                          Добавить в период
-                          {addOrgZids.length ? ` (${addOrgZids.length})` : ""}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-              <h3>Закрытие и переоткрытие</h3>
-              <p className="tools-hint">
-                Обычное закрытие доступно для комплектов с завершённым
-                бизнес-процессом. После закрытия формы нельзя редактировать.
-              </p>
-              <div className="toolbar-actions">
-                {canMutate && (
-                  <Button
-                    disabled={busy || selectedCampaign.closableCount === 0}
-                    onClick={() => void handleCloseCampaign()}
-                  >
-                    Закрыть период
-                    {selectedCampaign.closableCount > 0
-                      ? ` (${selectedCampaign.closableCount})`
-                      : ""}
-                  </Button>
-                )}
-                {canMutate && admin && selectedCampaign.openCount > 0 && (
-                  <Button
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => void handleCloseCampaign({ force: true })}
-                  >
-                    Закрыть принудительно
-                    {selectedCampaign.openCount > 0
-                      ? ` (${selectedCampaign.openCount})`
-                      : ""}
-                  </Button>
-                )}
-                {canMutate && selectedCampaign.closedCount > 0 && (
-                  <Button
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => void handleReopenCampaign()}
-                  >
-                    Переоткрыть период
-                    {selectedCampaign.closedCount > 0
-                      ? ` (${selectedCampaign.closedCount})`
-                      : ""}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  onClick={() => setTab("period")}
-                >
-                  К комплектам периода
-                </Button>
-              </div>
-              {canMutate &&
-              selectedCampaign.closableCount === 0 &&
-              selectedCampaign.openCount > 0 ? (
-                <p className="tools-hint" style={{ marginTop: 12 }}>
-                  Сейчас закрыть обычным способом нельзя: ни у одного комплекта
-                  БП не в статусе «Завершён».
-                  {admin
-                    ? " Администратор может закрыть принудительно."
-                    : " Завершите бизнес-процесс по организациям или обратитесь к администратору."}
-                </p>
-              ) : null}
-            </section>
+            <PackagePeriodSettingsPanel
+              campaign={selectedCampaign}
+              periodLocked={periodLocked}
+              admin={admin}
+              canMutate={canMutate}
+              busy={busy}
+              orgsMissingFromCampaign={orgsMissingFromCampaign}
+              addOrgSearch={addOrgSearch}
+              addOrgZids={addOrgZids}
+              onAddOrgSearchChange={setAddOrgSearch}
+              onAddOrgZidsChange={setAddOrgZids}
+              onAddOrgsToPeriod={() => void handleAddOrgsToPeriod()}
+              onCloseCampaign={(opts) => void handleCloseCampaign(opts)}
+              onReopenCampaign={() => void handleReopenCampaign()}
+              onBackToPackages={() => setTab("period")}
+            />
           )}
 
           {(tab === "period" ||
@@ -2101,363 +1632,50 @@ export function PackagePage() {
               tab !== "fill-forms" &&
               tab !== "period-settings")) &&
           selectedCampaign ? (
-            <section className="tools-section package-workspace-card">
-              <div className="package-workspace-card-head">
-                <div>
-                  <h2>
-                    {selectedCampaign.periodName}
-                    {" · "}
-                    {packageKindLabel(selectedCampaign.packageKind)}
-                  </h2>
-                  <p className="tools-hint package-workspace-card-meta">
-                    {selectedCampaign.periodStart && selectedCampaign.periodEnd
-                      ? formatPeriod(
-                          selectedCampaign.periodStart,
-                          selectedCampaign.periodEnd
-                        )
-                      : ""}
-                    {" · "}
-                    <strong>
-                      {selectedCampaign.status === "closed"
-                        ? "закрыт"
-                        : selectedCampaign.status === "mixed"
-                          ? "частично закрыт"
-                          : "открыт"}
-                    </strong>
-                    {` · ${selectedCampaign.orgCount} организаций`}
-                    {selectedCampaign.withoutForms
-                      ? ` · без форм: ${selectedCampaign.withoutForms}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="toolbar-actions">
-                  {canMutate && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setTab("period-settings")}
-                    >
-                      Настройки периода
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {periodLocked ? (
-                <p className="tools-hint" style={{ marginBottom: 12 }}>
-                  Период закрыт — заведение форм и добавление организаций
-                  недоступны.
-                </p>
-              ) : null}
-
-              <div className="package-workspace-filters" style={{ marginBottom: 12 }}>
-                <div className="tools-grid package-workspace-filter-grid">
-                  <label>
-                    Статус БП
-                    <select
-                      value={filterBp}
-                      onChange={(e) => setFilterBp(e.target.value)}
-                    >
-                      <option value="">Все</option>
-                      {Object.entries(BP_STATUS_LABEL).map(([k, v]) => (
-                        <option key={k} value={k}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="package-workspace-checkboxes">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={filterIncomplete}
-                      onChange={(e) => setFilterIncomplete(e.target.checked)}
-                    />{" "}
-                    Неполный
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={filterBlockers}
-                      onChange={(e) => setFilterBlockers(e.target.checked)}
-                    />{" "}
-                    Есть блокеры
-                  </label>
-                </div>
-              </div>
-
-              {canBulkSelect && (
-                <div className="package-workspace-bulk-bar" style={{ marginBottom: 12 }}>
-                  <label className="package-workspace-bulk-select-all">
-                    <input
-                      type="checkbox"
-                      checked={
-                        campaignPackages.length > 0 &&
-                        campaignPackages.every((r) => checkedKeys.has(rowKey(r)))
-                      }
-                      disabled={busy || campaignPackages.length === 0}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setCheckedKeys(
-                            new Set(campaignPackages.map((r) => rowKey(r)))
-                          );
-                        } else {
-                          clearSelection();
-                        }
-                      }}
-                    />{" "}
-                    Выбрать все ({campaignPackages.length})
-                  </label>
-                  {checkedRows.length > 0 ? (
-                    <div className="package-workspace-bulk-actions">
-                      {canMutate && !periodLocked && (
-                        <Button
-                          size="sm"
-                          disabled={
-                            busy ||
-                            !checkedRows.some(
-                              (r) =>
-                                r.periodStatus !== "closed" &&
-                                r.filled < r.total
-                            )
-                          }
-                          onClick={() =>
-                            openFillForms(
-                              checkedRows.filter(
-                                (r) =>
-                                  r.periodStatus !== "closed" &&
-                                  r.filled < r.total
-                              )
-                            )
-                          }
-                        >
-                          Завести формы
-                          {checkedRows.filter(
-                            (r) =>
-                              r.periodStatus !== "closed" && r.filled < r.total
-                          ).length
-                            ? ` (${
-                                checkedRows.filter(
-                                  (r) =>
-                                    r.periodStatus !== "closed" &&
-                                    r.filled < r.total
-                                ).length
-                              })`
-                            : ""}
-                        </Button>
-                      )}
-                      {canBulkStartCollection && (
-                        <Button
-                          size="sm"
-                          disabled={busy || bpBusy}
-                          onClick={() => void handleBulkStartCollection()}
-                        >
-                          {bpBusy ? "Запуск…" : "Запустить сбор"}
-                        </Button>
-                      )}
-                      {canBulkRunChecks && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={busy || packageChecksBusy}
-                          onClick={() => void handleBulkChecks()}
-                        >
-                          {packageChecksBusy ? "Проверки…" : "Запустить проверки"}
-                        </Button>
-                      )}
-                      {canBulkDelete && (
-                        <Button
-                          variant="danger-outline"
-                          size="sm"
-                          disabled={busy || checkedDeletableRows.length === 0}
-                          onClick={() => void handleBulkDelete()}
-                        >
-                          Удалить
-                          {checkedDeletableRows.length > 0
-                            ? ` (${checkedDeletableRows.length})`
-                            : ""}
-                        </Button>
-                      )}
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={busy}
-                        onClick={clearSelection}
-                      >
-                        Снять выбор
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              <div
-                className="table-wrap"
-                ref={packageTableScrollRef}
-                style={
-                  packageVirt.enabled
-                    ? { maxHeight: "min(70vh, 720px)", overflow: "auto" }
-                    : undefined
-                }
-              >
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {canBulkSelect ? <th /> : null}
-                      <th>Организация</th>
-                      <th>Формы</th>
-                      <th>БП</th>
-                      <th>Период</th>
-                      <th>Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {packageVirt.enabled && packageVirt.offsetTop > 0 ? (
-                      <tr aria-hidden>
-                        <td
-                          colSpan={canBulkSelect ? 6 : 5}
-                          style={{
-                            height: packageVirt.offsetTop,
-                            padding: 0,
-                            border: "none",
-                          }}
-                        />
-                      </tr>
-                    ) : null}
-                    {visibleCampaignPackages.map((r) => {
-                      const key = rowKey(r);
-                      const closed = r.periodStatus === "closed";
-                      const canClose = !closed && r.bpStatus === "completed";
-                      const canCheck =
-                        canBulkSelect && (orgZid == null || r.zid === orgZid);
-                      return (
-                        <tr key={key} style={{ height: PACKAGE_ROW_HEIGHT }}>
-                          {canBulkSelect ? (
-                            <td>
-                              <input
-                                type="checkbox"
-                                checked={checkedKeys.has(key)}
-                                disabled={busy || !canCheck}
-                                onChange={(e) =>
-                                  toggleChecked(key, e.target.checked)
-                                }
-                                aria-label={`Выбрать ${r.organizationName}`}
-                              />
-                            </td>
-                          ) : null}
-                          <td>
-                            {r.organizationName}
-                            {r.organizationCode ? (
-                              <div className="table-sub">{r.organizationCode}</div>
-                            ) : null}
-                          </td>
-                          <td>
-                            {r.filled}/{r.total}
-                            <div className="table-sub">сдано {r.submitted}</div>
-                          </td>
-                          <td>
-                            {r.bpStatus
-                              ? bpStatusLabel(r.bpStatus)
-                              : "—"}
-                            {r.hasBlockers ? (
-                              <div className="table-sub">блокеры</div>
-                            ) : null}
-                          </td>
-                          <td>{closed ? "закрыт" : "открыт"}</td>
-                          <td>
-                            <div className="toolbar-actions">
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                disabled={busy}
-                                onClick={() => {
-                                  void selectPackage(r.zid, r.eid, r.packageKind);
-                                  setTab("overview");
-                                }}
-                              >
-                                Открыть
-                              </button>
-                              {!periodLocked &&
-                                !closed &&
-                                r.filled < r.total &&
-                                canMutate && (
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  disabled={busy}
-                                  onClick={() => openFillForms([r])}
-                                >
-                                  {r.filled === 0
-                                    ? "Завести формы"
-                                    : "Дозавести формы"}
-                                </button>
-                              )}
-                              {!periodLocked && canClose && canMutate && (
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void handleClosePeriodFor(r.zid, r.eid)
-                                  }
-                                >
-                                  Закрыть
-                                </button>
-                              )}
-                              {closed && canMutate && !periodLocked && (
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void handleReopenPeriodFor(r.zid, r.eid)
-                                  }
-                                >
-                                  Переоткрыть
-                                </button>
-                              )}
-                              {canMutate &&
-                                (admin || (orgZid != null && r.zid === orgZid)) && (
-                                <button
-                                  type="button"
-                                  className="btn btn-danger-outline"
-                                  disabled={busy}
-                                  onClick={() => void handleDeletePackage(r)}
-                                >
-                                  Удалить
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {packageVirt.enabled && packageVirt.offsetBottom > 0 ? (
-                      <tr aria-hidden>
-                        <td
-                          colSpan={canBulkSelect ? 6 : 5}
-                          style={{
-                            height: packageVirt.offsetBottom,
-                            padding: 0,
-                            border: "none",
-                          }}
-                        />
-                      </tr>
-                    ) : null}
-                    {!campaignPackages.length && (
-                      <tr>
-                        <td colSpan={canBulkSelect ? 6 : 5}>
-                          В периоде нет комплектов по фильтру.
-                          {canMutate
-                            ? " Создайте комплекты кнопкой выше."
-                            : ""}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            <PackageCampaignPackagesPanel
+              campaign={selectedCampaign}
+              campaignPackages={campaignPackages}
+              visiblePackages={visibleCampaignPackages}
+              periodLocked={periodLocked}
+              canMutate={canMutate}
+              admin={admin}
+              orgZid={orgZid}
+              busy={busy}
+              bpBusy={bpBusy}
+              packageChecksBusy={packageChecksBusy}
+              canBulkSelect={canBulkSelect}
+              canBulkStartCollection={canBulkStartCollection}
+              canBulkRunChecks={canBulkRunChecks}
+              canBulkDelete={canBulkDelete}
+              filterBp={filterBp}
+              filterIncomplete={filterIncomplete}
+              filterBlockers={filterBlockers}
+              checkedKeys={checkedKeys}
+              checkedRows={checkedRows}
+              checkedDeletableRows={checkedDeletableRows}
+              packageVirt={packageVirt}
+              scrollRef={packageTableScrollRef}
+              onOpenSettings={() => setTab("period-settings")}
+              onFilterBpChange={setFilterBp}
+              onFilterIncompleteChange={setFilterIncomplete}
+              onFilterBlockersChange={setFilterBlockers}
+              onToggleChecked={toggleChecked}
+              onClearSelection={clearSelection}
+              onSelectAll={() =>
+                setCheckedKeys(new Set(campaignPackages.map((r) => rowKey(r))))
+              }
+              onFillForms={openFillForms}
+              onBulkStartCollection={() => void handleBulkStartCollection()}
+              onBulkChecks={() => void handleBulkChecks()}
+              onBulkDelete={() => void handleBulkDelete()}
+              onOpenPackage={(z, e, kind) => {
+                void selectPackage(z, e, kind);
+                setTab("overview");
+              }}
+              onClosePeriodFor={(z, e) => void handleClosePeriodFor(z, e)}
+              onReopenPeriodFor={(z, e) => void handleReopenPeriodFor(z, e)}
+              onDeletePackage={(r) => void handleDeletePackage(r)}
+            />
           ) : null}
 
           {!selectedCampaign &&
@@ -2490,374 +1708,88 @@ export function PackagePage() {
           tab !== "period" &&
           tab !== "period-settings" ? (
             <>
-              <section className="tools-section package-workspace-card">
-                <div className="package-workspace-card-head">
-                  <div>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ marginBottom: 8 }}
-                      onClick={() => {
-                        setZid("");
-                        setEid("");
-                        setDetail(null);
-                        setTab("period");
-                      }}
-                    >
-                      ← К периоду
-                    </button>
-                    <h2>
-                      {selectedRow.organizationName}
-                      {" · "}
-                      {selectedRow.periodName}
-                      {" · "}
-                      {packageKindLabel(selectedRow.packageKind)}
-                    </h2>
-                    <p className="tools-hint package-workspace-card-meta">
-                      {formatPeriod(
-                        selectedRow.periodStart ?? "",
-                        selectedRow.periodEnd ?? ""
-                      )}
-                      {" · период "}
-                      <strong>
-                        {selectedRow.periodStatus === "closed" ? "закрыт" : "открыт"}
-                      </strong>
-                      {selectedRow.curatorName
-                        ? ` · куратор: ${selectedRow.curatorName}`
-                        : ""}
-                      {selectedRow.bpLastChangedAt
-                        ? ` · изменён ${formatDateTimeRu(selectedRow.bpLastChangedAt)}`
-                        : ""}
-                    </p>
-                  </div>
-                  {selectedRow.bpStatus && (
-                    <StatusBadge
-                      status={selectedRow.bpStatus}
-                      label={bpStatusLabel(selectedRow.bpStatus)}
-                    />
-                  )}
-                </div>
+              <PackageSelectedPackageCard
+                selectedRow={selectedRow}
+                detailLoading={detailLoading}
+                bpBlockers={bpBlockers}
+                primaryCta={primaryCta}
+                canMutate={canMutate}
+                busy={busy}
+                bpBusy={bpBusy}
+                packageChecksBusy={packageChecksBusy}
+                backend={backend}
+                formsLinkLabel={formsLinkLabel}
+                checkExplanationsLink={checkExplanationsLink}
+                onBackToPeriod={() => {
+                  setZid("");
+                  setEid("");
+                  setDetail(null);
+                  setTab("period");
+                }}
+                onPrimaryCta={() => void runPrimaryCta()}
+                onRunPackageChecks={() => void handleRunPackageChecks()}
+              />
 
-                <div className="package-workspace-card-progress">
-                  <ProgressMeter percent={selectedRow.percent} />
-                </div>
-                <p className="tools-hint">
-                  Формы: <strong>{selectedRow.filled}/{selectedRow.total}</strong>
-                  {" · черновики "}
-                  <strong>{selectedRow.draft}</strong>
-                  {" · сдано "}
-                  <strong>{selectedRow.submitted}</strong>
-                  {detailLoading ? " · обновление…" : ""}
-                </p>
-
-                {bpBlockers?.blocked && (
-                  <StatusBanner tone="error">
-                    Согласование заблокировано — нет объяснений:{" "}
-                    {bpBlockers.missingExplanations
-                      .map((m) => `#${m.ruleNumber}`)
-                      .join(", ")}
-                    . <Link to={checkExplanationsLink}>Объяснения проверок</Link>
-                  </StatusBanner>
-                )}
-
-                <div className="toolbar-actions">
-                  {primaryCta && (
-                    <Button
-                      disabled={
-                        busy ||
-                        bpBusy ||
-                        (primaryCta.kind !== "forms-tab" && !canMutate)
-                      }
-                      onClick={() => void runPrimaryCta()}
-                    >
-                      {busy || bpBusy ? "…" : primaryCta.label}
-                    </Button>
-                  )}
-                  <Link to="/my" className="btn btn-secondary">
-                    {formsLinkLabel}
-                  </Link>
-                  {backend && (
-                    <Button
-                      variant="secondary"
-                      disabled={packageChecksBusy || !canMutate}
-                      onClick={() => void handleRunPackageChecks()}
-                    >
-                      {packageChecksBusy ? "Проверки…" : "Запустить проверки"}
-                    </Button>
-                  )}
-                  <Link to="/bp" className="btn btn-secondary">
-                    Мониторинг БП
-                  </Link>
-                </div>
-              </section>
-
-              {tab === "overview" && (
-                <section className="tools-section">
-                  <h2>Обзор</h2>
-                  <ul className="package-workspace-overview">
-                    <li>
-                      Статус БП:{" "}
-                      <strong>
-                        {selectedRow.bpStatus
-                          ? bpStatusLabel(selectedRow.bpStatus)
-                          : "ещё не создан"}
-                      </strong>
-                      {selectedRow.bpIteration != null
-                        ? ` · итерация ${selectedRow.bpIteration}`
-                        : ""}
-                    </li>
-                    <li>
-                      Прогресс форм: {selectedRow.filled} из {selectedRow.total} (
-                      {selectedRow.percent}%)
-                    </li>
-                    <li>
-                      Период:{" "}
-                      {selectedRow.periodStatus === "closed" ? "закрыт" : "открыт"}
-                    </li>
-                    <li>
-                      Блокеры согласования:{" "}
-                      {bpBlockers?.blocked
-                        ? `да (${bpBlockers.missingExplanations.length})`
-                        : "нет"}
-                    </li>
-                  </ul>
-                  <div className="toolbar-actions">
-                    {selectedRow.filled < selectedRow.total && canMutate && !periodClosed && (
-                      <Button
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => openFillForms([selectedRow])}
-                      >
-                        {selectedRow.filled === 0
-                          ? "Завести формы"
-                          : "Дозавести формы"}
-                      </Button>
-                    )}
-                    <Button variant="secondary" onClick={() => setTab("forms")}>
-                      Открыть список форм
-                    </Button>
-                    <Link to={checkExplanationsLink} className="btn btn-secondary">
-                      Объяснения проверок
-                    </Link>
-                  </div>
-                </section>
+              {tab === "overview" && selectedRow && (
+                <PackageOverviewPanel
+                  selectedRow={selectedRow}
+                  bpBlockers={bpBlockers}
+                  canMutate={canMutate}
+                  periodClosed={periodClosed}
+                  busy={busy}
+                  checkExplanationsLink={checkExplanationsLink}
+                  onFillForms={() => openFillForms([selectedRow])}
+                  onOpenFormsTab={() => setTab("forms")}
+                />
               )}
 
               {tab === "forms" && (
-                <section className="tools-section">
-                  <h2>
-                    Формы{" "}
-                    <span className="cat-count">
-                      {completeness ? `${completeness.filled}/${completeness.total}` : "—"}
-                    </span>
-                  </h2>
-                  <CollapsibleFilters
-                    activeCount={countActiveFilters(
-                      formSearch.trim().length > 0,
-                      formFilter !== "all"
-                    )}
-                    bodyClassName="tools-grid"
-                  >
-                    <label>
-                      Поиск
-                      <input
-                        type="search"
-                        value={formSearch}
-                        onChange={(e) => setFormSearch(e.target.value)}
-                        placeholder="Код, название, категория…"
-                      />
-                    </label>
-                    <label>
-                      Фильтр
-                      <select
-                        value={formFilter}
-                        onChange={(e) => setFormFilter(e.target.value as FormFilter)}
-                      >
-                        <option value="all">Все</option>
-                        <option value="filled">Заведено</option>
-                        <option value="draft">Черновики</option>
-                        <option value="submitted">Сдано</option>
-                        <option value="missing">Не заведено</option>
-                      </select>
-                    </label>
-                  </CollapsibleFilters>
-                  {canMutate && !periodClosed && selectedRow && (
-                    <div className="toolbar-actions section-actions">
-                      <Button
-                        variant="secondary"
-                        disabled={busy || selectedRow.filled >= selectedRow.total}
-                        onClick={() => openFillForms([selectedRow])}
-                      >
-                        Завести / дозавести
-                      </Button>
-                    </div>
-                  )}
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Форма</th>
-                          <th>Категория</th>
-                          <th>Статус</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formItems.map((f) => (
-                          <tr key={f.formId}>
-                            <td>
-                              <div>{f.title}</div>
-                              <div className="table-sub">{f.formId}</div>
-                            </td>
-                            <td>{f.category || "—"}</td>
-                            <td>
-                              {f.filled ? (
-                                <StatusBadge
-                                  status={f.status ?? "draft"}
-                                  label={formStatusLabel(f.status)}
-                                />
-                              ) : (
-                                <StatusBadge tone="not_started" label="Не заведена" />
-                              )}
-                            </td>
-                            <td>
-                              {f.instanceId ? (
-                                <Link
-                                  to={`/my/${f.instanceId}`}
-                                  className="btn btn-secondary btn-sm"
-                                >
-                                  Открыть
-                                </Link>
-                              ) : (
-                                <Link to="/catalog" className="btn btn-secondary btn-sm">
-                                  Каталог
-                                </Link>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                        {!formItems.length && (
-                          <tr>
-                            <td colSpan={4}>Нет форм по фильтру</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <PackageFormsTabPanel
+                  completeness={completeness}
+                  formItems={formItems}
+                  formSearch={formSearch}
+                  formFilter={formFilter}
+                  canMutate={canMutate}
+                  periodClosed={periodClosed}
+                  busy={busy}
+                  selectedRow={selectedRow}
+                  onFormSearchChange={setFormSearch}
+                  onFormFilterChange={setFormFilter}
+                  onFillForms={() => selectedRow && openFillForms([selectedRow])}
+                />
               )}
 
               {tab === "bp" && (
-                <section className="tools-section">
-                  <h2>Бизнес-процесс</h2>
-                  {!backend && (
-                    <p className="tools-hint">БП доступен только в backend-режиме.</p>
-                  )}
-                  {backend && bp && (
-                    <>
-                      <p className="tools-hint">
-                        <StatusBadge status={bp.status} label={BP_STATUS_LABEL[bp.status]} />
-                        {" · итерация "}
-                        {bp.iteration}
-                        {bp.curatorName ? ` · куратор: ${bp.curatorName}` : ""}
-                        {bp.lastChangedAt
-                          ? ` · ${formatDateTimeRu(bp.lastChangedAt)}${
-                              bp.lastChangedBy ? ` (${bp.lastChangedBy})` : ""
-                            }`
-                          : ""}
-                      </p>
-                      {bpBlockers?.blocked && (
-                        <p className="error">
-                          Блокеры:{" "}
-                          {bpBlockers.missingExplanations
-                            .map((m) => `#${m.ruleNumber}`)
-                            .join(", ")}
-                          . <Link to={checkExplanationsLink}>Объяснения</Link>
-                        </p>
-                      )}
-                      <div className="toolbar-actions">
-                        {bpActions.map((a) => (
-                          <button
-                            key={a.action}
-                            type="button"
-                            className="btn btn-secondary"
-                            disabled={bpBusy || !canMutate}
-                            onClick={() => void handleBpAction(a.action)}
-                          >
-                            {a.label}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          disabled={packageChecksBusy || !canMutate}
-                          onClick={() => void handleRunPackageChecks()}
-                        >
-                          {packageChecksBusy ? "Проверки…" : "Запустить проверки"}
-                        </button>
-                        <Link to="/bp" className="btn btn-secondary">
-                          Мониторинг БП
-                        </Link>
-                      </div>
-                    </>
-                  )}
-                  {backend && !bp && (
-                    <p className="tools-hint">БП не загружен для этого комплекта.</p>
-                  )}
-                </section>
+                <PackageBpPanel
+                  backend={backend}
+                  bp={bp}
+                  bpBlockers={bpBlockers}
+                  bpActions={bpActions}
+                  bpBusy={bpBusy}
+                  packageChecksBusy={packageChecksBusy}
+                  canMutate={canMutate}
+                  checkExplanationsLink={checkExplanationsLink}
+                  onBpAction={(action) => void handleBpAction(action)}
+                  onRunPackageChecks={() => void handleRunPackageChecks()}
+                />
               )}
             </>
           ) : null}
 
           {tab === "setup" && admin && (
-                <section className="tools-section">
-                  <h2>Настройка</h2>
-                  {selectedRow && (
-                  <div className="toolbar-actions" style={{ marginBottom: 16 }}>
-                    {canMutate && !periodClosed && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={busy || typeof zid !== "number" || typeof eid !== "number"}
-                        onClick={() => void handleDistribute()}
-                      >
-                        Раздать дочкам
-                        {childOrgs.length || childOrgCount
-                          ? ` (${childOrgs.length || childOrgCount})`
-                          : ""}
-                      </button>
-                    )}
-                    {canDeletePackage && canMutate && (
-                      <button
-                        type="button"
-                        className="btn btn-danger-outline"
-                        disabled={busy}
-                        onClick={() => void handleDeletePackage()}
-                      >
-                        Удалить комплект
-                      </button>
-                    )}
-                  </div>
-                  )}
-
-                  {canMutate && (
-                    <>
-                      <h3>Организации</h3>
-                      <p className="tools-hint">
-                        Создание и карточки организаций — в справочнике{" "}
-                        <Link to="/admin/refs?kind=Организации">
-                          Справочники → Организации
-                        </Link>
-                        .
-                      </p>
-                      <p className="tools-hint">
-                        Период — в списке слева и «Открыть период». Комплекты
-                        создаются внутри выбранного периода. Закрытие — на
-                        карточке периода.
-                      </p>
-                    </>
-                  )}
-                </section>
+            <PackageSetupPanel
+              selectedRow={selectedRow}
+              canMutate={canMutate}
+              periodClosed={periodClosed}
+              busy={busy}
+              zid={zid}
+              eid={eid}
+              childOrgs={childOrgs}
+              childOrgCount={childOrgCount}
+              canDeletePackage={canDeletePackage}
+              onDistribute={() => void handleDistribute()}
+              onDeletePackage={() => void handleDeletePackage()}
+            />
           )}
         </div>
       </div>

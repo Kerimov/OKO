@@ -3,29 +3,6 @@ import { getMethodologyRelease } from "./methodology.js";
 
 export type PeriodLifecycleStatus = "open" | "closed";
 
-export async function migratePeriodLifecycle(db: OkoDb): Promise<void> {
-  const cols: Array<[string, string]> = [
-    ["period_status", "TEXT DEFAULT 'open'"],
-    ["closed_at", "TEXT"],
-    ["closed_by", "TEXT"],
-    ["methodology_release_id", "TEXT"],
-  ];
-  for (const [name, ddl] of cols) {
-    if (!(await db.columnExists("periods", name))) {
-      await db.exec(`ALTER TABLE periods ADD COLUMN ${name} ${ddl}`);
-    }
-  }
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS period_form_set (
-      eid INTEGER NOT NULL,
-      form_id TEXT NOT NULL,
-      schema_version INTEGER NOT NULL DEFAULT 1,
-      PRIMARY KEY (eid, form_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_period_form_set_eid ON period_form_set(eid);
-  `);
-}
 
 export function normalizePeriodStatus(
   raw: string | null | undefined
@@ -150,7 +127,6 @@ export async function snapshotPeriodFormSetWithForms(
   eid: number,
   forms: Array<{ form_id: string; schema_version: number }>
 ): Promise<number> {
-  await migratePeriodLifecycle(db);
   await db.prepare("DELETE FROM period_form_set WHERE eid = ?").run(eid);
   if (forms.length === 0) return 0;
   await insertPeriodFormSetRows(db, eid, forms);
@@ -174,7 +150,6 @@ export async function replacePeriodFormSet(
   eid: number,
   formIds: string[]
 ): Promise<number> {
-  await migratePeriodLifecycle(db);
   const unique = [...new Set(formIds.map((id) => String(id).trim()).filter(Boolean))];
   if (unique.length === 0) {
     const err = new Error("formIds required");
@@ -207,7 +182,6 @@ export async function listPeriodFormSet(
   db: OkoDb,
   eid: number
 ): Promise<Array<{ formId: string; schemaVersion: number }>> {
-  await migratePeriodLifecycle(db);
   const rows = (await db
     .prepare(
       `SELECT form_id, schema_version FROM period_form_set WHERE eid = ? ORDER BY form_id`

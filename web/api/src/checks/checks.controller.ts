@@ -17,35 +17,19 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import {
   type CheckRuleDto,
-  dtoToRow,
+  createCheckRule,
+  deleteCheckRule,
   exportChecksPayload,
   getCheckRuleByNumber,
   getChecksStats,
   listCheckRules,
   reimportCheckRulesFromJson,
-  syncCheckRuleForms,
+  updateCheckRule,
 } from "../../../domain/src/checks.js";
 import { testCheckExpression } from "../../../domain/src/checkTest.js";
 import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
-import { IsNumber, IsOptional, IsString } from "class-validator";
-
-class TestCheckExpressionDto {
-  @IsString()
-  expression!: string;
-
-  @IsOptional()
-  @IsString()
-  expressionAlt?: string;
-
-  @IsOptional()
-  @IsNumber()
-  zid?: number;
-
-  @IsOptional()
-  @IsNumber()
-  eid?: number;
-}
+import { TestCheckExpressionDto } from "./dto/checks.dto.js";
 
 @ApiTags("checks")
 @ApiBearerAuth()
@@ -139,32 +123,11 @@ export class ChecksController {
   @HttpCode(201)
   @ApiOperation({ summary: "Создать увязку" })
   async create(@Body() dto: CheckRuleDto) {
-    if (!dto.number || !dto.expression?.trim()) {
-      throw new BadRequestException({ error: "number and expression required" });
-    }
-    const db = await getDb();
-    const r = dtoToRow(dto);
     try {
-      await db.prepare(
-        `INSERT INTO check_rules (
-          number, expression, expression_alt, message,
-          for_aggr_only, first_level, active, period_active, period, info
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        r.number,
-        r.expression,
-        r.expression_alt,
-        r.message,
-        r.for_aggr_only,
-        r.first_level,
-        r.active,
-        r.period_active,
-        r.period,
-        r.info
-      );
-      await syncCheckRuleForms(db, r.number, r.expression, r.expression_alt);
-      return dto;
-    } catch {
+      return await createCheckRule(await getDb(), dto);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "insert failed";
+      if (msg.includes("required")) throw new BadRequestException({ error: msg });
       throw new ConflictException({ error: "Rule number already exists" });
     }
   }
@@ -173,47 +136,24 @@ export class ChecksController {
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить увязку" })
   async update(@Param("number") numberRaw: string, @Body() dto: CheckRuleDto) {
-    const num = Number(numberRaw);
-    if (dto.number !== num) {
-      throw new BadRequestException({ error: "number mismatch" });
+    try {
+      const updated = await updateCheckRule(await getDb(), Number(numberRaw), dto);
+      if (!updated) throw new NotFoundException({ error: "Not found" });
+      return updated;
+    } catch (e) {
+      if (e instanceof NotFoundException) throw e;
+      const msg = e instanceof Error ? e.message : "update failed";
+      if (msg.includes("mismatch")) throw new BadRequestException({ error: msg });
+      throw e;
     }
-    const db = await getDb();
-    const r = dtoToRow(dto);
-    const result = await db.prepare(
-      `UPDATE check_rules SET
-        expression = ?, expression_alt = ?, message = ?,
-        for_aggr_only = ?, first_level = ?, active = ?, period_active = ?,
-        period = ?, info = ?
-       WHERE number = ?`
-    ).run(
-      r.expression,
-      r.expression_alt,
-      r.message,
-      r.for_aggr_only,
-      r.first_level,
-      r.active,
-      r.period_active,
-      r.period,
-      r.info,
-      num
-    );
-    if (result.changes === 0) {
-      throw new NotFoundException({ error: "Not found" });
-    }
-    await syncCheckRuleForms(db, num, r.expression, r.expression_alt);
-    return dto;
   }
 
   @Delete(":number")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Удалить увязку" })
   async remove(@Param("number") numberRaw: string) {
-    const result = await (await getDb())
-      .prepare("DELETE FROM check_rules WHERE number = ?")
-      .run(Number(numberRaw));
-    if (result.changes === 0) {
-      throw new NotFoundException({ error: "Not found" });
-    }
+    const ok = await deleteCheckRule(await getDb(), Number(numberRaw));
+    if (!ok) throw new NotFoundException({ error: "Not found" });
     return { ok: true as const };
   }
 }

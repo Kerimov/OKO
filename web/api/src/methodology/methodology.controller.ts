@@ -24,6 +24,12 @@ import {
 import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
+import {
+  MethodologyActivateDto,
+  MethodologyDryRunDto,
+  MethodologyRollbackDto,
+  MethodologySnapshotDto,
+} from "./dto/methodology.dto.js";
 
 @ApiTags("methodology")
 @ApiBearerAuth()
@@ -65,14 +71,7 @@ export class MethodologyController {
   @ApiOperation({
     summary: "Dry-run методологии: сравнить checksums с активным релизом без записи",
   })
-  async dryRun(
-    @Body()
-    body: {
-      version?: string;
-      checksums?: Record<string, string>;
-      parts?: Record<string, unknown>;
-    }
-  ) {
+  async dryRun(@Body() body: MethodologyDryRunDto) {
     try {
       return await dryRunMethodology(await getDb(), body);
     } catch (e) {
@@ -83,7 +82,7 @@ export class MethodologyController {
   @Post("activate")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Активировать релиз методологии (admin)" })
-  async activate(@Req() req: OkoRequest, @Body() body: MethodologyRelease) {
+  async activate(@Req() req: OkoRequest, @Body() body: MethodologyActivateDto) {
     if (!body?.version?.trim()) {
       throw new BadRequestException({ error: "version required" });
     }
@@ -96,6 +95,7 @@ export class MethodologyController {
       const stored = await activateMethodologyRelease(db, {
         ...body,
         kind: "methodology-release",
+        exportedAt: body.exportedAt ?? new Date().toISOString(),
         checksums,
       });
       await logDomainAudit(db, {
@@ -114,7 +114,7 @@ export class MethodologyController {
   @Post("rollback")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Откатить активный релиз на запись из истории (admin)" })
-  async rollback(@Req() req: OkoRequest, @Body() body: { id?: string }) {
+  async rollback(@Req() req: OkoRequest, @Body() body: MethodologyRollbackDto) {
     if (!body?.id?.trim()) {
       throw new BadRequestException({ error: "id required" });
     }
@@ -141,7 +141,7 @@ export class MethodologyController {
   })
   async snapshot(
     @Req() req: OkoRequest,
-    @Body() body: { version?: string; source?: string }
+    @Body() body: MethodologySnapshotDto
   ) {
     const version =
       body.version?.trim() ||

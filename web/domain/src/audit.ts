@@ -13,17 +13,6 @@ export interface AuditEntry {
   created_at: string;
 }
 
-export async function migrateAuditTable(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("report_log", "entity_type"))) {
-    await db.exec("ALTER TABLE report_log ADD COLUMN entity_type TEXT");
-  }
-  if (!(await db.columnExists("report_log", "entity_id"))) {
-    await db.exec("ALTER TABLE report_log ADD COLUMN entity_id TEXT");
-  }
-  if (!(await db.columnExists("report_log", "actor"))) {
-    await db.exec("ALTER TABLE report_log ADD COLUMN actor TEXT");
-  }
-}
 
 function actorFromRequest(req: Request): string | null {
   return req.apiUser?.username ?? req.apiRole ?? null;

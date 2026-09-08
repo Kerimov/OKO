@@ -48,33 +48,6 @@ function digest(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-export async function migratePackageInbox(db: OkoDb): Promise<void> {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS package_inbox (
-      id TEXT PRIMARY KEY,
-      received_at TEXT NOT NULL,
-      actor TEXT,
-      filename TEXT,
-      sha256 TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'received',
-      pkg_zid INTEGER,
-      pkg_eid INTEGER,
-      organization TEXT,
-      period_start TEXT,
-      period_end TEXT,
-      target_zid INTEGER,
-      target_eid INTEGER,
-      validation_errors TEXT NOT NULL DEFAULT '[]',
-      warnings TEXT NOT NULL DEFAULT '[]',
-      instance_count INTEGER NOT NULL DEFAULT 0,
-      accepted_at TEXT,
-      rejected_reason TEXT,
-      payload TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_package_inbox_status ON package_inbox(status, received_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_package_inbox_sha ON package_inbox(sha256);
-  `);
-}
 
 function rowToDto(row: {
   id: string;

@@ -610,6 +610,29 @@ CREATE TABLE IF NOT EXISTS background_jobs (
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_type ON background_jobs(type, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS methodology_releases (
+    id TEXT PRIMARY KEY,
+    version TEXT NOT NULL,
+    exported_at TEXT NOT NULL,
+    activated_at TEXT NOT NULL,
+    source TEXT,
+    checksums TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_methodology_releases_act
+    ON methodology_releases(active, activated_at DESC);
+
+-- GUID-keyed exchange marks (legacy zid/eid PK upgraded by migratePackageExchange)
+CREATE TABLE IF NOT EXISTS package_exchange (
+    package_id TEXT PRIMARY KEY,
+    zid INTEGER NOT NULL,
+    eid INTEGER NOT NULL,
+    last_exported_at TEXT,
+    last_imported_at TEXT,
+    import_version INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_package_exchange_zid_eid ON package_exchange(zid, eid);
+
 -- Remaining PSD tables (transfers, svods, import batches, appendix-12 rules, etc.)
 -- are created by migrations 005–011. Do not restore production from this file alone
 -- without running the migration runner.

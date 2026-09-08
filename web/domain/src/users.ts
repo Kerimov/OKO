@@ -69,32 +69,6 @@ function expiresAtIso(from = new Date()): string {
   return new Date(from.getTime() + sessionTtlMs()).toISOString();
 }
 
-export async function migrateUserTables(db: OkoDb): Promise<void> {
-  if (db.dialect === "postgres") return;
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-      password_hash TEXT NOT NULL,
-      display_name TEXT,
-      role TEXT NOT NULL DEFAULT 'org',
-      zid INTEGER REFERENCES organizations(zid),
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_users_zid ON users(zid);
-  `);
-}
 
 export async function countUsers(db: OkoDb): Promise<number> {
   return ((await db.prepare("SELECT COUNT(*) AS c FROM users").get()) as { c: number }).c;

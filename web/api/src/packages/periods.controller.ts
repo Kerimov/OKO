@@ -10,8 +10,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsNumber, IsOptional } from "class-validator";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { getDb } from "../../../domain/src/db.js";
 import { logAudit } from "../../../domain/src/audit.js";
@@ -28,77 +27,12 @@ import {
 import { userZid } from "../../../domain/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
-import { CreatePeriodDto } from "./dto/packages.dto.js";
-
-class ClosePeriodDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  requireAccepted?: boolean;
-}
-
-class DistributeDto {
-  @ApiPropertyOptional()
-  @IsNumber()
-  parentZid!: number;
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  sourceEid!: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  createEmptyPackages?: boolean;
-
-  @ApiPropertyOptional({ type: [Number] })
-  @IsOptional()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  childZids?: number[];
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  fallbackAllOthers?: boolean;
-}
-
-class CreatePeriodsBulkDto {
-  @ApiPropertyOptional({ type: [Number], description: "Организации; пусто = все" })
-  @IsOptional()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  zids?: number[];
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  name?: string;
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  quarter!: number;
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  year!: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  periodStart?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  periodEnd?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  packageKind?: "OKO" | "BALANCE";
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  reuseExisting?: boolean;
-}
+import {
+  ClosePeriodDto,
+  CreatePeriodDto,
+  CreatePeriodsBulkDto,
+  DistributeDto,
+} from "./dto/packages.dto.js";
 
 @ApiTags("periods")
 @ApiBearerAuth()

@@ -140,7 +140,7 @@ export async function createSvodDefinition(
 }
 
 /**
- * Drill-down placeholder: company → comments/rash for a form cell context.
+ * Company-level drill-down for comments/rash linked to a form cell context.
  */
 export async function svodDetailDrilldown(
   db: OkoDb,

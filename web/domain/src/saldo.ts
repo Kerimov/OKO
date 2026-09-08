@@ -63,51 +63,6 @@ const INSERT_SALDO = `INSERT INTO saldo_rules (
   saldo_t, saldo_s, saldo_g, name, conditional
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-export async function migrateSaldoTables(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("saldo_rules", "saldo_t"))) {
-    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_t INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("saldo_rules", "saldo_s"))) {
-    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_s INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("saldo_rules", "saldo_g"))) {
-    await db.exec("ALTER TABLE saldo_rules ADD COLUMN saldo_g INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("saldo_rules", "name"))) {
-    await db.exec("ALTER TABLE saldo_rules ADD COLUMN name TEXT");
-  }
-  if (!(await db.columnExists("saldo_rules", "conditional"))) {
-    await db.exec("ALTER TABLE saldo_rules ADD COLUMN conditional INTEGER DEFAULT 0");
-  }
-
-  if (!(await db.columnExists("form_templates", "saldo_yellow"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_yellow TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_red"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_red TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_blue"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_green"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_green TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "reorg_update"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN reorg_update TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "reorg_update_2"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN reorg_update_2 TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_yellow_corr"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_yellow_corr TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_red_corr"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_red_corr TEXT");
-  }
-  if (!(await db.columnExists("form_templates", "saldo_blue_corr"))) {
-    await db.exec("ALTER TABLE form_templates ADD COLUMN saldo_blue_corr TEXT");
-  }
-}
 
 export function rowToDto(row: SaldoRuleRow): SaldoRuleDto {
   return {
@@ -233,6 +188,158 @@ export async function getSaldoStats(db: OkoDb) {
       .get()) as { c: number }
   ).c;
   return { total, typeT, typeS, typeG, flagged };
+}
+
+const SALDO_SELECT = `number, target_form, target_column, target_row,
+                source_form, source_column, source_row,
+                end_form, end_column, end_row,
+                saldo_t, saldo_s, saldo_g, name, conditional`;
+
+export async function listSaldoRules(
+  db: OkoDb,
+  opts: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    formId?: string;
+    saldoType?: string;
+  } = {}
+): Promise<{ total: number; limit: number; offset: number; items: SaldoRuleDto[] }> {
+  const limit = Math.min(Number(opts.limit) || 50, 500);
+  const offset = Number(opts.offset) || 0;
+  const q = String(opts.q ?? "").trim();
+  const formId = String(opts.formId ?? "").trim();
+  const saldoType = String(opts.saldoType ?? "").trim();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (q) {
+    conditions.push(
+      "(CAST(number AS TEXT) LIKE ? OR name LIKE ? OR target_form LIKE ? OR source_form LIKE ?)"
+    );
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  if (formId) {
+    conditions.push("(target_form = ? OR source_form = ?)");
+    params.push(formId, formId);
+  }
+  if (saldoType === "t") {
+    conditions.push(
+      "(saldo_t = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
+    );
+  }
+  if (saldoType === "s") {
+    conditions.push(
+      "(saldo_s = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND source_column IS NOT NULL AND source_row IS NOT NULL))"
+    );
+  }
+  if (saldoType === "g") {
+    conditions.push(
+      "(saldo_g = 1 OR (saldo_t = 0 AND saldo_s = 0 AND saldo_g = 0 AND end_column IS NOT NULL AND end_row IS NOT NULL))"
+    );
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const total = (
+    (await db.prepare(`SELECT COUNT(*) AS c FROM saldo_rules ${where}`).get(...params)) as {
+      c: number;
+    }
+  ).c;
+
+  const rows = (await db
+    .prepare(
+      `SELECT ${SALDO_SELECT}
+       FROM saldo_rules ${where}
+       ORDER BY number
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset)) as SaldoRuleRow[];
+
+  return { total, limit, offset, items: rows.map(rowToDto) };
+}
+
+export async function getSaldoRule(db: OkoDb, number: number): Promise<SaldoRuleDto | null> {
+  const row = (await db
+    .prepare(`SELECT ${SALDO_SELECT} FROM saldo_rules WHERE number = ?`)
+    .get(number)) as SaldoRuleRow | undefined;
+  return row ? rowToDto(row) : null;
+}
+
+export async function createSaldoRule(db: OkoDb, dto: SaldoRuleDto): Promise<SaldoRuleDto> {
+  if (!dto.number || !dto.targetForm?.trim()) {
+    throw Object.assign(new Error("number and targetForm required"), { status: 400 });
+  }
+  const r = dtoToRow(dto);
+  await db
+    .prepare(
+      `INSERT INTO saldo_rules (
+        number, target_form, target_column, target_row,
+        source_form, source_column, source_row,
+        end_form, end_column, end_row,
+        saldo_t, saldo_s, saldo_g, name, conditional
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      r.number,
+      r.target_form,
+      r.target_column,
+      r.target_row,
+      r.source_form,
+      r.source_column,
+      r.source_row,
+      r.end_form,
+      r.end_column,
+      r.end_row,
+      r.saldo_t,
+      r.saldo_s,
+      r.saldo_g,
+      r.name,
+      r.conditional
+    );
+  return rowToDto(r);
+}
+
+export async function updateSaldoRule(
+  db: OkoDb,
+  number: number,
+  dto: SaldoRuleDto
+): Promise<SaldoRuleDto | null> {
+  const r = dtoToRow({ ...dto, number });
+  const result = await db
+    .prepare(
+      `UPDATE saldo_rules SET
+        target_form = ?, target_column = ?, target_row = ?,
+        source_form = ?, source_column = ?, source_row = ?,
+        end_form = ?, end_column = ?, end_row = ?,
+        saldo_t = ?, saldo_s = ?, saldo_g = ?, name = ?, conditional = ?
+       WHERE number = ?`
+    )
+    .run(
+      r.target_form,
+      r.target_column,
+      r.target_row,
+      r.source_form,
+      r.source_column,
+      r.source_row,
+      r.end_form,
+      r.end_column,
+      r.end_row,
+      r.saldo_t,
+      r.saldo_s,
+      r.saldo_g,
+      r.name,
+      r.conditional,
+      number
+    );
+  if (result.changes === 0) return null;
+  return rowToDto(r);
+}
+
+export async function deleteSaldoRule(db: OkoDb, number: number): Promise<boolean> {
+  const result = await db.prepare("DELETE FROM saldo_rules WHERE number = ?").run(number);
+  return result.changes > 0;
 }
 
 export async function exportSaldoPayload(db: OkoDb) {

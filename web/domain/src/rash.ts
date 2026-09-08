@@ -126,20 +126,6 @@ export interface RowRashIndexPayload {
   stats?: { forms: number; rows: number; placements: number };
 }
 
-export async function migrateRashTables(db: OkoDb): Promise<void> {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS rash_placements (
-      id          SERIAL PRIMARY KEY,
-      form_id     TEXT NOT NULL,
-      row_no      TEXT NOT NULL,
-      column_key  TEXT NOT NULL DEFAULT '',
-      kod         INTEGER NOT NULL REFERENCES rash_rules(kod) ON DELETE CASCADE,
-      UNIQUE (form_id, row_no, column_key)
-    );
-    CREATE INDEX IF NOT EXISTS idx_rash_placements_kod ON rash_placements(kod);
-    CREATE INDEX IF NOT EXISTS idx_rash_placements_form ON rash_placements(form_id);
-  `);
-}
 
 function rowToDto(row: RashRuleRow): RashRuleDto {
   return {

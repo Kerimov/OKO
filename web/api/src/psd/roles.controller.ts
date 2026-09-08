@@ -31,6 +31,12 @@ import {
   PsdPermissionGuard,
   RequirePsdPermissions,
 } from "../auth/psd-permission.guard.js";
+import {
+  AddRoleMemberDto,
+  CreateRoleDto,
+  SetRolePermissionsDto,
+  UpdateRoleDto,
+} from "./dto/roles.dto.js";
 
 @ApiTags("roles")
 @ApiBearerAuth()
@@ -70,8 +76,8 @@ export class RolesController {
   @HttpCode(200)
   @RequirePsdPermissions("roles.manage", "users.manage", "tech.configure")
   @ApiOperation({ summary: "Добавить пользователя в роль" })
-  async addMember(@Param("code") code: string, @Body() body: { userId?: number }) {
-    const userId = Number(body?.userId);
+  async addMember(@Param("code") code: string, @Body() body: AddRoleMemberDto) {
+    const userId = Number(body.userId);
     if (!Number.isFinite(userId) || userId <= 0) {
       throw new BadRequestException({ error: "userId required" });
     }
@@ -109,16 +115,7 @@ export class RolesController {
   @HttpCode(201)
   @RequirePsdPermissions("roles.manage", "tech.configure")
   @ApiOperation({ summary: "Создать кастомную роль" })
-  async create(
-    @Body()
-    body: {
-      code: string;
-      nameRu: string;
-      nameEn?: string | null;
-      permissions?: string[];
-      active?: boolean;
-    }
-  ) {
+  async create(@Body() body: CreateRoleDto) {
     try {
       const permissions = (body.permissions ?? []).filter(isPsdPermission);
       return await createRole(await getDb(), {
@@ -138,10 +135,7 @@ export class RolesController {
   @Put("roles/:code")
   @RequirePsdPermissions("roles.manage", "tech.configure")
   @ApiOperation({ summary: "Обновить имя/active роли" })
-  async update(
-    @Param("code") code: string,
-    @Body() body: { nameRu?: string; nameEn?: string | null; active?: boolean }
-  ) {
+  async update(@Param("code") code: string, @Body() body: UpdateRoleDto) {
     try {
       return await updateRole(await getDb(), code, body);
     } catch (e) {
@@ -156,13 +150,10 @@ export class RolesController {
   @ApiOperation({ summary: "Задать набор permissions роли" })
   async setPermissions(
     @Param("code") code: string,
-    @Body() body: { permissions: string[] }
+    @Body() body: SetRolePermissionsDto
   ) {
     try {
-      const permissions = (body.permissions ?? []).filter(isPsdPermission) as PsdPermission[];
-      if (!Array.isArray(body.permissions)) {
-        throw new Error("permissions must be an array");
-      }
+      const permissions = body.permissions.filter(isPsdPermission) as PsdPermission[];
       if (body.permissions.some((p) => !isPsdPermission(p))) {
         throw new Error("unknown permission in list");
       }

@@ -18,7 +18,7 @@
                             │ HTTPS  /api/*
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  server-nest/ — NestJS REST (TypeScript)                    │
+│  web/api/ — NestJS REST (TypeScript)                    │
 │  + server/ (домен) · @oko/engine (увязки)                   │
 │  auth · instances · forms · checks · packages · users     │
 └───────────────────────────┬─────────────────────────────────┘
@@ -34,7 +34,7 @@ Offline kits (Tauri): SQLite WAL file `oko.db` in the package folder (not API).
 
 ---
 
-## Фронтенд (`portal/`)
+## Фронтенд (`web/portal/`)
 
 ### Стек
 
@@ -43,7 +43,7 @@ Offline kits (Tauri): SQLite WAL file `oko.db` in the package folder (not API).
 - **React Router** — маршрутизация SPA
 - **react-markdown** — страница инструкции
 
-### Структура `portal/src/`
+### Структура `web/portal/src/`
 
 | Каталог | Назначение |
 |---------|------------|
@@ -101,12 +101,12 @@ Offline kits (Tauri): SQLite WAL file `oko.db` in the package folder (not API).
 
 ---
 
-## Бэкенд (`server-nest/` + `server/`)
+## Бэкенд (`web/api/` + `web/domain/`)
 
 ### Стек
 
-- **NestJS 11** + **TypeScript** — HTTP entrypoint (`server-nest/`)
-- Домен и БД — `server/src/*`
+- **NestJS 11** + **TypeScript** — HTTP entrypoint (`web/api/`)
+- Домен и БД — `web/domain/src/*`
 - **`@oko/engine`** — period-проверки при сдаче формы
 - **pg** — PostgreSQL
 
@@ -114,24 +114,24 @@ Swagger: `/api/docs`.
 
 ### Абстракция БД
 
-`server/src/oko-db.ts` — интерфейс `OkoDb` (PostgreSQL). Требуется `DATABASE_URL`.
+`web/domain/src/oko-db.ts` — интерфейс `OkoDb` (PostgreSQL). Требуется `DATABASE_URL`.
 
 ### Модули
 
 | Слой | Ответственность |
 |------|-----------------|
-| `server-nest/src/**` | Controllers, guards, DTO, Swagger |
-| `server/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
-| `server/src/instances.ts` | CRUD экземпляров |
-| `server/src/instance-submit.ts` | Сдача + серверные проверки |
-| `server/src/auth.ts` | Логин, сессии, Bearer, роли |
-| `server/src/forms.ts` / `checks.ts` / … | Метаданные и правила |
-| `server/src/packages.ts` | Организации, периоды, комплекты |
-| `server/src/orgScope.ts` | Фильтрация по ZID для роли org |
+| `web/api/src/**` | Controllers, guards, DTO, Swagger |
+| `web/domain/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
+| `web/domain/src/instances.ts` | CRUD экземпляров |
+| `web/domain/src/instance-submit.ts` | Сдача + серверные проверки |
+| `web/domain/src/auth.ts` | Логин, сессии, Bearer, роли |
+| `web/domain/src/forms.ts` / `checks.ts` / … | Метаданные и правила |
+| `web/domain/src/packages.ts` | Организации, периоды, комплекты |
+| `web/domain/src/orgScope.ts` | Фильтрация по ZID для роли org |
 | `packages/engine` | `runFormChecksWithData`, cell expressions |
 ### Инициализация БД
 
-`server/src/db.ts` → `bootstrapDatabase()`:
+`web/domain/src/db.ts` → `bootstrapDatabase()`:
 
 1. Применяет `schema.postgresql.sql`.
 2. Импортирует шаблоны и правила из JSON (если таблицы пусты).

@@ -21,11 +21,10 @@ import {
   exportExcelPayload,
   getExcelMapping,
   getExcelStats,
+  listExcelMappings,
   reimportExcelMappingsFromJson,
-  rowToDto as excelRowToDto,
   updateExcelMapping,
   type ExcelMappingDto,
-  type ExcelMappingRow,
 } from "../../../domain/src/excel.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
@@ -52,50 +51,17 @@ export class ExcelController {
   @ApiQuery({ name: "q", required: false })
   @ApiQuery({ name: "formName", required: false })
   async list(
-    @Query("limit") limitRaw?: string,
-    @Query("offset") offsetRaw?: string,
-    @Query("q") qRaw?: string,
-    @Query("formName") formNameRaw?: string
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+    @Query("q") q?: string,
+    @Query("formName") formName?: string
   ) {
-    const db = await getDb();
-    const limit = Math.min(Number(limitRaw) || 50, 500);
-    const offset = Number(offsetRaw) || 0;
-    const q = String(qRaw ?? "").trim();
-    const formName = String(formNameRaw ?? "").trim();
-
-    const conditions: string[] = [];
-    const params: (string | number)[] = [];
-
-    if (q) {
-      conditions.push(
-        "(form_name LIKE ? OR sheet_name LIKE ? OR form_column LIKE ? OR CAST(excel_row AS TEXT) LIKE ?)"
-      );
-      const like = `%${q}%`;
-      params.push(like, like, like, like);
-    }
-    if (formName) {
-      conditions.push("form_name = ?");
-      params.push(formName);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const total = (
-      (await db.prepare(`SELECT COUNT(*) AS c FROM excel_mappings ${where}`).get(...params)) as {
-        c: number;
-      }
-    ).c;
-
-    const rows = (await db
-      .prepare(
-        `SELECT id, form_name, sheet_name, excel_row, excel_column,
-                form_column, form_row, period, add_text
-         FROM excel_mappings ${where}
-         ORDER BY form_name, id
-         LIMIT ? OFFSET ?`
-      )
-      .all(...params, limit, offset)) as ExcelMappingRow[];
-
-    return { total, limit, offset, items: rows.map(excelRowToDto) };
+    return listExcelMappings(await getDb(), {
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      q,
+      formName,
+    });
   }
 
   @Get(":id")
@@ -125,8 +91,7 @@ export class ExcelController {
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить Excel-маппинг (admin)" })
   async update(@Param("id") idRaw: string, @Body() dto: ExcelMappingDto) {
-    const id = Number(idRaw);
-    const updated = await updateExcelMapping(await getDb(), id, dto);
+    const updated = await updateExcelMapping(await getDb(), Number(idRaw), dto);
     if (!updated) throw new NotFoundException({ error: "Not found" });
     return updated;
   }
@@ -154,4 +119,3 @@ export class ExcelController {
     }
   }
 }
-

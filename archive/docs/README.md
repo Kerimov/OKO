@@ -2,6 +2,8 @@
 
 Указатель всей проектной документации. Документы сгруппированы по назначению — для аудита, разработки и эксплуатации.
 
+Актуальное дерево кода: `web/portal`, `web/api`, `web/domain`, `desktop/`, `packages/*`, `archive/`.
+
 ---
 
 ## Для аудита и руководства
@@ -11,9 +13,8 @@
 | [AUDIT-OVERVIEW.md](AUDIT-OVERVIEW.md) | Обзор проекта для аудита: цели, этапы, объём работ, решения |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Техническая архитектура системы |
 | [ОКО-архитектура-файлы-увязки.md](ОКО-архитектура-файлы-увязки.md) | Архитектура, описание файлов проекта и увязки (с примерами) |
-| [PORTAL-GUIDE.md](PORTAL-GUIDE.md) | Руководство пользователя и администратора портала |
-| [../CHANGELOG.md](../CHANGELOG.md) | Хронология разработки |
-| [CHAT-LOG.md](CHAT-LOG.md) | Журнал решений из чата разработки |
+| [PORTAL-GUIDE.md](PORTAL-GUIDE.md) | Руководство пользователя и администратора портала (заморожено) |
+| [CHANGELOG.md](CHANGELOG.md) | Хронология разработки |
 
 ---
 
@@ -22,10 +23,10 @@
 | Документ | Описание |
 |----------|----------|
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Локальная среда, запуск, отладка, типичные задачи |
-| [DEPLOY.md](DEPLOY.md) | Production: Vercel + Render, PostgreSQL, Docker |
+| [DEPLOY.md](DEPLOY.md) | Production: Docker Compose, PostgreSQL, Vercel |
 | [PHASE2-PLAN.md](PHASE2-PLAN.md) | Этап 2: метаданные в БД, редакторы |
 | [PHASE3-PLAN.md](PHASE3-PLAN.md) | Этап 3: сальдо, комплекты, личные кабинеты, агрегация |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Соглашения по коду и коммитам |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Соглашения по коду и коммитам |
 
 ---
 
@@ -33,12 +34,12 @@
 
 | Документ | Описание |
 |----------|----------|
-| [../portal/README.md](../portal/README.md) | Фронтенд-приложение |
-| [../server-nest/README.md](../server-nest/README.md) | NestJS REST API |
-| [../server/README.md](../server/README.md) | Доменный слой API |
-| [../data/README.md](../data/README.md) | Схемы базы данных |
-| [../scripts/README.md](../scripts/README.md) | Скрипты выгрузки из MDB / acceptance-desktop |
-| [../desktop/tauri/README.md](../desktop/tauri/README.md) | Десктоп Tauri 2 |
+| [../../web/portal/README.md](../../web/portal/README.md) | Фронтенд-приложение |
+| [../../web/api/README.md](../../web/api/README.md) | NestJS REST API |
+| [../../web/domain/README.md](../../web/domain/README.md) | Доменный слой API |
+| [../../data/README.md](../../data/README.md) | Схемы базы данных |
+| [../../scripts/README.md](../../scripts/README.md) | CI/ops-скрипты |
+| [../../desktop/README.md](../../desktop/README.md) | Десктоп Tauri 2 |
 | [DESKTOP-TAURI-PILOT.md](DESKTOP-TAURI-PILOT.md) | Пилот M5: установщики, SMB, нагрузка |
 | [DESKTOP-TAURI-GAP-CHECKLIST.md](DESKTOP-TAURI-GAP-CHECKLIST.md) | Чеклист дыр Tauri vs ТЗ / §15 |
 | [DESKTOP-SIGNING.md](DESKTOP-SIGNING.md) | Подпись macOS/Windows (опционально) |
@@ -51,8 +52,8 @@
 
 Текст раздела **Инструкция** в UI собирается из:
 
-- `portal/src/content/instructions-user.md` — пользователь организации
-- `portal/src/content/instructions-admin.md` — администратор
-- `portal/src/content/instructions-appendix.md` — справочник
+- `web/portal/src/content/instructions-user.md` — пользователь организации
+- `web/portal/src/content/instructions-admin.md` — администратор
+- `web/portal/src/content/instructions-appendix.md` — справочник
 
-Сейчас инструкция **заморожена**: не синхронизировать и не дополнять при обычных доработках UI. Когда снова понадобится — обновляйте три файла выше и собирайте `docs/PORTAL-GUIDE.md` (конкатенация).
+Сейчас инструкция **заморожена**: не синхронизировать и не дополнять при обычных доработках UI. Когда снова понадобится — обновляйте три файла выше и собирайте `archive/docs/PORTAL-GUIDE.md` (конкатенация).

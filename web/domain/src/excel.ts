@@ -33,14 +33,6 @@ const INSERT_EXCEL = `INSERT INTO excel_mappings (
   form_name, sheet_name, excel_row, excel_column, form_column, form_row, period, add_text
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-export async function migrateExcelTables(db: OkoDb): Promise<void> {
-  if (!(await db.columnExists("excel_mappings", "period"))) {
-    await db.exec("ALTER TABLE excel_mappings ADD COLUMN period INTEGER DEFAULT 0");
-  }
-  if (!(await db.columnExists("excel_mappings", "add_text"))) {
-    await db.exec("ALTER TABLE excel_mappings ADD COLUMN add_text TEXT");
-  }
-}
 
 export function rowToDto(row: ExcelMappingRow): ExcelMappingDto {
   let excelColumn: number | string | null = row.excel_column;
@@ -121,6 +113,50 @@ export async function getExcelStats(db: OkoDb) {
     }
   ).c;
   return { total, formsCount };
+}
+
+export async function listExcelMappings(
+  db: OkoDb,
+  opts: { limit?: number; offset?: number; q?: string; formName?: string } = {}
+): Promise<{ total: number; limit: number; offset: number; items: ExcelMappingDto[] }> {
+  const limit = Math.min(Number(opts.limit) || 50, 500);
+  const offset = Number(opts.offset) || 0;
+  const q = String(opts.q ?? "").trim();
+  const formName = String(opts.formName ?? "").trim();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (q) {
+    conditions.push(
+      "(form_name LIKE ? OR sheet_name LIKE ? OR form_column LIKE ? OR CAST(excel_row AS TEXT) LIKE ?)"
+    );
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  if (formName) {
+    conditions.push("form_name = ?");
+    params.push(formName);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const total = (
+    (await db.prepare(`SELECT COUNT(*) AS c FROM excel_mappings ${where}`).get(...params)) as {
+      c: number;
+    }
+  ).c;
+
+  const rows = (await db
+    .prepare(
+      `SELECT id, form_name, sheet_name, excel_row, excel_column,
+              form_column, form_row, period, add_text
+       FROM excel_mappings ${where}
+       ORDER BY form_name, id
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset)) as ExcelMappingRow[];
+
+  return { total, limit, offset, items: rows.map(rowToDto) };
 }
 
 export async function exportExcelPayload(db: OkoDb) {

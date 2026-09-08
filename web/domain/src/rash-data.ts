@@ -37,31 +37,6 @@ export interface RashEntryDto {
   values: Record<string, string | number>;
 }
 
-export async function migrateRashDataTables(db: OkoDb): Promise<void> {
-  await db.exec(`
-      CREATE TABLE IF NOT EXISTS form_rash_entries (
-        id              SERIAL PRIMARY KEY,
-        instance_id     TEXT NOT NULL REFERENCES form_instances(instance_id) ON DELETE CASCADE,
-        form_id         TEXT NOT NULL,
-        parent_row_no   INTEGER NOT NULL,
-        column_key      TEXT,
-        rash_kod        INTEGER NOT NULL REFERENCES rash_rules(kod),
-        line_no         INTEGER NOT NULL DEFAULT 0,
-        kontr_id        INTEGER,
-        kontr_name      TEXT,
-        inn             TEXT,
-        kpp             TEXT,
-        attr_a2         TEXT,
-        attr_a3         TEXT,
-        attr_a4         TEXT,
-        template_row_key TEXT,
-        values_json     TEXT NOT NULL DEFAULT '{}'
-      );
-      CREATE INDEX IF NOT EXISTS idx_rash_entries_instance ON form_rash_entries(instance_id);
-      CREATE INDEX IF NOT EXISTS idx_rash_entries_lookup
-        ON form_rash_entries(instance_id, form_id, parent_row_no, rash_kod);
-    `);
-}
 
 function rowToDto(row: RashEntryRow): RashEntryDto {
   let values: Record<string, string | number> = {};

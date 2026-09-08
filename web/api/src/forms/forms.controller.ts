@@ -11,9 +11,6 @@ import {
   saveFormSchemaAtomic,
   setFormArchived,
   updateFormMeta,
-  type FormColumnDto,
-  type FormRowDto,
-  type FormSchemaDto,
 } from "../../../domain/src/forms.js";
 import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
@@ -34,12 +31,23 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Param,
+  ParseArrayPipe,
   Post,
   Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import {
+  ArchiveFormDto,
+  CreateFormDto,
+  FormColumnItemDto,
+  FormRowItemDto,
+  RenameFormColumnDto,
+  ReplaceFormSchemaDto,
+  UpdateFormMetaDto,
+  UpsertCellDefinitionDto,
+} from "./dto/forms.dto.js";
 
 @ApiTags("forms")
 @ApiBearerAuth()
@@ -83,10 +91,7 @@ export class FormsController {
   @UseGuards(AdminGuard)
   @HttpCode(201)
   @ApiOperation({ summary: "Создать или клонировать форму" })
-  async create(
-    @Body() body: { id: string; title?: string; category?: string; cloneFrom?: string }
-  ) {
-    if (!body?.id?.trim()) throw new BadRequestException({ error: "id required" });
+  async create(@Body() body: CreateFormDto) {
     try {
       return await createFormSchema(await getDb(), {
         id: body.id,
@@ -137,18 +142,18 @@ export class FormsController {
   @Put(":id/meta")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить мета формы (admin)" })
-  async updateMeta(@Param("id") id: string, @Body() body: Record<string, unknown>) {
+  async updateMeta(@Param("id") id: string, @Body() body: UpdateFormMetaDto) {
     const db = await getDb();
     const exists = await loadFormSchema(db, id);
     if (!exists) throw new NotFoundException({ error: "Form not found" });
-    await updateFormMeta(db, id, body as Parameters<typeof updateFormMeta>[2]);
+    await updateFormMeta(db, id, body);
     return loadFormSchema(db, id);
   }
 
   @Put(":id/archive")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Архивировать / разархивировать форму" })
-  async archive(@Param("id") id: string, @Body() body: { archived?: boolean }) {
+  async archive(@Param("id") id: string, @Body() body: ArchiveFormDto) {
     try {
       return await setFormArchived(await getDb(), id, body?.archived !== false);
     } catch {
@@ -159,22 +164,28 @@ export class FormsController {
   @Put(":id/columns")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Заменить колонки формы (admin)" })
-  async replaceColumns(@Param("id") id: string, @Body() body: unknown) {
+  async replaceColumns(
+    @Param("id") id: string,
+    @Body(new ParseArrayPipe({ items: FormColumnItemDto, whitelist: true }))
+    body: FormColumnItemDto[]
+  ) {
     const db = await getDb();
     if (!(await loadFormSchema(db, id))) throw new NotFoundException({ error: "Form not found" });
-    if (!Array.isArray(body)) throw new BadRequestException({ error: "columns array required" });
-    await replaceFormColumns(db, id, body as FormColumnDto[]);
+    await replaceFormColumns(db, id, body);
     return loadFormSchema(db, id);
   }
 
   @Put(":id/rows")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Заменить строки формы (admin)" })
-  async replaceRows(@Param("id") id: string, @Body() body: unknown) {
+  async replaceRows(
+    @Param("id") id: string,
+    @Body(new ParseArrayPipe({ items: FormRowItemDto, whitelist: true }))
+    body: FormRowItemDto[]
+  ) {
     const db = await getDb();
     if (!(await loadFormSchema(db, id))) throw new NotFoundException({ error: "Form not found" });
-    if (!Array.isArray(body)) throw new BadRequestException({ error: "rows array required" });
-    await replaceFormRows(db, id, body as FormRowDto[]);
+    await replaceFormRows(db, id, body);
     return loadFormSchema(db, id);
   }
 
@@ -192,24 +203,10 @@ export class FormsController {
   @ApiOperation({ summary: "Сохранить определение ячейки" })
   async putCellDefinition(
     @Param("id") id: string,
-    @Body()
-    body: {
-      rowId: string;
-      columnKey: string;
-      formulaA1?: string | null;
-      formulaStable?: string | null;
-      readonly?: boolean;
-      style?: unknown;
-      validation?: unknown;
-      numberFormat?: string | null;
-      helpText?: string | null;
-    }
+    @Body() body: UpsertCellDefinitionDto
   ) {
     if (!(await loadFormSchema(await getDb(), id))) {
       throw new NotFoundException({ error: "Form not found" });
-    }
-    if (!body?.rowId || !body?.columnKey) {
-      throw new BadRequestException({ error: "rowId and columnKey required" });
     }
     const db = await getDb();
     const result = await upsertCellDefinition(db, { formId: id, ...body });
@@ -241,13 +238,7 @@ export class FormsController {
   @UseGuards(AdminGuard)
   @HttpCode(200)
   @ApiOperation({ summary: "Переименовать графу с каскадом ссылок (admin)" })
-  async renameColumn(
-    @Param("id") id: string,
-    @Body() body: { fromKey?: string; toKey?: string }
-  ) {
-    if (!body?.fromKey?.trim() || !body?.toKey?.trim()) {
-      throw new BadRequestException({ error: "fromKey and toKey required" });
-    }
+  async renameColumn(@Param("id") id: string, @Body() body: RenameFormColumnDto) {
     try {
       return await cascadeRenameColumnKey(
         await getDb(),
@@ -268,7 +259,7 @@ export class FormsController {
   @Put(":id/schema")
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Обновить schema целиком (атомарно, admin)" })
-  async replaceSchema(@Param("id") id: string, @Body() body: FormSchemaDto) {
+  async replaceSchema(@Param("id") id: string, @Body() body: ReplaceFormSchemaDto) {
     if (body.id !== id) throw new BadRequestException({ error: "id mismatch" });
     try {
       const saved = await saveFormSchemaAtomic(await getDb(), body);

@@ -7,9 +7,10 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { domainErrorBody, resolveDomainHttpStatus, type DomainErrorLike } from "./domain-error.js";
 
 /**
- * Domain `Error` with `.status` / известные русские сообщения раньше уходили в
+ * Domain `Error` with `.status` / известные сообщения раньше уходили в
  * Nest ExceptionsHandler как opaque 500 «Internal Server Error».
  * Этот фильтр отдаёт 400/403/422 с текстом причины.
  */
@@ -31,46 +32,16 @@ export class DomainExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    const err = exception as Error & {
-      status?: number;
-      result?: unknown;
-      results?: unknown;
-      toJSON?: () => unknown;
-    };
+    const err = exception as DomainErrorLike;
     const msg = err?.message || "Request failed";
-    const domainStatus = err?.status;
+    const status = resolveDomainHttpStatus(err);
 
-    if (domainStatus === 403) {
-      res.status(403).json({ statusCode: 403, error: msg, message: msg });
-      return;
-    }
-    if (domainStatus === 422) {
-      const body =
-        typeof err.toJSON === "function"
-          ? err.toJSON()
-          : {
-              error: msg,
-              result: err.result,
-              results: err.results,
-            };
-      res.status(422).json({ statusCode: 422, ...(body as object) });
-      return;
-    }
-    if (
-      domainStatus === 400 ||
-      /неполон|не все|недопустимый|закрыт|нельзя принять|period is closed|период не найден|not found|already closed|комплект/i.test(
-        msg
-      )
-    ) {
-      res.status(400).json({ statusCode: 400, error: msg, message: msg });
+    if (status === 500) {
+      this.logger.error(msg, (exception as Error)?.stack);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(domainErrorBody(err, 500));
       return;
     }
 
-    this.logger.error(msg, err?.stack);
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-      statusCode: 500,
-      error: msg,
-      message: msg,
-    });
+    res.status(status).json(domainErrorBody(err, status));
   }
 }

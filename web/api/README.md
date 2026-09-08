@@ -18,9 +18,17 @@ npm install
 npm run dev      # :3001
 ```
 
-Доменная зависимость: пакет `web/domain/` + `@oko/engine` (`packages/engine`).
+Доменная зависимость: пакет `web/domain/` (`oko-domain`) + `@oko/engine` (`packages/engine`).
 
 Переменные окружения — [`.env.example`](../.env.example). Требуется `DATABASE_URL` (PostgreSQL).
+
+Проверки:
+
+```bash
+npm run build   # typecheck
+npm test        # unit (domain-error mapping)
+# e2e при запущенном API+Postgres: node ../../scripts/api_journey.mjs
+```
 
 ---
 
@@ -30,7 +38,8 @@ npm run dev      # :3001
 |------|------------|
 | `src/main.ts` | Bootstrap: Express shell + Nest adapter |
 | `src/app.module.ts` | Модули API |
-| `src/*/…controller.ts` | HTTP-слой |
+| `src/*/…controller.ts` | HTTP-слой (без SQL) |
+| `src/common/` | HTTP helpers, exception filter, unit tests |
 | `../domain/src/*` | Домен (БД, правила, instances, auth) |
 | `../domain/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
 | `../packages/engine` | `@oko/engine` — общие проверки |
