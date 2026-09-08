@@ -24,8 +24,8 @@ import {
   bulkUpsertKontrAgents,
   type KontrAgentDto,
   type KontrBulkItem,
-} from "../../../server/src/kontr.js";
-import { getDb } from "../../../server/src/db.js";
+} from "../../../domain/src/kontr.js";
+import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import {
   PsdPermissionGuard,

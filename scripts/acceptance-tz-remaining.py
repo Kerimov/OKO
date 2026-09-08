@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = ROOT / "portal" / "public"
+PUBLIC = ROOT / "web" / "portal" / "public"
 
 
 def iso_now() -> str:
@@ -420,7 +420,7 @@ def main() -> int:
         print("ALL AUTOMATABLE TZ ACCEPTANCE: PASS")
         print(
             "Optional outside this script: physical SMB LAN audit; "
-            "corporate code signing (see docs/DESKTOP-SIGNING.md); "
+            "corporate code signing (see archive/docs/DESKTOP-SIGNING.md); "
             "Windows/Linux installers via GitHub Actions tauri-ci."
         )
         return 0

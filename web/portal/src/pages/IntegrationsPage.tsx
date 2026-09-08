@@ -222,7 +222,7 @@ export function IntegrationsPage() {
       <h1>Интеграции и своды</h1>
       <p className="tools-hint">
         Админ-хаб ПСД. Реальные адаптеры DO/SAP/ЭЦП — заглушки до артефактов заказчика (см.{" "}
-        <code>docs/PSD-INTEGRATIONS.md</code>). Роль:{" "}
+        <code>archive/docs/PSD-INTEGRATIONS.md</code>). Роль:{" "}
         {psdRoleLabelRu(resolveUiPsdRole(auth.user))}
         {!canMutate ? " · только чтение" : ""}
       </p>

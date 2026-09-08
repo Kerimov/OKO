@@ -1,6 +1,6 @@
 # OKO API (NestJS)
 
-Целевой REST API. Доменная логика остаётся в [`../server/src`](../server/src); контроллеры Nest — в `src/`.
+Целевой REST API. Доменная логика остаётся в [`../domain/src`](../domain/src); контроллеры Nest — в `src/`.
 
 Swagger: http://localhost:3001/api/docs
 
@@ -13,12 +13,12 @@ Swagger: http://localhost:3001/api/docs
 ./dev.sh
 
 # только API
-cd server-nest
+cd web/api
 npm install
 npm run dev      # :3001
 ```
 
-Доменная зависимость: пакет `server/` + `@oko/engine` (`packages/engine`).
+Доменная зависимость: пакет `web/domain/` + `@oko/engine` (`packages/engine`).
 
 Переменные окружения — [`.env.example`](../.env.example). Требуется `DATABASE_URL` (PostgreSQL).
 
@@ -31,8 +31,8 @@ npm run dev      # :3001
 | `src/main.ts` | Bootstrap: Express shell + Nest adapter |
 | `src/app.module.ts` | Модули API |
 | `src/*/…controller.ts` | HTTP-слой |
-| `../server/src/*` | Домен (БД, правила, instances, auth) |
-| `../server/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
+| `../domain/src/*` | Домен (БД, правила, instances, auth) |
+| `../domain/src/legacy-routes.ts` | CORS, JSON, auth/audit middleware |
 | `../packages/engine` | `@oko/engine` — общие проверки |
 
 ---
@@ -49,6 +49,6 @@ docker compose up -d --build          # deploy/Dockerfile.api-nest
 
 ## См. также
 
-- [server/README.md](../server/README.md) — доменный слой
-- [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)
-- [docs/DEPLOY.md](../docs/DEPLOY.md)
+- [domain/README.md](../domain/README.md) — доменный слой
+- [archive/docs/DEVELOPMENT.md](../../archive/docs/DEVELOPMENT.md)
+- [archive/docs/DEPLOY.md](../../archive/docs/DEPLOY.md)

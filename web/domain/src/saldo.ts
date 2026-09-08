@@ -53,8 +53,8 @@ export interface FormCorrespondenceDto {
   pages?: number | null;
 }
 
-const SALDO_JSON = path.join(ROOT, "portal", "public", "data", "saldo-rules.json");
-const CORRESPONDENCE_JSON = path.join(ROOT, "portal", "public", "data", "form-correspondence.json");
+const SALDO_JSON = path.join(ROOT, "web", "portal", "public", "data", "saldo-rules.json");
+const CORRESPONDENCE_JSON = path.join(ROOT, "web", "portal", "public", "data", "form-correspondence.json");
 
 const INSERT_SALDO = `INSERT INTO saldo_rules (
   number, target_form, target_column, target_row,

@@ -12,8 +12,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
-import { logDomainAudit } from "../../../server/src/audit.js";
+import { getDb } from "../../../domain/src/db.js";
+import { logDomainAudit } from "../../../domain/src/audit.js";
 import {
   acceptPackageInbox,
   getPackageInboxDetail,
@@ -22,7 +22,7 @@ import {
   receivePackageInbox,
   rejectPackageInbox,
   type InboxStatus,
-} from "../../../server/src/packageInbox.js";
+} from "../../../domain/src/packageInbox.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";

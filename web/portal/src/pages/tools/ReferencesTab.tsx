@@ -58,7 +58,7 @@ export function ReferencesTab({
         <section className="tools-section">
           <h2>Методология</h2>
           <p className="hint-text">
-            Активный релиз (checksums правил из <code>portal/public/data</code>). Версия
+            Активный релиз (checksums правил из <code>web/portal/public/data</code>). Версия
             уходит в комплект при экспорте правил.
           </p>
           <p>

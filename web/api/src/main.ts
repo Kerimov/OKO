@@ -1,13 +1,13 @@
 import "reflect-metadata";
-import "../../server/src/env.js";
+import "../../domain/src/env.js";
 import express from "express";
 import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Logger, ValidationPipe } from "@nestjs/common";
-import { bootstrapDatabase } from "../../server/src/db.js";
-import { isPostgresMode } from "../../server/src/oko-db.js";
-import { mountLegacyApi } from "../../server/src/legacy-routes.js";
+import { bootstrapDatabase } from "../../domain/src/db.js";
+import { isPostgresMode } from "../../domain/src/oko-db.js";
+import { mountLegacyApi } from "../../domain/src/legacy-routes.js";
 import { AppModule } from "./app.module.js";
 import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 

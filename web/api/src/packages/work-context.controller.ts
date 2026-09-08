@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Put, Req } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { getDb } from "../../../server/src/db.js";
-import { getWorkContext, setWorkContext } from "../../../server/src/packages.js";
-import { userZid } from "../../../server/src/orgScope.js";
-import type { SessionUser } from "../../../server/src/users.js";
+import { getDb } from "../../../domain/src/db.js";
+import { getWorkContext, setWorkContext } from "../../../domain/src/packages.js";
+import { userZid } from "../../../domain/src/orgScope.js";
+import type { SessionUser } from "../../../domain/src/users.js";
 import { WorkContextDto } from "./dto/packages.dto.js";
 
 type ReqWithUser = Request & { apiUser?: SessionUser };

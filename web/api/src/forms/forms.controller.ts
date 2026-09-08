@@ -14,15 +14,15 @@ import {
   type FormColumnDto,
   type FormRowDto,
   type FormSchemaDto,
-} from "../../../server/src/forms.js";
-import { getDb } from "../../../server/src/db.js";
+} from "../../../domain/src/forms.js";
+import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import {
   deleteCellDefinition,
   listCellDefinitions,
   upsertCellDefinition,
   saveTemplateRevision,
-} from "../../../server/src/spreadsheet.js";
+} from "../../../domain/src/spreadsheet.js";
 import {
   BadRequestException,
   Body,
@@ -124,7 +124,7 @@ export class FormsController {
     const version =
       versionRaw != null && versionRaw !== "" ? Number(versionRaw) : undefined;
     if (version != null && Number.isFinite(version)) {
-      const { loadFormSchemaAtVersion } = await import("../../../server/src/spreadsheet.js");
+      const { loadFormSchemaAtVersion } = await import("../../../domain/src/spreadsheet.js");
       const schema = await loadFormSchemaAtVersion(db, id, version);
       if (!schema) throw new NotFoundException({ error: "Form not found" });
       return schema;
@@ -213,7 +213,7 @@ export class FormsController {
     }
     const db = await getDb();
     const result = await upsertCellDefinition(db, { formId: id, ...body });
-    const { bumpFormSchemaVersion } = await import("../../../server/src/forms.js");
+    const { bumpFormSchemaVersion } = await import("../../../domain/src/forms.js");
     await bumpFormSchemaVersion(db, id, "admin");
     return result;
   }

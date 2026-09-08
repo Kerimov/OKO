@@ -1,6 +1,6 @@
 # OKO API — доменный слой
 
-Бизнес-логика и доступ к БД для REST API. **HTTP-entrypoint — NestJS** ([`../server-nest`](../server-nest)).
+Бизнес-логика и доступ к БД для REST API. **HTTP-entrypoint — NestJS** ([`../api`](../api)).
 
 ---
 
@@ -11,7 +11,7 @@
 ./dev.sh
 
 # или
-cd ../server-nest && npm install && npm run dev   # :3001, Swagger /api/docs
+cd ../api && npm install && npm run dev   # :3001, Swagger /api/docs
 ```
 
 Переменные окружения — [`.env.example`](../.env.example). Требуется **`DATABASE_URL`** (PostgreSQL).
@@ -24,14 +24,14 @@ cd ../server-nest && npm install && npm run dev   # :3001, Swagger /api/docs
 |-------|------------|------------|
 | **PostgreSQL** | `DATABASE_URL=postgresql://...` | `data/schema.postgresql.sql` |
 
-Офлайн-комплекты десктопа (`desktop/tauri`, файл `oko.db`) — отдельный SQLite WAL; не используется API.
+Офлайн-комплекты десктопа (`desktop/`, файл `oko.db`) — отдельный SQLite WAL; не используется API.
 
 Абстракция: `src/oko-db.ts` (`OkoDb`, только Postgres).
 
 При старте Nest вызывается `bootstrapDatabase()`:
 
 1. Создаёт таблицы.
-2. Импортирует шаблоны и правила из `portal/public/`.
+2. Импортирует шаблоны и правила из `web/portal/public/`.
 3. Создаёт admin из `OKO_BOOTSTRAP_ADMIN_*`.
 
 ---
@@ -56,7 +56,7 @@ cd ../server-nest && npm install && npm run dev   # :3001, Swagger /api/docs
 
 ## Эндпоинты
 
-Контракты REST реализует Nest (`server-nest/src/**`). Документация: `/api/docs`.
+Контракты REST реализует Nest (`web/api/src/**`). Документация: `/api/docs`.
 
 ---
 
@@ -68,6 +68,6 @@ cd ../server-nest && npm install && npm run dev   # :3001, Swagger /api/docs
 
 ## См. также
 
-- [server-nest/README.md](../server-nest/README.md)
-- [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)
-- [docs/DEPLOY.md](../docs/DEPLOY.md)
+- [api/README.md](../api/README.md)
+- [archive/docs/DEVELOPMENT.md](../../archive/docs/DEVELOPMENT.md)
+- [archive/docs/DEPLOY.md](../../archive/docs/DEPLOY.md)

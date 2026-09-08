@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { ROOT } from "./paths.js";
 
-const RECALC_JSON = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
+const RECALC_JSON = path.join(ROOT, "web", "portal", "public", "data", "recalc-rules.json");
 
 export async function migrateSpreadsheetTables(db: OkoDb): Promise<void> {
   if (!(await db.columnExists("form_template_rows", "row_id"))) {

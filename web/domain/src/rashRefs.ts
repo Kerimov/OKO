@@ -8,7 +8,7 @@ import path from "path";
 import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
-const RASH_REFS_PATH = path.join(ROOT, "portal", "public", "data", "rash-refs.json");
+const RASH_REFS_PATH = path.join(ROOT, "web", "portal", "public", "data", "rash-refs.json");
 
 const LOANS_NZ_REFS_KEY = "loansNzRefs";
 const REFS_OVERLAY_KEY = "rashRefsOverlay";

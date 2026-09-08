@@ -55,8 +55,8 @@ async function loadPackageInstances(
 
 function loadRequiredSchItems(): RequiredSchItem[] {
   const candidates = [
-    path.join(ROOT, "server", "data", "required-sch.json"),
-    path.join(ROOT, "portal", "public", "data", "required-sch.json"),
+    path.join(ROOT, "web", "domain", "data", "required-sch.json"),
+    path.join(ROOT, "web", "portal", "public", "data", "required-sch.json"),
   ];
   for (const file of candidates) {
     try {
@@ -73,7 +73,7 @@ function loadRequiredSchItems(): RequiredSchItem[] {
 }
 
 function loadRequiredRowSlots(): RequiredRowSlotItem[] {
-  const file = path.join(ROOT, "portal", "public", "data", "rash-refs.json");
+  const file = path.join(ROOT, "web", "portal", "public", "data", "rash-refs.json");
   try {
     if (!fs.existsSync(file)) return [];
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as {

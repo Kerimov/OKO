@@ -3,7 +3,7 @@ import path from "path";
 import type { OkoDb } from "./oko-db.js";
 import { ROOT } from "./paths.js";
 
-const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
+const KONTR_PATH = path.join(ROOT, "web", "portal", "public", "data", "kontr.json");
 
 export interface KontrAgentDto {
   id: number;

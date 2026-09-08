@@ -19,7 +19,7 @@ export function AdminAccessGate({ title }: { title: string }) {
         <h1>{title}</h1>
         <div className="error-box">
           Редактирование доступно только при запущенном API-сервере (
-          <code>cd server && npm run dev</code>).
+          <code>cd web/api && npm run dev</code>).
         </div>
       </div>
     );

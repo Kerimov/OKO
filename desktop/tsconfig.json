@@ -13,8 +13,8 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@oko/engine": ["../../packages/engine/src/index.ts"],
-      "@portal/*": ["../../portal/src/*"]
+      "@oko/engine": ["../packages/engine/src/index.ts"],
+      "@portal/*": ["../web/portal/src/*"]
     }
   },
   "include": ["src"]

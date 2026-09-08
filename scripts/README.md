@@ -1,85 +1,18 @@
-# Скрипты выгрузки данных из MDB
+# scripts/
 
-Python-утилиты для переноса метаданных из базы **ПК «ОКО»** (`z261.mdb`) в JSON-файлы портала.
+Operational and CI utilities kept at the repo root.
 
-Исходный MDB кладётся в `reference/` (не коммитится в git). Пароль: `12345`.
+| Script | Role |
+|--------|------|
+| `api_journey.mjs` | API e2e journey (CI) |
+| `validate_corpus.py` | Corpus size/key checks (`web/portal/public/data`) |
+| `scan_secrets.py` | Lightweight secrets scan |
+| `tauri_security_smoke.py` | Tauri CSP / allowlist smoke |
+| `tauri-collab-smoke.py` | Desktop collab smoke |
+| `acceptance-desktop.sh` | Desktop acceptance wrapper |
+| `acceptance-tz-remaining.py` | TZ remaining checks |
+| `pg-backup.sh` / `prod-up.sh` | Ops helpers |
+| `install-macos-oko.sh` | macOS install helper |
+| `import_production_rash.sh` | Re-export rash data from production MDB |
 
----
-
-## Основные скрипты (production)
-
-| Скрипт | Назначение | Результат |
-|--------|------------|-----------|
-| **`generate_schemas_from_mdb.py`** | Шаблоны 76 форм: строки, колонки, метаданные | `portal/public/schemas/*.json`, `catalog.json` |
-| **`export_mdb_data.py`** | Правила увязок, сальдо, Excel, расшифровки, агрегация | `portal/public/data/*.json` |
-
-Запуск из корня репозитория:
-
-```bash
-python scripts/generate_schemas_from_mdb.py
-python scripts/export_mdb_data.py
-```
-
-После выгрузки — Reimport в API (`/admin/forms`, `/admin/checks` и т.д.) или пересоздание БД.
-
----
-
-## Вспомогательные скрипты (разработка / анализ)
-
-| Скрипт | Назначение |
-|--------|------------|
-| `explore_mdb.py`, `explore_mdb2.py`, `explore_mdb3.py` | Исследование структуры таблиц MDB |
-| `explore_phase2.py` | Анализ таблиц для Phase 2 |
-| `explore_exports.py` | Проверка выгруженных JSON |
-| `explore_excel.py` | Анализ Excel-маппинга |
-| `compare_forms.py`, `compare_forms_detail.py` | Сверка форм MDB ↔ портал |
-| `check_n02_6.py` | Точечная проверка формы N02_6 |
-| `check_encoding.py` | Кодировки в MDB |
-| `missing_forms_info.py` | Какие формы отсутствуют в каталоге |
-| `mde_gap.py` | Разрыв между MDE и порталом |
-| `empty_portal_forms.py` | Генерация пустых экземпляров |
-| `tauri-collab-smoke.py` | M5: 10 клиентов + опционально `--conflict-test` |
-| `acceptance-tz-remaining.py` | §15: dual-client, offline, backup, import 76 форм в портал |
-| `acceptance-desktop.sh` | Обёртка smoke + TZ remaining |
-| `install-macos-oko.sh` | Установка DMG в «Программы» (оба имени .app) |
-| `generate_schemas.py` | Устаревший генератор (используйте `generate_schemas_from_mdb.py`) |
-
----
-
-## Зависимости
-
-Скрипты используют стандартную библиотеку Python и/или:
-
-- доступ к `reference/z261.mdb` через ODBC или mdbtools (зависит от скрипта);
-- пути относительно корня репозитория.
-
-Перед первым запуском убедитесь, что MDB на месте:
-
-```bash
-ls reference/z261.mdb   # файл должен существовать локально
-```
-
----
-
-## Workflow обновления комплекта ОКО
-
-```
-Новый z261.mdb от методологов
-        ↓
-reference/z261.mdb
-        ↓
-generate_schemas_from_mdb.py  →  portal/public/schemas/
-export_mdb_data.py            →  portal/public/data/
-        ↓
-git commit JSON-файлов
-        ↓
-Reimport в production API
-```
-
----
-
-## См. также
-
-- [reference/README.md](../reference/README.md)
-- [reference/docs/oko-analysis.md](../reference/docs/oko-analysis.md)
-- [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)
+One-off Access/MDB explorers and schema generators live in [`archive/scripts/`](../archive/scripts/).

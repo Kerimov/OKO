@@ -19,7 +19,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   assertInstanceWritable,
   buildEvalSnapshotFromDb,
@@ -34,21 +34,21 @@ import {
   setInstanceStatus,
   upsertInstance,
   upsertInstancesBatch,
-} from "../../../server/src/instances.js";
+} from "../../../domain/src/instances.js";
 import {
   submitInstanceWithChecks,
   submitInstancesBulkWithChecks,
   runInstancePeriodChecks,
-} from "../../../server/src/instance-submit.js";
+} from "../../../domain/src/instance-submit.js";
 import {
   assertOrgInstanceAccess,
   enforceOrgInstanceWrite,
   mergeOrgFilter,
   userZid,
-} from "../../../server/src/orgScope.js";
-import { loadRashEntries, saveRashEntries } from "../../../server/src/rash-data.js";
-import type { RashEntryDto } from "../../../server/src/rash-data.js";
-import type { OkoFormInstance } from "../../../server/src/types.js";
+} from "../../../domain/src/orgScope.js";
+import { loadRashEntries, saveRashEntries } from "../../../domain/src/rash-data.js";
+import type { RashEntryDto } from "../../../domain/src/rash-data.js";
+import type { OkoFormInstance } from "../../../domain/src/types.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import {
   PsdPermissionGuard,
@@ -266,7 +266,7 @@ export class InstancesController {
       if (!inst.status) inst.status = "draft";
 
       if (inst.zid != null && inst.eid != null) {
-        const { assertPeriodWritable } = await import("../../../server/src/periodLifecycle.js");
+        const { assertPeriodWritable } = await import("../../../domain/src/periodLifecycle.js");
         await assertPeriodWritable(db, inst.eid, inst.zid);
       }
 

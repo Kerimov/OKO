@@ -15,7 +15,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   dtoToRow as saldoDtoToRow,
   exportFormCorrespondencePayload,
@@ -29,7 +29,7 @@ import {
   type FormCorrespondenceDto,
   type SaldoRuleDto,
   type SaldoRuleRow,
-} from "../../../server/src/saldo.js";
+} from "../../../domain/src/saldo.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
 @ApiTags("saldo")

@@ -9,8 +9,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
-import { logDomainAudit } from "../../../server/src/audit.js";
+import { getDb } from "../../../domain/src/db.js";
+import { logDomainAudit } from "../../../domain/src/audit.js";
 import {
   activateMethodologyRelease,
   buildChecksums,
@@ -20,7 +20,7 @@ import {
   listMethodologyReleases,
   rollbackMethodologyRelease,
   type MethodologyRelease,
-} from "../../../server/src/methodology.js";
+} from "../../../domain/src/methodology.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
@@ -149,8 +149,8 @@ export class MethodologyController {
     try {
       const fs = await import("node:fs");
       const path = await import("node:path");
-      const { ROOT } = await import("../../../server/src/paths.js");
-      const dataDir = path.join(ROOT, "portal", "public", "data");
+      const { ROOT } = await import("../../../domain/src/paths.js");
+      const dataDir = path.join(ROOT, "web", "portal", "public", "data");
       const read = (name: string) => {
         const p = path.join(dataDir, name);
         if (!fs.existsSync(p)) return undefined;
@@ -170,7 +170,7 @@ export class MethodologyController {
         kind: "methodology-release",
         version,
         exportedAt: new Date().toISOString(),
-        source: body.source ?? "portal/public/data",
+        source: body.source ?? "web/portal/public/data",
         checksums: buildChecksums(parts),
       });
       await logDomainAudit(db, {

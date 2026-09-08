@@ -14,10 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MDB = Path(os.environ.get("OKO_MDB_PATH", "")).resolve() if os.environ.get("OKO_MDB_PATH") else None
 if not MDB or not MDB.exists():
-    MDB = ROOT / "reference" / "z261.mdb"
+    MDB = ROOT / "archive" / "reference" / "z261.mdb"
 if not MDB.exists():
-    MDB = ROOT / "12345" / "z261.m_b"
-OUT = ROOT / "portal" / "public" / "data"
+    MDB = ROOT / "archive" / "kits" / "12345" / "z261.m_b"
+OUT = ROOT / "web" / "portal" / "public" / "data"
 
 FL_AGENT = {
     "id": 3041,
@@ -264,7 +264,7 @@ def main() -> int:
     (OUT / "loans-nzs-refs.json").write_text(
         json.dumps(loans, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    fixture_dir = ROOT / "portal" / "src" / "engine" / "fixtures"
+    fixture_dir = ROOT / "web" / "portal" / "src" / "engine" / "fixtures"
     fixture_dir.mkdir(parents=True, exist_ok=True)
     (fixture_dir / "t-ras-sample.json").write_text(
         json.dumps(fixture, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

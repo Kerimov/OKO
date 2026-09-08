@@ -65,7 +65,7 @@ export interface FormCatalogDto {
   }>;
 }
 
-const SCHEMAS_DIR = path.join(ROOT, "portal", "public", "schemas");
+const SCHEMAS_DIR = path.join(ROOT, "web", "portal", "public", "schemas");
 const CATALOG_JSON = path.join(SCHEMAS_DIR, "catalog.json");
 
 const DEFAULT_CATEGORIES: Record<string, string> = {
@@ -973,7 +973,7 @@ export async function getFormDependencies(
   }
 
   try {
-    const recalcPath = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
+    const recalcPath = path.join(ROOT, "web", "portal", "public", "data", "recalc-rules.json");
     if (fs.existsSync(recalcPath)) {
       const data = JSON.parse(fs.readFileSync(recalcPath, "utf-8")) as {
         byForm?: Record<string, unknown[]>;

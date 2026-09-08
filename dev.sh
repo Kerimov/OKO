@@ -108,8 +108,8 @@ rm -f "${PIDS_FILE}"
 mkdir -p "${LOG_DIR}"
 
 echo "==> API runtime: NestJS"
-run_service "API" "server-nest" "npm run dev"
-run_service "Portal" "portal" "npm run dev"
+run_service "API" "web/api" "npm run dev"
+run_service "Portal" "web/portal" "npm run dev"
 
 echo ""
 echo "API:     http://localhost:3001"

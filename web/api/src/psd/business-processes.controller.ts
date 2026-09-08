@@ -14,7 +14,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   assertBpOrgAccess,
   assignBpCurator,
@@ -24,21 +24,21 @@ import {
   listBusinessProcesses,
   transitionBusinessProcess,
   type BpAction,
-} from "../../../server/src/businessProcess.js";
-import { normalizePackageKind } from "../../../server/src/businessProcessTypes.js";
+} from "../../../domain/src/businessProcess.js";
+import { normalizePackageKind } from "../../../domain/src/businessProcessTypes.js";
 import {
   DtoValidationError,
   parseBpEnsureBody,
-} from "../../../server/src/psdDto.js";
-import { resolvePsdRole, type PsdRole } from "../../../server/src/psdRoles.js";
-import { getApprovalBlockers } from "../../../server/src/checkJournal.js";
+} from "../../../domain/src/psdDto.js";
+import { resolvePsdRole, type PsdRole } from "../../../domain/src/psdRoles.js";
+import { getApprovalBlockers } from "../../../domain/src/checkJournal.js";
 import {
   ApiRoleParam,
   ReqUser,
 } from "../auth/decorators/oko-request.decorator.js";
 import { PsdPermissionGuard, RequirePsdPermissions } from "./psd-permission.guard.js";
-import type { SessionUser } from "../../../server/src/users.js";
-import type { ApiRole } from "../../../server/src/auth.js";
+import type { SessionUser } from "../../../domain/src/users.js";
+import type { ApiRole } from "../../../domain/src/auth.js";
 
 function roleOf(user: SessionUser | undefined, apiRole: ApiRole | undefined): PsdRole {
   return resolvePsdRole({

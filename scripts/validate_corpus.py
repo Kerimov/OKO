@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate portal/public/data corpus sizes and required keys."""
+"""Validate web/portal/public/data corpus sizes and required keys."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "portal" / "public" / "data"
+DATA = ROOT / "web" / "portal" / "public" / "data"
 
 MIN_KONTR = 10  # sample MDB has 13; production should be much larger
 MIN_CHECKS = 100

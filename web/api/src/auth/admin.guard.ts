@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
-import { isAuthEnabled } from "../../../server/src/auth.js";
+import { isAuthEnabled } from "../../../domain/src/auth.js";
 import type { OkoRequest } from "./decorators/oko-request.decorator.js";
 
 @Injectable()

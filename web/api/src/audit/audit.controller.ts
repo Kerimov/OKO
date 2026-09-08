@@ -1,7 +1,7 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
-import { listAuditLog } from "../../../server/src/audit.js";
+import { getDb } from "../../../domain/src/db.js";
+import { listAuditLog } from "../../../domain/src/audit.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
 @ApiTags("audit")

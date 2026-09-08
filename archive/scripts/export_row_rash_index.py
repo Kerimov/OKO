@@ -14,11 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MDB = Path(os.environ.get("OKO_MDB_PATH", "")).resolve() if os.environ.get("OKO_MDB_PATH") else None
 if not MDB or not MDB.exists():
-    MDB = ROOT / "reference" / "z261.mdb"
+    MDB = ROOT / "archive" / "reference" / "z261.mdb"
 if not MDB.exists():
-    MDB = ROOT / "12345" / "z261.m_b"
-OUT = ROOT / "portal" / "public" / "data" / "row-rash-index.json"
-CATALOG = ROOT / "portal" / "public" / "schemas" / "catalog.json"
+    MDB = ROOT / "archive" / "kits" / "12345" / "z261.m_b"
+OUT = ROOT / "web" / "portal" / "public" / "data" / "row-rash-index.json"
+CATALOG = ROOT / "web" / "portal" / "public" / "schemas" / "catalog.json"
 
 LETTER_COLS = list("BCDEFGHIJKLMNOPQRSTUVWXYZ") + [
     "Б",
@@ -154,7 +154,7 @@ def main() -> int:
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Wrote {OUT} ({payload['stats']['rows']} rows, {payload['stats']['forms']} forms)")
 
-    schemas_dir = ROOT / "portal" / "public" / "schemas"
+    schemas_dir = ROOT / "web" / "portal" / "public" / "schemas"
     patched = 0
     for fpath in sorted(schemas_dir.glob("*.json")):
         if fpath.name == "catalog.json":

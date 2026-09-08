@@ -96,7 +96,7 @@ export interface RashThresholdsDto {
   labels: string[];
 }
 
-const RASH_JSON = path.join(ROOT, "portal", "public", "data", "rash-rules.json");
+const RASH_JSON = path.join(ROOT, "web", "portal", "public", "data", "rash-rules.json");
 
 const DEFAULT_THRESHOLDS: RashThresholdsDto = {
   level1: 1,
@@ -106,7 +106,7 @@ const DEFAULT_THRESHOLDS: RashThresholdsDto = {
   labels: ["1 тыс. руб.", "5 млн руб.", "50 млн руб."],
 };
 
-const ROW_RASH_JSON = path.join(ROOT, "portal", "public", "data", "row-rash-index.json");
+const ROW_RASH_JSON = path.join(ROOT, "web", "portal", "public", "data", "row-rash-index.json");
 
 export interface RashPlacementDto {
   formId: string;

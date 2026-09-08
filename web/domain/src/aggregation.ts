@@ -169,9 +169,10 @@ export interface RunAggregationResult {
   checkSummary?: { total: number; passed: number; failed: number };
 }
 
-const AGG_JSON = path.join(ROOT, "portal", "public", "data", "agg-list.json");
+const AGG_JSON = path.join(ROOT, "web", "portal", "public", "data", "agg-list.json");
 const CORRESPONDENCE_JSON = path.join(
   ROOT,
+  "web",
   "portal",
   "public",
   "data",
@@ -1135,8 +1136,8 @@ async function buildAggregationRecalcContext(
 ): Promise<AggregationRecalcContext> {
   const { loadFormSchemas } = await import("./forms.js");
   const schemas = await loadFormSchemas(db, formIds);
-  const modernPath = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
-  const legacyPath = path.join(ROOT, "portal", "public", "data", "row-formulas.json");
+  const modernPath = path.join(ROOT, "web", "portal", "public", "data", "recalc-rules.json");
+  const legacyPath = path.join(ROOT, "web", "portal", "public", "data", "row-formulas.json");
   let modernByForm: Record<string, RecalcRule[]> | undefined;
   let legacyByForm: Record<string, RowFormula[]> | undefined;
   if (fs.existsSync(modernPath)) {

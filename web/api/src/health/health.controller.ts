@@ -1,10 +1,10 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import { getAuthConfig } from "../../../server/src/auth.js";
-import { getDb } from "../../../server/src/db.js";
-import { getInstanceStorageStats } from "../../../server/src/instances.js";
-import { listAppliedMigrations } from "../../../server/src/migrations/runner.js";
-import { isPostgresMode } from "../../../server/src/oko-db.js";
+import { getAuthConfig } from "../../../domain/src/auth.js";
+import { getDb } from "../../../domain/src/db.js";
+import { getInstanceStorageStats } from "../../../domain/src/instances.js";
+import { listAppliedMigrations } from "../../../domain/src/migrations/runner.js";
+import { isPostgresMode } from "../../../domain/src/oko-db.js";
 import { getRequestMetrics } from "../common/request-log.middleware.js";
 import { Public } from "../auth/decorators/public.decorator.js";
 

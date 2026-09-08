@@ -32,13 +32,13 @@ import {
   runPackageAggregation,
   upsertAggEntry,
   validatePackageAccountRows,
-} from "../../../server/src/aggregation.js";
-import { getDb } from "../../../server/src/db.js";
-import { logDomainAudit } from "../../../server/src/audit.js";
+} from "../../../domain/src/aggregation.js";
+import { getDb } from "../../../domain/src/db.js";
+import { logDomainAudit } from "../../../domain/src/audit.js";
 import {
   assertAggregationTargetZid,
   assertOrgZidParam,
-} from "../../../server/src/orgScope.js";
+} from "../../../domain/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {

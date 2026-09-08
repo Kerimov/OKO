@@ -15,14 +15,14 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   countOrganizations,
   createOrganization,
   listOrganizations,
   updateOrganization,
-} from "../../../server/src/packages.js";
-import { userZid } from "../../../server/src/orgScope.js";
+} from "../../../domain/src/packages.js";
+import { userZid } from "../../../domain/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import {
   CreateOrganizationDto,

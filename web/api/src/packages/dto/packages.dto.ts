@@ -9,7 +9,7 @@ import {
   IsString,
   ValidateNested,
 } from "class-validator";
-import type { OkoFormInstance } from "../../../../server/src/types.js";
+import type { OkoFormInstance } from "../../../../domain/src/types.js";
 
 export class CreateOrganizationDto {
   @ApiProperty()

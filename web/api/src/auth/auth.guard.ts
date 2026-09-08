@@ -10,7 +10,7 @@ import {
   isAuthEnabled,
   isPublicApiPath,
   resolveAuth,
-} from "../../../server/src/auth.js";
+} from "../../../domain/src/auth.js";
 import type { OkoRequest } from "./decorators/oko-request.decorator.js";
 import { IS_PUBLIC_KEY } from "./decorators/public.decorator.js";
 

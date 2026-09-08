@@ -1,6 +1,6 @@
 /**
  * Integration ports for PSD external systems.
- * Concrete adapters must not invent customer formats — see docs/PSD-INTEGRATIONS.md.
+ * Concrete adapters must not invent customer formats — see archive/docs/PSD-INTEGRATIONS.md.
  */
 
 export type PackageKind = "OKO" | "BALANCE";

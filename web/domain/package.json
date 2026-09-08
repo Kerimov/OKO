@@ -2,7 +2,7 @@
   "name": "oko-server",
   "private": true,
   "version": "1.0.0",
-  "description": "Domain layer for OKO API (NestJS entrypoint is server-nest).",
+  "description": "Domain layer for OKO API (NestJS entrypoint is web/api).",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -11,7 +11,7 @@
     "migrate:dry-run": "tsx src/migrateDryRun.ts"
   },
   "dependencies": {
-    "@oko/engine": "file:../packages/engine",
+    "@oko/engine": "file:../../packages/engine",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",

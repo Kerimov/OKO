@@ -3,24 +3,24 @@ name: ci
 on:
   push:
     paths:
-      - "portal/**"
-      - "server/**"
-      - "server-nest/**"
+      - "web/portal/**"
+      - "web/domain/**"
+      - "web/api/**"
       - "packages/engine/**"
       - "packages/spreadsheet/**"
-      - "desktop/tauri/**"
+      - "desktop/**"
       - "deploy/**"
       - "data/**"
       - "scripts/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
-      - "portal/**"
-      - "server/**"
-      - "server-nest/**"
+      - "web/portal/**"
+      - "web/domain/**"
+      - "web/api/**"
       - "packages/engine/**"
       - "packages/spreadsheet/**"
-      - "desktop/tauri/**"
+      - "desktop/**"
       - "deploy/**"
       - "data/**"
       - "scripts/**"
@@ -32,14 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: portal
+        working-directory: web/portal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: portal/package-lock.json
+          cache-dependency-path: web/portal/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -48,14 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: portal
+        working-directory: web/portal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: portal/package-lock.json
+          cache-dependency-path: web/portal/package-lock.json
       - run: npm ci
       - run: npx playwright install chromium --with-deps
       - run: npm run build
@@ -103,7 +103,7 @@ jobs:
           python-version: "3.12"
       - run: python3 scripts/tauri_security_smoke.py
       - name: Rust path-allowlist unit tests
-        working-directory: desktop/tauri/src-tauri
+        working-directory: desktop/src-tauri
         run: cargo test path_allowlist_tests -- --nocapture
 
   server-typecheck:
@@ -115,20 +115,20 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: |
-            server/package-lock.json
-            server-nest/package-lock.json
+            web/domain/package-lock.json
+            web/api/package-lock.json
       - name: Install server + nest
         run: |
-          cd server && npm ci
-          cd ../server-nest && npm ci
+          cd web/domain && npm ci
+          cd ../api && npm ci
       - name: Typecheck domain
-        working-directory: server
+        working-directory: web/domain
         run: npm run typecheck
       - name: Session policy selftest
-        working-directory: server
+        working-directory: web/domain
         run: npm run test:selftest
       - name: Typecheck Nest
-        working-directory: server-nest
+        working-directory: web/api
         run: npm run build
 
   corpus-and-secrets:
@@ -178,19 +178,19 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: |
-            server/package-lock.json
-            server-nest/package-lock.json
+            web/domain/package-lock.json
+            web/api/package-lock.json
             packages/engine/package-lock.json
       - name: Install dependencies
         run: |
           cd packages/engine && npm ci
-          cd ../../server && npm ci
-          cd ../server-nest && npm ci
+          cd ../../web/domain && npm ci
+          cd ../api && npm ci
       - name: Migration dry-run
-        working-directory: server
+        working-directory: web/domain
         run: npm run migrate:dry-run
       - name: Start API
-        working-directory: server-nest
+        working-directory: web/api
         run: |
           npm start > /tmp/oko-api.log 2>&1 &
           echo $! > /tmp/oko-api.pid

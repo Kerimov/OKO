@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 import type { Request } from "express";
-import type { ApiRole } from "../../../../server/src/auth.js";
-import type { SessionUser } from "../../../../server/src/users.js";
+import type { ApiRole } from "../../../../domain/src/auth.js";
+import type { SessionUser } from "../../../../domain/src/users.js";
 
 export interface OkoRequest extends Request {
   apiRole?: ApiRole;

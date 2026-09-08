@@ -6,12 +6,12 @@ import {
   SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { isAuthEnabled } from "../../../server/src/auth.js";
+import { isAuthEnabled } from "../../../domain/src/auth.js";
 import {
   hasPermission,
   resolvePsdRole,
   type PsdPermission,
-} from "../../../server/src/psdRoles.js";
+} from "../../../domain/src/psdRoles.js";
 import type { OkoRequest } from "./decorators/oko-request.decorator.js";
 
 export const PSD_PERMISSIONS_KEY = "psd_permissions";

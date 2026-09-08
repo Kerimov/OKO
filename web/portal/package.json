@@ -13,8 +13,8 @@
     "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
-    "@oko/engine": "file:../packages/engine",
-    "@oko/spreadsheet": "file:../packages/spreadsheet",
+    "@oko/engine": "file:../../packages/engine",
+    "@oko/spreadsheet": "file:../../packages/spreadsheet",
     "@univerjs/preset-sheets-core": "^0.25.1",
     "@univerjs/presets": "^0.25.1",
     "exceljs": "^4.4.0",

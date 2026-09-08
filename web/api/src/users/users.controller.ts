@@ -11,9 +11,9 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { refreshUserAccountsCache } from "../../../server/src/auth.js";
-import { getDb } from "../../../server/src/db.js";
-import { createUser, listUsers, updateUser } from "../../../server/src/users.js";
+import { refreshUserAccountsCache } from "../../../domain/src/auth.js";
+import { getDb } from "../../../domain/src/db.js";
+import { createUser, listUsers, updateUser } from "../../../domain/src/users.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { CreateUserDto, UpdateUserDto } from "../packages/dto/packages.dto.js";
 

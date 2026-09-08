@@ -34,7 +34,7 @@ export interface CheckRuleDto {
   info?: string | null;
 }
 
-const CHECKS_JSON = path.join(ROOT, "portal", "public", "data", "checks.json");
+const CHECKS_JSON = path.join(ROOT, "web", "portal", "public", "data", "checks.json");
 
 export function referencedFormsFromExpression(
   expression: string,

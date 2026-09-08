@@ -20,7 +20,7 @@ npm run preview   # просмотр сборки
 ## Структура
 
 ```
-portal/
+web/portal/
 ├── src/
 │   ├── pages/          # Экраны (маршруты)
 │   ├── components/     # UI-компоненты
@@ -86,12 +86,12 @@ python scripts/export_mdb_data.py
 - `src/content/instructions-admin.md`
 - `src/content/instructions-appendix.md`
 
-Сейчас инструкция **заморожена** (см. [docs/README.md](../docs/README.md)): не дополнять при обычных доработках.
+Сейчас инструкция **заморожена** (см. [archive/docs/README.md](../../archive/docs/README.md)): не дополнять при обычных доработках.
 
 ---
 
 ## См. также
 
-- [docs/PORTAL-GUIDE.md](../docs/PORTAL-GUIDE.md) — руководство пользователя
-- [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
-- [server/README.md](../server/README.md)
+- [archive/docs/PORTAL-GUIDE.md](../../archive/docs/PORTAL-GUIDE.md) — руководство пользователя
+- [archive/docs/ARCHITECTURE.md](../../archive/docs/ARCHITECTURE.md)
+- [domain/README.md](../domain/README.md)

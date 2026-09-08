@@ -13,19 +13,19 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { IsArray, IsBoolean, IsNumber, IsOptional } from "class-validator";
 import type { Request } from "express";
-import { getDb } from "../../../server/src/db.js";
-import { logAudit } from "../../../server/src/audit.js";
+import { getDb } from "../../../domain/src/db.js";
+import { logAudit } from "../../../domain/src/audit.js";
 import {
   createPeriod,
   createPeriodsForOrganizations,
   distributePackagesToChildren,
   listPeriods,
-} from "../../../server/src/packages.js";
+} from "../../../domain/src/packages.js";
 import {
   closePeriod,
   reopenPeriod,
-} from "../../../server/src/periodLifecycle.js";
-import { userZid } from "../../../server/src/orgScope.js";
+} from "../../../domain/src/periodLifecycle.js";
+import { userZid } from "../../../domain/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import type { OkoRequest } from "../auth/decorators/oko-request.decorator.js";
 import { CreatePeriodDto } from "./dto/packages.dto.js";

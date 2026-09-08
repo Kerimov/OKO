@@ -13,7 +13,7 @@
 - **M2:** presence / heartbeat / sync / per-cell save
 - **M3:** назначения, PIN координатора, статусы, «Мои формы»
 - **M4:** бэкап, экспорт/импорт JSON, увязки, force-unlock
-- **M5:** сборка установщиков (dmg/nsis/msi), [пилот-док](../../docs/DESKTOP-TAURI-PILOT.md), smoke 10 клиентов
+- **M5:** сборка установщиков (dmg/nsis/msi), [пилот-док](../archive/docs/DESKTOP-TAURI-PILOT.md), smoke 10 клиентов
 
 Ограничения пилота: часть rash/recalc rule engine на стороне bridge упрощена; code signing / нотаризация.
 
@@ -26,7 +26,7 @@
 ## Запуск (dev)
 
 ```bash
-cd desktop/tauri
+cd desktop
 npm install
 npm run dev:tauri
 ```
@@ -68,4 +68,4 @@ python3 ../../scripts/tauri-collab-smoke.py /path/to/package --clients 10 --seco
 | M3 | `get/save_assignments`, `*_coordinator_pin`, `set_instance_status`, `set_restrict_executors` |
 | M4 | `backup_database`, `force_unlock`, `export_package_json`, `import_package_json` |
 
-См. [docs/DESKTOP-FILLER-TZ.md](../../docs/DESKTOP-FILLER-TZ.md), [docs/DESKTOP-TAURI-PILOT.md](../../docs/DESKTOP-TAURI-PILOT.md).
+См. [docs/DESKTOP-FILLER-TZ.md](../archive/docs/DESKTOP-FILLER-TZ.md), [docs/DESKTOP-TAURI-PILOT.md](../archive/docs/DESKTOP-TAURI-PILOT.md).

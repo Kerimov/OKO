@@ -24,9 +24,9 @@ import {
   listCheckRules,
   reimportCheckRulesFromJson,
   syncCheckRuleForms,
-} from "../../../server/src/checks.js";
-import { testCheckExpression } from "../../../server/src/checkTest.js";
-import { getDb } from "../../../server/src/db.js";
+} from "../../../domain/src/checks.js";
+import { testCheckExpression } from "../../../domain/src/checkTest.js";
+import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { IsNumber, IsOptional, IsString } from "class-validator";
 

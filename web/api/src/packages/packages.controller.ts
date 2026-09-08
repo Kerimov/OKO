@@ -17,7 +17,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   createReportPackage,
   constructPackages,
@@ -31,15 +31,15 @@ import {
   importReportPackage,
   listPackageCampaigns,
   previewPackageConstruction,
-} from "../../../server/src/packages.js";
+} from "../../../domain/src/packages.js";
 import {
   enqueueBackgroundJob,
   getBackgroundJob,
-} from "../../../server/src/jobs.js";
+} from "../../../domain/src/jobs.js";
 import {
   assertOrgZidParam,
   userZid,
-} from "../../../server/src/orgScope.js";
+} from "../../../domain/src/orgScope.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { rethrowAsHttp } from "../common/oko-http.js";
 import {
@@ -49,8 +49,8 @@ import {
   PackageImportDto,
   PackageZidEidDto,
 } from "./dto/packages.dto.js";
-import { assertPackageSubmittedChecks } from "../../../server/src/instance-submit.js";
-import type { OkoFormInstance } from "../../../server/src/types.js";
+import { assertPackageSubmittedChecks } from "../../../domain/src/instance-submit.js";
+import type { OkoFormInstance } from "../../../domain/src/types.js";
 
 function assertConstructAccess(req: Request, body: PackageConstructDto): void {
   const scoped = userZid(req);

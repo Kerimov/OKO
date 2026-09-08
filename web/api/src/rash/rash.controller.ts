@@ -48,8 +48,8 @@ import {
   type RashPlacementDto,
   type RashRuleDto,
   type RashThresholdsDto,
-} from "../../../server/src/rash.js";
-import { getDb } from "../../../server/src/db.js";
+} from "../../../domain/src/rash.js";
+import { getDb } from "../../../domain/src/db.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
 @ApiTags("rash")

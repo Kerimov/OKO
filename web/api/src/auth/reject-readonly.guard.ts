@@ -4,8 +4,8 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
-import { isAuthEnabled } from "../../../server/src/auth.js";
-import { resolvePsdRole } from "../../../server/src/psdRoles.js";
+import { isAuthEnabled } from "../../../domain/src/auth.js";
+import { resolvePsdRole } from "../../../domain/src/psdRoles.js";
 import type { OkoRequest } from "./decorators/oko-request.decorator.js";
 
 /** Block mutating verbs for auditor_readonly. */

@@ -27,7 +27,7 @@ export interface ExcelMappingDto {
   addText?: string | null;
 }
 
-const EXCEL_JSON = path.join(ROOT, "portal", "public", "data", "excel-export.json");
+const EXCEL_JSON = path.join(ROOT, "web", "portal", "public", "data", "excel-export.json");
 
 const INSERT_EXCEL = `INSERT INTO excel_mappings (
   form_name, sheet_name, excel_row, excel_column, form_column, form_row, period, add_text

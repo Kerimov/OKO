@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CONF = ROOT / "desktop" / "tauri" / "src-tauri" / "tauri.conf.json"
-LIB = ROOT / "desktop" / "tauri" / "src-tauri" / "src" / "lib.rs"
+CONF = ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
+LIB = ROOT / "desktop" / "src-tauri" / "src" / "lib.rs"
 
 
 def main() -> int:

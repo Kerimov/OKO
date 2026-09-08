@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Импорт справочников расшифровок из боевой MDB в portal/public/data/
+# Импорт справочников расшифровок из боевой MDB в web/portal/public/data/
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MDB="${OKO_MDB_PATH:-$ROOT/12345/z261.m_b}"
+MDB="${OKO_MDB_PATH:-$ROOT/archive/kits/12345/z261.m_b}"
 
 if [[ ! -f "$MDB" ]]; then
   echo "MDB not found: $MDB" >&2
@@ -13,8 +13,8 @@ fi
 export OKO_MDB_PATH="$MDB"
 echo "Source MDB: $MDB"
 
-python3 "$ROOT/scripts/export_rash_support_data.py"
-python3 "$ROOT/scripts/export_row_rash_index.py"
+python3 "/archive/scripts/export_rash_support_data.py"
+python3 "/archive/scripts/export_row_rash_index.py"
 
 echo ""
 echo "Для сервера (после деплоя kontr.json):"

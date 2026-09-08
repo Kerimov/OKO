@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Automated portion of DESKTOP-FILLER-TZ §15 + pilot checklist.
-# Manual SMB/2-PC steps remain in docs/DESKTOP-TAURI-GAP-CHECKLIST.md (P0.1–P0.4).
+# Manual SMB/2-PC steps remain in archive/docs/DESKTOP-TAURI-GAP-CHECKLIST.md (P0.1–P0.4).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="${1:-}"

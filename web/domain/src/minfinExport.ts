@@ -21,9 +21,9 @@ const require = createRequire(import.meta.url);
 export function resolveMinfinTemplatePath(): string | null {
   const candidates = [
     process.env.OKO_MINFIN_TEMPLATE?.trim(),
-    path.join(ROOT, "12345", "ШаблоныФорм-МинФин.xlsx"),
-    path.join(ROOT, "portal", "public", "templates", "minfin.xlsx"),
-    path.join(ROOT, "reference", "ШаблоныФорм-МинФин.xlsx"),
+    path.join(ROOT, "archive", "kits", "12345", "ШаблоныФорм-МинФин.xlsx"),
+    path.join(ROOT, "web", "portal", "public", "templates", "minfin.xlsx"),
+    path.join(ROOT, "archive", "reference", "ШаблоныФорм-МинФин.xlsx"),
   ].filter(Boolean) as string[];
   return candidates.find((p) => fs.existsSync(p)) ?? null;
 }
@@ -36,7 +36,7 @@ function loadExcelJS(): {
   };
 } {
   const candidates = [
-    path.join(ROOT, "portal/node_modules/exceljs"),
+    path.join(ROOT, "web/portal/node_modules/exceljs"),
     path.join(ROOT, "node_modules/exceljs"),
   ];
   for (const c of candidates) {

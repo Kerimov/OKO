@@ -6,5 +6,5 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 // Repo root .env (OKO/.env) — as documented in DEVELOPMENT.md
 dotenv.config({ path: path.join(here, "../../.env") });
-// Fallback: server/.env
+// Fallback: web/domain/.env
 dotenv.config({ path: path.join(here, "../.env") });

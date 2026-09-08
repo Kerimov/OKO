@@ -8,11 +8,11 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import fs from "fs";
 import path from "path";
-import { getDb } from "../../../server/src/db.js";
-import { ROOT } from "../../../server/src/paths.js";
-import { listRecalcRules } from "../../../server/src/spreadsheet.js";
+import { getDb } from "../../../domain/src/db.js";
+import { ROOT } from "../../../domain/src/paths.js";
+import { listRecalcRules } from "../../../domain/src/spreadsheet.js";
 
-const RECALC_JSON = path.join(ROOT, "portal", "public", "data", "recalc-rules.json");
+const RECALC_JSON = path.join(ROOT, "web", "portal", "public", "data", "recalc-rules.json");
 
 @ApiTags("recalc")
 @ApiBearerAuth()

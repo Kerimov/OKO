@@ -82,7 +82,7 @@ def main() -> int:
             continue
         # Skip docs that only discuss env var names as examples.
         rel = path.relative_to(ROOT).as_posix()
-        if rel.startswith("docs/") or rel.endswith(".md"):
+        if rel.startswith("docs/") or rel.startswith("archive/docs/") or rel.endswith(".md"):
             continue
         for name, pat in PATTERNS:
             for m in pat.finditer(text):

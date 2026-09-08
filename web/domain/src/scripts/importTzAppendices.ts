@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const db = await getDb();
   const apply = process.argv.includes("--apply");
   if (!apply && !process.argv.includes("--preview")) throw new Error("use --preview or --apply");
-  const tzDir = path.join(ROOT, "TZ");
+  const tzDir = path.join(ROOT, "archive", "tz");
   const reports: unknown[] = [];
   const big = path.join(tzDir, "Приложение 1-10,14-16,18.xlsx");
   if (!fs.existsSync(big)) throw new Error(`Missing ${big}`);

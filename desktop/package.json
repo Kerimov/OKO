@@ -16,8 +16,8 @@
     "icons": "tauri icon src-tauri/icons/icon.png --output src-tauri/icons"
   },
   "dependencies": {
-    "@oko/engine": "file:../../packages/engine",
-    "@oko/spreadsheet": "file:../../packages/spreadsheet",
+    "@oko/engine": "file:../packages/engine",
+    "@oko/spreadsheet": "file:../packages/spreadsheet",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.1",
     "@tauri-apps/plugin-fs": "^2.2.1",

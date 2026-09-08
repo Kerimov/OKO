@@ -5,7 +5,7 @@
 | `schema.postgresql.sql` | PostgreSQL 16 | **API** (Nest) — source of truth |
 | `schema.sql` | SQLite | Справка / исторический шаблон; десктоп-кит создаёт `oko.db` в Tauri (DDL в Rust) |
 
-Применяется автоматически при `bootstrapDatabase()` в `server/src/db.ts` (только PostgreSQL).
+Применяется автоматически при `bootstrapDatabase()` в `web/domain/src/db.ts` (только PostgreSQL).
 
 ---
 
@@ -37,6 +37,6 @@ form_cell_values       (instance_id, row_no, column_key, …)
 
 ## См. также
 
-- [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
-- [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)
-- [LOCAL-POSTGRES.md](../docs/LOCAL-POSTGRES.md)
+- [archive/docs/ARCHITECTURE.md](../archive/docs/ARCHITECTURE.md)
+- [archive/docs/DEVELOPMENT.md](../archive/docs/DEVELOPMENT.md)
+- [LOCAL-POSTGRES.md](../archive/docs/LOCAL-POSTGRES.md)

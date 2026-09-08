@@ -14,28 +14,28 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { getDb } from "../../../server/src/db.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   listCollectionUnits,
   upsertCollectionUnit,
   type CollectionUnitKind,
-} from "../../../server/src/collectionUnits.js";
+} from "../../../domain/src/collectionUnits.js";
 import {
   archiveKontragent,
   createKontrVersion,
   findKontrUsages,
   getKontrVersionAt,
   listKontrVersions,
-} from "../../../server/src/kontrVersions.js";
+} from "../../../domain/src/kontrVersions.js";
 import {
   appendCheckRunJournal,
   getApprovalBlockers,
   listCheckExplanations,
   listCheckJournal,
   upsertCheckExplanation,
-} from "../../../server/src/checkJournal.js";
-import { parseCheckDsl } from "../../../server/src/checkDsl.js";
-import { runPackageChecks } from "../../../server/src/packageCheckRun.js";
+} from "../../../domain/src/checkJournal.js";
+import { parseCheckDsl } from "../../../domain/src/checkDsl.js";
+import { runPackageChecks } from "../../../domain/src/packageCheckRun.js";
 import {
   createSvodDefinition,
   listSvodDefinitions,
@@ -43,45 +43,45 @@ import {
   calculateSvod,
   copySvodFromPreviousPeriod,
   svodDrilldown,
-} from "../../../server/src/svodRegistry.js";
+} from "../../../domain/src/svodRegistry.js";
 import {
   bulkUpsertMinfinMappings,
   bulkUpsertTransferMaps,
   listMinfinMappings,
   listTransferMaps,
   type TransferMapKind,
-} from "../../../server/src/transferMaps.js";
-import { applyTransferMaps, rollbackTransferBatch } from "../../../server/src/transferApply.js";
-import { listCellComments, upsertCellComment } from "../../../server/src/cellComments.js";
+} from "../../../domain/src/transferMaps.js";
+import { applyTransferMaps, rollbackTransferBatch } from "../../../domain/src/transferApply.js";
+import { listCellComments, upsertCellComment } from "../../../domain/src/cellComments.js";
 import {
   findKontrByGuid,
   getKontrCardSections,
   listPerimeterKontragents,
   listPerimeterOrganizations,
   updateKontrCardSection,
-} from "../../../server/src/nsiPerimeter.js";
-import { recommendRashArticles } from "../../../server/src/rashRefs.js";
-import { StubDoXmlTransport, listDoInbox } from "../../../server/src/integrations/doXmlAdapter.js";
+} from "../../../domain/src/nsiPerimeter.js";
+import { recommendRashArticles } from "../../../domain/src/rashRefs.js";
+import { StubDoXmlTransport, listDoInbox } from "../../../domain/src/integrations/doXmlAdapter.js";
 import {
   MappingTableMinFinExport,
   StubEdsSigningAdapter,
   StubSapConsolidationAdapter,
-} from "../../../server/src/integrations/adapters.js";
-import { normalizePackageKind } from "../../../server/src/businessProcessTypes.js";
+} from "../../../domain/src/integrations/adapters.js";
+import { normalizePackageKind } from "../../../domain/src/businessProcessTypes.js";
 import {
   DtoValidationError,
   parseTransferApplyBody,
-} from "../../../server/src/psdDto.js";
+} from "../../../domain/src/psdDto.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import {
   ApiRoleParam,
   ReqUser,
 } from "../auth/decorators/oko-request.decorator.js";
-import type { SessionUser } from "../../../server/src/users.js";
-import type { ApiRole } from "../../../server/src/auth.js";
-import { resolvePsdRole } from "../../../server/src/psdRoles.js";
-import { loadInstance } from "../../../server/src/instances.js";
-import type { OkoDb } from "../../../server/src/oko-db.js";
+import type { SessionUser } from "../../../domain/src/users.js";
+import type { ApiRole } from "../../../domain/src/auth.js";
+import { resolvePsdRole } from "../../../domain/src/psdRoles.js";
+import { loadInstance } from "../../../domain/src/instances.js";
+import type { OkoDb } from "../../../domain/src/oko-db.js";
 import {
   PsdPermissionGuard,
   RejectReadOnlyGuard,
@@ -424,7 +424,7 @@ export class PsdChecksController {
   @Get("dsl-rules")
   @RequirePsdPermissions("forms.read")
   async listDslRules(@Query("packageKind") packageKind?: string) {
-    const { listCheckDslRules } = await import("../../../server/src/checkDslRules.js");
+    const { listCheckDslRules } = await import("../../../domain/src/checkDslRules.js");
     return listCheckDslRules(await getDb(), packageKind ? normalizePackageKind(packageKind) : undefined);
   }
 
@@ -443,7 +443,7 @@ export class PsdChecksController {
       sortOrder?: number;
     }
   ) {
-    const { upsertCheckDslRule } = await import("../../../server/src/checkDslRules.js");
+    const { upsertCheckDslRule } = await import("../../../domain/src/checkDslRules.js");
     return upsertCheckDslRule(await getDb(), {
       ...body,
       packageKind: normalizePackageKind(body.packageKind),
@@ -457,7 +457,7 @@ export class PsdChecksController {
     @Body() body: { zid: number; eid: number; packageKind?: string },
     @ReqUser() user?: SessionUser
   ) {
-    const { runPackageDslChecks } = await import("../../../server/src/checkDslRules.js");
+    const { runPackageDslChecks } = await import("../../../domain/src/checkDslRules.js");
     return runPackageDslChecks(await getDb(), {
       zid: body.zid,
       eid: body.eid,
@@ -475,7 +475,7 @@ export class SupportReportsController {
   @Get("presets")
   @RequirePsdPermissions("reports.build", "forms.read")
   async presets() {
-    const { listSupportReportPresets } = await import("../../../server/src/supportReports.js");
+    const { listSupportReportPresets } = await import("../../../domain/src/supportReports.js");
     return listSupportReportPresets(await getDb());
   }
 
@@ -485,7 +485,7 @@ export class SupportReportsController {
   async run(
     @Body() body: { code: string; zid?: number; eid?: number; locale?: "ru" | "en" }
   ) {
-    const { runSupportReport } = await import("../../../server/src/supportReports.js");
+    const { runSupportReport } = await import("../../../domain/src/supportReports.js");
     try {
       return await runSupportReport(await getDb(), body);
     } catch (e) {
@@ -726,7 +726,7 @@ export class IntegrationsController {
       sap: { name: sap.name, configured: sap.isConfigured() },
       eds: { name: eds.name, configured: eds.isConfigured() },
       minfin: { name: minfin.name, configured: minfin.isConfigured() },
-      docs: "/docs/PSD-INTEGRATIONS.md",
+      docs: "/archive/docs/PSD-INTEGRATIONS.md",
     };
   }
 

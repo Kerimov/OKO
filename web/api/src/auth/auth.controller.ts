@@ -18,14 +18,14 @@ import {
   loginWithCredentials,
   logoutAllSessions,
   logoutSession,
-} from "../../../server/src/auth.js";
-import { sessionTtlMs, maxSessionsPerUser } from "../../../server/src/users.js";
-import { getDb } from "../../../server/src/db.js";
+} from "../../../domain/src/auth.js";
+import { sessionTtlMs, maxSessionsPerUser } from "../../../domain/src/users.js";
+import { getDb } from "../../../domain/src/db.js";
 import {
   beginOidcState,
   completeOidcLogin,
   getOidcRuntimeConfig,
-} from "../../../server/src/oidc.js";
+} from "../../../domain/src/oidc.js";
 import { LoginDto } from "./dto/login.dto.js";
 import { Public } from "./decorators/public.decorator.js";
 

@@ -50,7 +50,7 @@ import { getDb, initDatabase, type OkoDb } from "./oko-db.js";
 import { DATA_DIR, ROOT } from "./paths.js";
 import { refreshUserAccountsCache } from "./auth.js";
 
-const KONTR_PATH = path.join(ROOT, "portal", "public", "data", "kontr.json");
+const KONTR_PATH = path.join(ROOT, "web", "portal", "public", "data", "kontr.json");
 
 async function initSchema(database: OkoDb): Promise<void> {
   await migrateCheckRulesTable(database);
