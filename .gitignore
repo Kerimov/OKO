@@ -3,37 +3,38 @@
 .oko-dev-pids
 .oko-logs/
 
-portal/node_modules
-portal/dist
-server/node_modules
-server-nest/node_modules
-server-nest/dist
+web/portal/node_modules
+web/portal/dist
+web/domain/node_modules
+web/api/node_modules
+web/api/dist
 packages/**/node_modules
 packages/**/dist
-desktop/tauri/node_modules
-desktop/tauri/dist
-desktop/tauri/dist-install
-desktop/tauri/src-tauri/target
-desktop/tauri/release/
+desktop/node_modules
+desktop/dist
+desktop/dist-install
+desktop/src-tauri/target
+desktop/release/
 
 # Legacy Electron filler (not in repo; local leftovers must not flood SCM)
 desktop/filler/
+archive/desktop-filler/
 
 # Accidental tsc emit next to TypeScript sources
-server/src/**/*.js
+web/domain/src/**/*.js
 
 # SQLite (legacy local API file; kits use per-folder oko.db)
 data/oko.db
 data/oko.db-*
 
 # PDF-образцы форм (локально, не публикуются в репозиторий)
-portal/public/pdf/*.pdf
+web/portal/public/pdf/*.pdf
 
 # Исходный комплект ОКО (бинарники)
-reference/*.mdb
-reference/*.mde
+archive/reference/*.mdb
+archive/reference/*.mde
 # Локальная копия комплекта ОКО (не публиковать)
-12345/
+archive/kits/12345/
 *.mde
 .env
 *.pfx
@@ -41,5 +42,5 @@ reference/*.mde
 *.key
 
 # Playwright
-portal/test-results/
-portal/playwright-report/
+web/portal/test-results/
+web/portal/playwright-report/
