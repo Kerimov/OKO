@@ -14,6 +14,13 @@ import {
   type SystemPsdRole,
 } from "./psdRoles.js";
 
+export interface RoleMemberDto {
+  id: number;
+  username: string;
+  displayName: string | null;
+  active: boolean;
+}
+
 export interface RoleDto {
   code: RoleCode;
   nameRu: string;
@@ -22,6 +29,7 @@ export interface RoleDto {
   active: boolean;
   permissions: PsdPermission[];
   userCount: number;
+  members: RoleMemberDto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -122,6 +130,53 @@ export function allPermissionsSet(): ReadonlySet<PsdPermission> {
   return new Set(PSD_PERMISSIONS);
 }
 
+async function membersByRole(db: OkoDb): Promise<Map<string, RoleMemberDto[]>> {
+  const rows = (await db
+    .prepare(
+      `SELECT id, username, display_name, active, psd_role
+       FROM users
+       WHERE psd_role IS NOT NULL
+       ORDER BY COALESCE(display_name, username)`
+    )
+    .all()) as Array<{
+    id: number;
+    username: string;
+    display_name: string | null;
+    active: number;
+    psd_role: string;
+  }>;
+  const map = new Map<string, RoleMemberDto[]>();
+  for (const row of rows) {
+    const list = map.get(row.psd_role) ?? [];
+    list.push({
+      id: row.id,
+      username: row.username,
+      displayName: row.display_name,
+      active: !!row.active,
+    });
+    map.set(row.psd_role, list);
+  }
+  return map;
+}
+
+function toRoleDto(
+  row: RoleRow,
+  members: RoleMemberDto[] = []
+): RoleDto {
+  return {
+    code: row.code,
+    nameRu: row.name_ru,
+    nameEn: row.name_en,
+    system: !!row.system,
+    active: !!row.active,
+    permissions: [...permissionsForRoleCode(row.code)],
+    userCount: members.length,
+    members,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export async function listRoles(db: OkoDb): Promise<RoleDto[]> {
   const rows = (await db
     .prepare(
@@ -130,28 +185,8 @@ export async function listRoles(db: OkoDb): Promise<RoleDto[]> {
        ORDER BY system DESC, name_ru`
     )
     .all()) as RoleRow[];
-  const counts = (await db
-    .prepare(
-      `SELECT psd_role AS code, COUNT(*) AS c FROM users WHERE psd_role IS NOT NULL GROUP BY psd_role`
-    )
-    .all()) as Array<{ code: string; c: number }>;
-  const countMap = new Map(counts.map((c) => [c.code, Number(c.c)]));
-  const result: RoleDto[] = [];
-  for (const r of rows) {
-    const perms = [...permissionsForRoleCode(r.code)];
-    result.push({
-      code: r.code,
-      nameRu: r.name_ru,
-      nameEn: r.name_en,
-      system: !!r.system,
-      active: !!r.active,
-      permissions: perms,
-      userCount: countMap.get(r.code) ?? 0,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    });
-  }
-  return result;
+  const membersMap = await membersByRole(db);
+  return rows.map((r) => toRoleDto(r, membersMap.get(r.code) ?? []));
 }
 
 export async function getRole(db: OkoDb, code: RoleCode): Promise<RoleDto | null> {
@@ -161,22 +196,8 @@ export async function getRole(db: OkoDb, code: RoleCode): Promise<RoleDto | null
     )
     .get(code)) as RoleRow | undefined;
   if (!row) return null;
-  const userCount = (
-    (await db
-      .prepare(`SELECT COUNT(*) AS c FROM users WHERE psd_role = ?`)
-      .get(code)) as { c: number }
-  ).c;
-  return {
-    code: row.code,
-    nameRu: row.name_ru,
-    nameEn: row.name_en,
-    system: !!row.system,
-    active: !!row.active,
-    permissions: [...permissionsForRoleCode(row.code)],
-    userCount: Number(userCount),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+  const membersMap = await membersByRole(db);
+  return toRoleDto(row, membersMap.get(code) ?? []);
 }
 
 export async function assertRoleExists(db: OkoDb, code: RoleCode): Promise<void> {
@@ -184,6 +205,79 @@ export async function assertRoleExists(db: OkoDb, code: RoleCode): Promise<void>
   if (!row || !row.active) {
     throw new Error(`Unknown or inactive role: ${code}`);
   }
+}
+
+export interface RoleDirectoryUser {
+  id: number;
+  username: string;
+  displayName: string | null;
+  active: boolean;
+  roleCode: string | null;
+  roleNameRu: string | null;
+}
+
+/** Compact user list for assigning roles from the Roles admin UI. */
+export async function listRoleDirectory(db: OkoDb): Promise<RoleDirectoryUser[]> {
+  const rows = (await db
+    .prepare(
+      `SELECT u.id, u.username, u.display_name, u.active, u.psd_role, r.name_ru
+       FROM users u
+       LEFT JOIN roles r ON r.code = u.psd_role
+       ORDER BY COALESCE(u.display_name, u.username)`
+    )
+    .all()) as Array<{
+    id: number;
+    username: string;
+    display_name: string | null;
+    active: number;
+    psd_role: string | null;
+    name_ru: string | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name,
+    active: !!r.active,
+    roleCode: r.psd_role,
+    roleNameRu: r.name_ru,
+  }));
+}
+
+const DEFAULT_FALLBACK_ROLE: RoleCode = "subsidiary_specialist";
+
+export async function assignUserToRole(
+  db: OkoDb,
+  roleCode: RoleCode,
+  userId: number
+): Promise<RoleDto> {
+  await assertRoleExists(db, roleCode);
+  const { updateUser, getUserById } = await import("./users.js");
+  const user = await getUserById(db, userId);
+  if (!user) throw new Error("User not found");
+  if (!user.active) throw new Error("Cannot assign role to inactive user");
+  await updateUser(db, userId, { psdRole: roleCode });
+  return (await getRole(db, roleCode))!;
+}
+
+export async function removeUserFromRole(
+  db: OkoDb,
+  roleCode: RoleCode,
+  userId: number,
+  toRoleCode?: RoleCode
+): Promise<RoleDto> {
+  const { updateUser, getUserById } = await import("./users.js");
+  const user = await getUserById(db, userId);
+  if (!user) throw new Error("User not found");
+  if (user.psdRole !== roleCode) {
+    throw new Error("User is not assigned to this role");
+  }
+  let next = (toRoleCode ?? DEFAULT_FALLBACK_ROLE).trim();
+  if (next === roleCode) {
+    throw new Error("Choose a different role when removing a member");
+  }
+  await assertRoleExists(db, next);
+  await updateUser(db, userId, { psdRole: next });
+  return (await getRole(db, roleCode))!;
 }
 
 function normalizeRoleCode(raw: string): string {

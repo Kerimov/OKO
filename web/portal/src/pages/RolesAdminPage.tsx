@@ -12,6 +12,13 @@ type PermissionEntry = {
   labelEn: string;
 };
 
+type RoleMemberDto = {
+  id: number;
+  username: string;
+  displayName: string | null;
+  active: boolean;
+};
+
 type RoleDto = {
   code: string;
   nameRu: string;
@@ -20,6 +27,7 @@ type RoleDto = {
   active: boolean;
   permissions: string[];
   userCount: number;
+  members: RoleMemberDto[];
   createdAt: string;
   updatedAt: string;
 };
@@ -46,7 +54,17 @@ const GROUP_HELP: Record<string, string> = {
   admin: "Пользователи, роли и доступы.",
 };
 
+type RoleDirectoryUser = {
+  id: number;
+  username: string;
+  displayName: string | null;
+  active: boolean;
+  roleCode: string | null;
+  roleNameRu: string | null;
+};
+
 const ROLE_CODE_PATTERN = "[a-z][a-z0-9_]{1,63}";
+const FALLBACK_ROLE = "subsidiary_specialist";
 
 export function RolesAdminPage() {
   const backend = isBackendMode();
@@ -59,6 +77,7 @@ export function RolesAdminPage() {
 
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [catalog, setCatalog] = useState<PermissionEntry[]>([]);
+  const [directory, setDirectory] = useState<RoleDirectoryUser[]>([]);
   const [selected, setSelected] = useState<RoleDto | null>(null);
   const [nameRu, setNameRu] = useState("");
   const [nameEn, setNameEn] = useState("");
@@ -67,10 +86,13 @@ export function RolesAdminPage() {
   const [newCode, setNewCode] = useState("");
   const [newNameRu, setNewNameRu] = useState("");
   const [query, setQuery] = useState("");
+  const [addUserId, setAddUserId] = useState<number | "">("");
+  const [removeToRole, setRemoveToRole] = useState(FALLBACK_ROLE);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [memberBusy, setMemberBusy] = useState(false);
 
   const applyRole = useCallback((role: RoleDto) => {
     setSelected(role);
@@ -78,6 +100,8 @@ export function RolesAdminPage() {
     setNameEn(role.nameEn ?? "");
     setActive(role.active);
     setPerms(new Set(role.permissions));
+    setAddUserId("");
+    setRemoveToRole(role.code === FALLBACK_ROLE ? "support_specialist" : FALLBACK_ROLE);
     setStatus("");
     setError("");
   }, []);
@@ -88,23 +112,27 @@ export function RolesAdminPage() {
       setLoading(true);
       setError("");
       try {
-        const [roleList, permList] = await Promise.all([
+        const [roleList, permList, userList] = await Promise.all([
           apiFetch<RoleDto[]>("/api/roles"),
           apiFetch<PermissionEntry[]>("/api/permissions"),
+          apiFetch<RoleDirectoryUser[]>("/api/role-directory"),
         ]);
-        setRoles(roleList);
+        const normalized = roleList.map((r) => ({ ...r, members: r.members ?? [] }));
+        setRoles(normalized);
         setCatalog(permList);
+        setDirectory(userList);
         setSelected((prev) => {
           const pick =
-            (keepCode && roleList.find((r) => r.code === keepCode)) ||
-            (prev && roleList.find((r) => r.code === prev.code)) ||
-            roleList[0] ||
+            (keepCode && normalized.find((r) => r.code === keepCode)) ||
+            (prev && normalized.find((r) => r.code === prev.code)) ||
+            normalized[0] ||
             null;
           if (pick) {
             setNameRu(pick.nameRu);
             setNameEn(pick.nameEn ?? "");
             setActive(pick.active);
             setPerms(new Set(pick.permissions));
+            setRemoveToRole(pick.code === FALLBACK_ROLE ? "support_specialist" : FALLBACK_ROLE);
           }
           return pick;
         });
@@ -134,13 +162,82 @@ export function RolesAdminPage() {
   const filteredRoles = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return roles;
-    return roles.filter((r) =>
-      [r.nameRu, r.nameEn ?? "", r.code, r.system ? "системная" : "своя"]
+    return roles.filter((r) => {
+      const haystack = [
+        r.nameRu,
+        r.nameEn ?? "",
+        r.code,
+        r.system ? "системная" : "своя",
+        ...r.members.flatMap((m) => [m.username, m.displayName ?? ""]),
+      ]
         .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
+        .toLowerCase();
+      return haystack.includes(q);
+    });
   }, [roles, query]);
+
+  const memberLabel = (m: RoleMemberDto | RoleDirectoryUser) =>
+    m.displayName?.trim() || m.username;
+
+  const candidates = useMemo(() => {
+    if (!selected) return [];
+    const memberIds = new Set(selected.members.map((m) => m.id));
+    return directory.filter((u) => u.active && !memberIds.has(u.id));
+  }, [directory, selected]);
+
+  const otherRoles = useMemo(() => {
+    if (!selected) return roles;
+    return roles.filter((r) => r.active && r.code !== selected.code);
+  }, [roles, selected]);
+
+  const handleAddMember = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selected || addUserId === "") return;
+    setMemberBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      await apiFetch(`/api/roles/${encodeURIComponent(selected.code)}/members`, {
+        method: "POST",
+        body: JSON.stringify({ userId: addUserId }),
+      });
+      setAddUserId("");
+      setStatus("Пользователь добавлен в роль");
+      await load(selected.code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось добавить");
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId: number, label: string) => {
+    if (!selected) return;
+    const target = removeToRole || FALLBACK_ROLE;
+    if (target === selected.code) {
+      setError("Выберите другую роль для перевода");
+      return;
+    }
+    if (!confirm(`Убрать «${label}» из роли «${selected.nameRu}» и перевести в другую роль?`)) {
+      return;
+    }
+    setMemberBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      const qs = new URLSearchParams({ toRole: target });
+      await apiFetch(
+        `/api/roles/${encodeURIComponent(selected.code)}/members/${userId}?${qs}`,
+        { method: "DELETE" }
+      );
+      setStatus(`«${label}» переведён в другую роль`);
+      await load(selected.code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось убрать");
+    } finally {
+      setMemberBusy(false);
+    }
+  };
 
   const roleStats = useMemo(
     () => ({
@@ -358,9 +455,24 @@ export function RolesAdminPage() {
                     <span className="roles-list-name">{r.nameRu}</span>
                     <span className="roles-list-meta">
                       {r.system ? "Системная" : "Своя"} · {r.permissions.length} прав ·{" "}
-                      {r.userCount} польз.
+                      {r.members.length} участн.
                     </span>
                     {!r.active ? <span className="roles-list-badge">Отключена</span> : null}
+                    <span className="roles-list-members">
+                      {r.members.length === 0 ? (
+                        <span className="roles-member-empty">Нет участников</span>
+                      ) : (
+                        r.members.map((m) => (
+                          <span
+                            key={m.id}
+                            className={`roles-member-chip ${m.active ? "" : "is-inactive"}`}
+                            title={m.active ? m.username : `${m.username} · отключён`}
+                          >
+                            {memberLabel(m)}
+                          </span>
+                        ))
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -412,6 +524,91 @@ export function RolesAdminPage() {
                       Роль активна и доступна для назначения
                     </label>
                   )}
+                </div>
+
+                <div className="roles-members-block">
+                  <div className="roles-members-heading">
+                    <h3>Участники</h3>
+                    <span>{selected.members.length}</span>
+                  </div>
+
+                  <form className="roles-members-add" onSubmit={handleAddMember}>
+                    <label>
+                      Добавить пользователя
+                      <select
+                        value={addUserId === "" ? "" : String(addUserId)}
+                        onChange={(e) =>
+                          setAddUserId(e.target.value ? Number(e.target.value) : "")
+                        }
+                        disabled={memberBusy || candidates.length === 0}
+                      >
+                        <option value="">
+                          {candidates.length === 0
+                            ? "Нет доступных пользователей"
+                            : "Выберите пользователя…"}
+                        </option>
+                        {candidates.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {memberLabel(u)}
+                            {u.roleNameRu ? ` · сейчас: ${u.roleNameRu}` : ""}
+                            {` (${u.username})`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="submit"
+                      className="btn primary"
+                      disabled={memberBusy || addUserId === ""}
+                    >
+                      {memberBusy ? "…" : "Добавить"}
+                    </button>
+                  </form>
+
+                  {otherRoles.length > 0 ? (
+                    <label className="roles-members-reassign">
+                      При снятии перевести в
+                      <select
+                        value={removeToRole}
+                        onChange={(e) => setRemoveToRole(e.target.value)}
+                        disabled={memberBusy}
+                      >
+                        {otherRoles.map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.nameRu}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  {selected.members.length === 0 ? (
+                    <p className="tools-hint">В этой роли пока никого нет.</p>
+                  ) : (
+                    <ul className="roles-members-list">
+                      {selected.members.map((m) => (
+                        <li key={m.id} className={!m.active ? "is-inactive" : undefined}>
+                          <div className="roles-member-meta">
+                            <strong>{memberLabel(m)}</strong>
+                            <span>{m.username}</span>
+                            {!m.active ? <em>отключён</em> : null}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={memberBusy || !m.active || otherRoles.length === 0}
+                            onClick={() => void handleRemoveMember(m.id, memberLabel(m))}
+                          >
+                            Убрать
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="tools-hint roles-members-footnote">
+                    Назначить роль можно и на странице{" "}
+                    <Link to="/admin/users">Пользователи</Link>.
+                  </p>
                 </div>
               </section>
 

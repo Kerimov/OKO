@@ -2913,6 +2913,146 @@ a.btn:hover {
   border-color: #f3dda8;
 }
 
+.roles-list-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
+.roles-member-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid #d7e5f2;
+  background: #f4f9ff;
+  color: var(--ink);
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roles-member-chip.is-inactive {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.roles-member-empty {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.roles-members-block {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.roles-members-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.roles-members-heading h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--primary);
+}
+
+.roles-members-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.roles-members-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.roles-members-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.65rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.roles-members-list li span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.roles-members-list li em {
+  color: #9a5a00;
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.roles-members-list li.is-inactive {
+  opacity: 0.7;
+  background: #fafafa;
+}
+
+.roles-members-add,
+.roles-members-reassign {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.roles-members-add {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.roles-members-add label,
+.roles-members-reassign {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.roles-members-add select,
+.roles-members-reassign select {
+  width: 100%;
+}
+
+.roles-member-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.roles-members-list li {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.roles-members-footnote {
+  margin: 0;
+}
+
 .roles-editor-panel {
   min-width: 0;
 }

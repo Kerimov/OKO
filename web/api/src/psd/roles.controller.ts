@@ -9,6 +9,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -18,7 +19,10 @@ import {
   deleteRole,
   getRole,
   listPermissionsCatalog,
+  listRoleDirectory,
   listRoles,
+  assignUserToRole,
+  removeUserFromRole,
   setRolePermissions,
   updateRole,
 } from "../../../domain/src/rbac.js";
@@ -40,6 +44,13 @@ export class RolesController {
     return listPermissionsCatalog();
   }
 
+  @Get("role-directory")
+  @RequirePsdPermissions("roles.manage", "users.manage", "tech.configure")
+  @ApiOperation({ summary: "Справочник пользователей для назначения ролей" })
+  async directory() {
+    return listRoleDirectory(await getDb());
+  }
+
   @Get("roles")
   @RequirePsdPermissions("roles.manage", "users.manage", "tech.configure")
   @ApiOperation({ summary: "Список ролей" })
@@ -53,6 +64,45 @@ export class RolesController {
     const role = await getRole(await getDb(), code);
     if (!role) throw new NotFoundException({ error: "Not found" });
     return role;
+  }
+
+  @Post("roles/:code/members")
+  @HttpCode(200)
+  @RequirePsdPermissions("roles.manage", "users.manage", "tech.configure")
+  @ApiOperation({ summary: "Добавить пользователя в роль" })
+  async addMember(@Param("code") code: string, @Body() body: { userId?: number }) {
+    const userId = Number(body?.userId);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      throw new BadRequestException({ error: "userId required" });
+    }
+    try {
+      return await assignUserToRole(await getDb(), code, userId);
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "assign failed",
+      });
+    }
+  }
+
+  @Delete("roles/:code/members/:userId")
+  @RequirePsdPermissions("roles.manage", "users.manage", "tech.configure")
+  @ApiOperation({ summary: "Убрать пользователя из роли (переназначить на другую)" })
+  async removeMember(
+    @Param("code") code: string,
+    @Param("userId") userIdRaw: string,
+    @Query("toRole") toRole?: string
+  ) {
+    const userId = Number(userIdRaw);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      throw new BadRequestException({ error: "invalid userId" });
+    }
+    try {
+      return await removeUserFromRole(await getDb(), code, userId, toRole);
+    } catch (e) {
+      throw new BadRequestException({
+        error: e instanceof Error ? e.message : "remove failed",
+      });
+    }
   }
 
   @Post("roles")
